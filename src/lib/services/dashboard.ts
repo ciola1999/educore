@@ -1,3 +1,5 @@
+// Project\educore\src\lib\services\dashboard.ts
+
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { attendance, students, users } from "../db/schema";

@@ -1,3 +1,5 @@
+// Project\educore\src\lib\auth\service.ts
+
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db';
 import { users, type User } from '../db/schema';

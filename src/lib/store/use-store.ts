@@ -1,15 +1,14 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { User } from '../db/schema'; // Pastikan path ini benar ke schema kamu
 
-type UserSession = {
-  id: string;
-  name: string;
-  role: 'admin' | 'teacher' | 'staff';
-};
+// Kita ambil tipe User dari DB, tapi buang passwordHash demi keamanan
+export type UserSession = Omit<User, 'passwordHash'>;
 
 interface AppState {
   // Session
   user: UserSession | null;
+  isAuthenticated: boolean; // Helper flag untuk cek login
   login: (user: UserSession) => void;
   logout: () => void;
 
@@ -23,10 +22,13 @@ interface AppState {
 export const useStore = create<AppState>()(
   persist(
     (set) => ({
+      // Auth State
       user: null,
-      login: (user) => set({ user }),
-      logout: () => set({ user: null }),
+      isAuthenticated: false,
+      login: (user) => set({ user, isAuthenticated: true }),
+      logout: () => set({ user: null, isAuthenticated: false }),
 
+      // Sync State
       isSyncing: false,
       lastSync: null,
       setSyncStatus: (status) => set({ isSyncing: status }),
@@ -34,7 +36,16 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'educore-storage',
-      partialize: (state) => ({ user: state.user, lastSync: state.lastSync }), // Persist minimal state
+      // Kita gunakan sessionStorage agar sesi hilang jika window ditutup (lebih aman untuk sekolah)
+      // Jika ingin tetap login meski browser ditutup, hapus baris 'storage' ini.
+      storage: createJSONStorage(() => sessionStorage), 
+      
+      // Persist user & lastSync, tapi jangan persist status syncing (karena itu state sementara)
+      partialize: (state) => ({ 
+        user: state.user, 
+        isAuthenticated: state.isAuthenticated,
+        lastSync: state.lastSync 
+      }), 
     }
   )
 );

@@ -8,7 +8,7 @@ export default function CoursesPage() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-orange-400 to-amber-200 bg-clip-text text-transparent">
+				<h2 className="text-3xl font-bold tracking-tight bg-linear-to-r from-orange-400 to-amber-200 bg-clip-text text-transparent">
 					Academic Data
 				</h2>
 				<p className="text-zinc-400 mt-1">Manage classes and subjects.</p>

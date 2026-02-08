@@ -11,14 +11,15 @@ import {
 } from "@/components/ui/table";
 import { deleteSubject, getSubjects } from "@/lib/services/academic";
 import { Loader2, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AddSubjectDialog } from "./add-subject-dialog";
+import { EditSubjectDialog } from "./edit-subject-dialog";
 
 export function SubjectList() {
 	const [data, setData] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
 
-	async function fetchData() {
+	const fetchData = useCallback(async () => {
 		setLoading(true);
 		try {
 			const result = await getSubjects();
@@ -28,11 +29,11 @@ export function SubjectList() {
 		} finally {
 			setLoading(false);
 		}
-	}
+	}, []);
 
 	useEffect(() => {
 		fetchData();
-	}, []);
+	}, [fetchData]);
 
 	async function handleDelete(id: string) {
 		if (confirm("Delete this subject?")) {
@@ -81,7 +82,11 @@ export function SubjectList() {
 										{item.name}
 									</TableCell>
 									<TableCell className="font-mono">{item.code}</TableCell>
-									<TableCell className="text-right">
+									<TableCell className="text-right flex justify-end gap-1">
+										<EditSubjectDialog
+											subjectData={item}
+											onSuccess={fetchData}
+										/>
 										<Button
 											size="icon"
 											variant="ghost"

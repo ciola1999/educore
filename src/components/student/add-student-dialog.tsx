@@ -19,59 +19,59 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { getDb } from "@/lib/db";
-import { students } from "@/lib/db/schema";
+import { createStudent, type InsertStudent } from "@/lib/services/student";
 import { Loader2, UserPlus } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export function AddStudentDialog() {
 	const [open, setOpen] = useState(false);
 	const [loading, setLoading] = useState(false);
-	const router = useRouter();
-	const [isMounted, setIsMounted] = useState(false);
-
-	useEffect(() => {
-		setIsMounted(true);
-	}, []);
-
-	if (!isMounted) return null;
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
+		const data: InsertStudent = {
+			nis: formData.get("nis") as string,
+			fullName: formData.get("fullName") as string,
+			gender: formData.get("gender") as "L" | "P",
+			grade: formData.get("grade") as string,
+			parentName: (formData.get("parentName") as string) || null,
+			parentPhone: (formData.get("parentPhone") as string) || null,
+		};
 
 		try {
-			const db = await getDb();
+			await createStudent(data);
+			toast.success("Siswa berhasil ditambahkan!");
+			setOpen(false);
 
-			// Insert Data sesuai Schema Anda
-			await db.insert(students).values({
-				id: crypto.randomUUID(), // Generate ID unik
-				nis: formData.get("nis") as string,
-				fullName: formData.get("fullName") as string,
-				gender: formData.get("gender") as "L" | "P", // Casting type
-				grade: formData.get("grade") as string,
-
-				// Data Tambahan (Sesuai Schema baru)
-				parentName: (formData.get("parentName") as string) || null,
-				parentPhone: (formData.get("parentPhone") as string) || null,
-
-				// created_at & updated_at akan otomatis diisi oleh SQLite (default value)
-			});
-
-			setOpen(false); // Tutup modal
-			router.refresh(); // Refresh data (kalau sudah ada tabel nanti)
-			console.log("✅ Siswa berhasil ditambahkan!");
+			// Refresh data - ideally we'd use a dedicated store or router.refresh()
+			// but keeping it simple for now as per project's current pattern
+			window.location.reload();
 		} catch (error: any) {
 			console.error("❌ Gagal simpan:", error);
 
 			const errorMessage = error?.message || String(error);
-			if (errorMessage.includes("UNIQUE constraint failed: students.nis")) {
-				alert("Gagal: NIS sudah terdaftar!");
+
+			if (
+				errorMessage.includes("UNIQUE constraint failed: students.nis") ||
+				errorMessage.includes("code: 2067") ||
+				error.code === "NIS_ALREADY_EXISTS"
+			) {
+				toast.error("Gagal: NIS ini sudah terdaftar di database!", {
+					description: "Silakan gunakan NIS yang berbeda.",
+				});
+			} else if (error.name === "ZodError") {
+				toast.error("Data tidak valid", {
+					description:
+						error.errors[0]?.message || "Periksa kembali isian Anda.",
+				});
 			} else {
-				alert("Gagal menyimpan data. Cek console.");
+				toast.error("Terjadi Kesalahan", {
+					description: errorMessage,
+				});
 			}
 		} finally {
 			setLoading(false);
@@ -81,7 +81,11 @@ export function AddStudentDialog() {
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
-				<Button className="bg-blue-600 hover:bg-blue-500 gap-2 shadow-lg shadow-blue-900/20">
+				{/* ✅ Tambahkan suppressHydrationWarning untuk mencegah error console */}
+				<Button
+					suppressHydrationWarning={true}
+					className="bg-blue-600 hover:bg-blue-500 gap-2 shadow-lg shadow-blue-900/20"
+				>
 					<UserPlus className="h-4 w-4" /> Add Student
 				</Button>
 			</DialogTrigger>
@@ -131,7 +135,8 @@ export function AddStudentDialog() {
 
 					<div className="grid gap-2">
 						<Label>Gender</Label>
-						<Select name="gender" required>
+						{/* Perbaikan struktur Select agar value terkirim dengan benar */}
+						<Select name="gender" required defaultValue="L">
 							<SelectTrigger className="bg-zinc-950 border-zinc-700">
 								<SelectValue placeholder="Select Gender" />
 							</SelectTrigger>

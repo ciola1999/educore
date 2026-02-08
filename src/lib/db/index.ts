@@ -1,160 +1,179 @@
 import Database from "@tauri-apps/plugin-sql";
-import { count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { hashPassword } from "../auth/hash";
+import { count } from "drizzle-orm";
 import { users } from "./schema";
+// 👇 KITA IMPORT FUNGSI HASH ASLI DARI FILE YANG KAMU KIRIM TADI
+import { hashPassword } from "../auth/hash"; 
 
-const DB_FILENAME = "educore.db";
+// Ganti nama DB ke v2 untuk memaksa reset ulang (karena data v1 hash-nya rusak)
+const DB_FILENAME = "educore_v2.db"; 
 
-let _db: any = null;
+let _dbPromise: Promise<any> | null = null;
 
 export const getDb = async () => {
-	if (_db) return _db;
+  if (_dbPromise) return _dbPromise;
 
-	try {
-		// 1. Load Database
-		const sqlite = await Database.load(`sqlite:${DB_FILENAME}`);
+  _dbPromise = (async () => {
+    try {
+      const sqlite = await Database.load(`sqlite:${DB_FILENAME}`);
 
-		// 2. Setup Drizzle Driver
-		_db = drizzle(async (sql, params, method) => {
-			try {
-				const rows = await sqlite.select<any[]>(sql, params);
-				const runResult = await sqlite.execute(sql, params);
-				return {
-					rows: rows.map((row: any) => Object.values(row)),
-					rowsAffected: runResult.rowsAffected,
-					insertId: runResult.lastInsertId,
-				};
-			} catch (e: any) {
-				console.error("SQL Error:", e);
-				throw e; // Biar caller (Drizzle) tahu kalau query gagal
-			}
-		});
+      const db = drizzle(async (sql, params, method) => {
+        try {
+          const rows = await sqlite.select<any[]>(sql, params);
+          if (method === "run") {
+            const result = await sqlite.execute(sql, params);
+            return {
+              rows: [],
+              rowsAffected: result.rowsAffected,
+              insertId: result.lastInsertId,
+            };
+          }
+          const formattedRows = rows.map((row) => Object.values(row));
+          return { rows: formattedRows };
+        } catch (e: any) {
+          console.error("SQL Error:", e);
+          throw e;
+        }
+      }, { schema: await import("./schema") });
 
-		// 3. --- AUTO MIGRATION (The Fix) ---
-		// Kita paksa aplikasi membuat tabel jika belum ada
-		await initTables(sqlite);
+      await initTables(sqlite);
+      await seedDatabase(db); // <-- Seeding akan dijalankan di sini
 
-		// 4. --- AUTO SEED ---
-		await seedDatabase(_db);
+      return db;
+    } catch (error) {
+      console.error("❌ Failed to connect/seed DB:", error);
+      _dbPromise = null;
+      throw error;
+    }
+  })();
 
-		return _db;
-	} catch (error) {
-		console.error("❌ Failed to connect/seed DB:", error);
-		throw error;
-	}
+  return _dbPromise;
 };
 
-// Fungsi Manual untuk membuat tabel (Raw SQL)
-// Ini solusi paling robust agar Tauri tidak bingung path
 async function initTables(sqlite: Database) {
-	console.log("⚙️ Checking tables...");
+  console.log("⚙️ Verifying Database Schema...");
 
-	// Create Table: USERS
-	await sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id text PRIMARY KEY NOT NULL,
-        full_name text NOT NULL,
-        email text NOT NULL UNIQUE,
-        role text DEFAULT 'teacher' NOT NULL,
-        password_hash text,
-        created_at integer DEFAULT (strftime('%s', 'now')),
-        updated_at integer DEFAULT (strftime('%s', 'now')),
-        sync_status text DEFAULT 'pending'
-      );
-    `);
+  // USERS
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id text PRIMARY KEY NOT NULL,
+      full_name text NOT NULL,
+      email text NOT NULL UNIQUE,
+      role text DEFAULT 'teacher' NOT NULL,
+      password_hash text,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
 
-	// Create Table: STUDENTS
-	await sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS students (
-        id text PRIMARY KEY NOT NULL,
-        nis text NOT NULL UNIQUE,
-        full_name text NOT NULL,
-        gender text NOT NULL,
-        grade text NOT NULL,
-        parent_name text,
-        parent_phone text,
-        created_at integer DEFAULT (strftime('%s', 'now')),
-        updated_at integer DEFAULT (strftime('%s', 'now'))
-      );
-    `);
+  // STUDENTS
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS students (
+      id text PRIMARY KEY NOT NULL,
+      nis text NOT NULL UNIQUE,
+      full_name text NOT NULL,
+      gender text NOT NULL,
+      grade text NOT NULL,
+      parent_name text,
+      parent_phone text,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
 
-	// Create Table: CLASSES
-	await sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS classes (
-        id text PRIMARY KEY NOT NULL,
-        name text NOT NULL,
-        academic_year text NOT NULL,
-        homeroom_teacher_id text REFERENCES users(id),
-        updated_at integer DEFAULT (strftime('%s', 'now'))
-      );
-    `);
+  // CLASSES
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS classes (
+      id text PRIMARY KEY NOT NULL,
+      name text NOT NULL,
+      academic_year text NOT NULL,
+      homeroom_teacher_id text REFERENCES users(id),
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
 
-	// Create Table: SUBJECTS
-	await sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS subjects (
-        id text PRIMARY KEY NOT NULL,
-        name text NOT NULL,
-        code text NOT NULL UNIQUE,
-        updated_at integer DEFAULT (strftime('%s', 'now'))
-      );
-    `);
+  // SUBJECTS
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS subjects (
+      id text PRIMARY KEY NOT NULL,
+      name text NOT NULL,
+      code text NOT NULL UNIQUE,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
 
-	// Create Table: SCHEDULE
-	await sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS schedule (
-        id text PRIMARY KEY NOT NULL,
-        class_id text NOT NULL REFERENCES classes(id),
-        subject_id text NOT NULL REFERENCES subjects(id),
-        teacher_id text NOT NULL REFERENCES users(id),
-        day_of_week integer NOT NULL,
-        start_time text NOT NULL,
-        end_time text NOT NULL,
-        updated_at integer DEFAULT (strftime('%s', 'now'))
-      );
-    `);
+  // SCHEDULE
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS schedule (
+      id text PRIMARY KEY NOT NULL,
+      class_id text NOT NULL REFERENCES classes(id),
+      subject_id text NOT NULL REFERENCES subjects(id),
+      teacher_id text NOT NULL REFERENCES users(id),
+      day_of_week integer NOT NULL,
+      start_time text NOT NULL,
+      end_time text NOT NULL,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
 
-	// Create Table: ATTENDANCE
-	await sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS attendance (
-        id text PRIMARY KEY NOT NULL,
-        student_id text NOT NULL REFERENCES students(id),
-        class_id text NOT NULL REFERENCES classes(id),
-        date text NOT NULL,
-        status text NOT NULL,
-        notes text,
-        recorded_by text NOT NULL,
-        created_at integer DEFAULT (strftime('%s', 'now')),
-        sync_status text DEFAULT 'pending'
-      );
-    `);
+  // ATTENDANCE
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS attendance (
+      id text PRIMARY KEY NOT NULL,
+      student_id text NOT NULL REFERENCES students(id),
+      class_id text NOT NULL REFERENCES classes(id),
+      date text NOT NULL,
+      status text NOT NULL,
+      notes text,
+      recorded_by text NOT NULL,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
 
-	console.log("✅ Tables checked/created.");
+  console.log("✅ Schema Verified.");
 }
 
+// 👇 INI BAGIAN UTAMA PERBAIKANNYA
 async function seedDatabase(db: any) {
-	try {
-		const result = await db.select({ count: count() }).from(users);
-		const userCount = result[0]?.count || 0;
+  try {
+    const result = await db.select({ count: count() }).from(users);
+    const userCount = result[0]?.count || 0;
 
-		if (userCount === 0) {
-			console.log("🌱 Database empty. Seeding Super Admin...");
-			const adminHash = await hashPassword("admin123");
-
-			await db
-				.insert(users)
-				.values({
-					id: "admin-001",
-					fullName: "Super Admin",
-					email: "admin@educore.school",
-					role: "admin",
-					passwordHash: adminHash,
-					syncStatus: "pending",
-				})
-				.onConflictDoNothing();
-			console.log("✅ Super Admin created!");
-		}
-	} catch (e) {
-		console.error("Seed error:", e);
-	}
+    if (userCount === 0) {
+      console.log("🌱 Seeding Super Admin...");
+      
+      // ✅ Generate Hash ASLI menggunakan fungsi dari hash.ts
+      const adminPasswordHash = await hashPassword("admin123"); 
+      
+      await db.insert(users).values({
+        id: crypto.randomUUID(), 
+        fullName: "Super Admin",
+        email: "admin@educore.school",
+        role: "admin",
+        passwordHash: adminPasswordHash, // Hash valid
+        syncStatus: "pending",
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      console.log("✅ Super Admin created (with valid bcrypt hash)!");
+    }
+  } catch (e) {
+    console.error("Seed error:", e);
+  }
 }

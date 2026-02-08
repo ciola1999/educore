@@ -13,6 +13,7 @@ import { deleteClass, getClasses } from "@/lib/services/academic";
 import { Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AddClassDialog } from "./add-class-dialog";
+import { EditClassDialog } from "./edit-class-dialog";
 
 export function ClassList() {
 	const [data, setData] = useState<any[]>([]);
@@ -83,7 +84,8 @@ export function ClassList() {
 									</TableCell>
 									<TableCell>{item.academicYear}</TableCell>
 									<TableCell>{item.homeroomTeacherName || "-"}</TableCell>
-									<TableCell className="text-right">
+									<TableCell className="text-right flex justify-end gap-1">
+										<EditClassDialog classData={item} onSuccess={fetchData} />
 										<Button
 											size="icon"
 											variant="ghost"

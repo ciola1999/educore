@@ -1,10 +1,12 @@
+"use client";
+
 import { DashboardStatsCards } from "@/components/dashboard/dashboard-stats";
 
 export default function DashboardPage() {
 	return (
 		<div className="space-y-8">
 			<div>
-				<h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
+				<h1 className="text-3xl font-bold bg-linear-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
 					Dashboard
 				</h1>
 				<p className="text-zinc-400 mt-2">

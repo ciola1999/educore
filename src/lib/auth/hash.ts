@@ -1,3 +1,5 @@
+// Project\educore\src\lib\auth\hash.ts
+
 import bcrypt from 'bcryptjs';
 
 const SALT_ROUNDS = 10;
