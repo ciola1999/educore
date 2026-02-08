@@ -1,132 +1,159 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
 import {
-	type Attendance,
 	attendance,
-	type Class,
+	attendanceLogs,
+	attendanceSettings,
 	classes,
-	type Student,
+	holidays,
 	students,
-	type Subject,
 	subjects,
-	type User,
 	users,
 } from "../db/schema";
-
-import { supabase, type SyncResult } from "./client";
+import { type SyncResult, supabase } from "./client";
 export { supabase, type SyncResult };
 
 /**
  * Push pending local data to Supabase (Upload)
- * Uses Last-Write-Wins (LWW) strategy
  */
 export async function pushToSupabase(): Promise<SyncResult> {
 	try {
 		const db = await getDb();
 		let uploadedCount = 0;
 
-		// 1. Sync Students
-		const pendingStudents = await db.select().from(students);
-		if (pendingStudents.length > 0) {
-			const { error } = await supabase.from("students").upsert(
-				pendingStudents.map((s: Student) => ({
-					id: s.id,
-					nis: s.nis,
-					full_name: s.fullName,
-					gender: s.gender,
-					grade: s.grade,
-					parent_name: s.parentName,
-					parent_phone: s.parentPhone,
-					updated_at: new Date().toISOString(),
-				})),
-				{ onConflict: "id" },
-			);
-			if (error) throw error;
-			uploadedCount += pendingStudents.length;
-		}
+		// Helper to sync a table
+		const syncTable = async (
+			tableName: string,
+			drizzleTable: any,
+			mapFn: (data: any) => any,
+			onConflict: string = "id",
+		) => {
+			const pendingItems = await db
+				.select()
+				.from(drizzleTable)
+				.where(eq(drizzleTable.syncStatus, "pending"));
 
-		// 2. Sync Users (Teachers)
-		const pendingUsers = await db.select().from(users);
-		if (pendingUsers.length > 0) {
-			const { error } = await supabase.from("users").upsert(
-				pendingUsers.map((u: User) => ({
-					id: u.id,
-					full_name: u.fullName,
-					email: u.email,
-					role: u.role,
-					password_hash: u.passwordHash,
-					updated_at: new Date().toISOString(),
-				})),
-				{ onConflict: "id" },
-			);
-			if (error) throw error;
-			uploadedCount += pendingUsers.length;
-		}
+			if (pendingItems.length > 0) {
+				const { error } = await supabase
+					.from(tableName)
+					.upsert(pendingItems.map(mapFn), { onConflict });
+
+				if (error) {
+					console.error(`Error syncing table ${tableName}:`, error);
+					throw error;
+				}
+
+				// Mark as synced
+				for (const item of pendingItems) {
+					await db
+						.update(drizzleTable)
+						.set({ syncStatus: "synced", updatedAt: new Date() })
+						.where(eq(drizzleTable.id, item.id));
+				}
+				uploadedCount += pendingItems.length;
+			}
+		};
+
+		// 1. Sync Students (Conflict on NIS to prevent 23505)
+		await syncTable(
+			"students",
+			students,
+			(s) => ({
+				id: s.id,
+				nis: s.nis,
+				full_name: s.fullName,
+				gender: s.gender,
+				grade: s.grade,
+				parent_name: s.parentName,
+				parent_phone: s.parentPhone,
+				updated_at: new Date().toISOString(),
+			}),
+			"nis",
+		);
+
+		// 2. Sync Users (Conflict on Email)
+		await syncTable(
+			"users",
+			users,
+			(u) => ({
+				id: u.id,
+				full_name: u.fullName,
+				email: u.email,
+				role: u.role,
+				password_hash: u.passwordHash,
+				updated_at: new Date().toISOString(),
+			}),
+			"email",
+		);
 
 		// 3. Sync Classes
-		const pendingClasses = await db.select().from(classes);
-		if (pendingClasses.length > 0) {
-			const { error } = await supabase.from("classes").upsert(
-				pendingClasses.map((c: Class) => ({
-					id: c.id,
-					name: c.name,
-					academic_year: c.academicYear,
-					homeroom_teacher_id: c.homeroomTeacherId,
-					updated_at: new Date().toISOString(),
-				})),
-				{ onConflict: "id" },
-			);
-			if (error) throw error;
-			uploadedCount += pendingClasses.length;
-		}
+		await syncTable("classes", classes, (c) => ({
+			id: c.id,
+			name: c.name,
+			academic_year: c.academicYear,
+			homeroom_teacher_id: c.homeroomTeacherId,
+			updated_at: new Date().toISOString(),
+		}));
 
-		// 4. Sync Subjects
-		const pendingSubjects = await db.select().from(subjects);
-		if (pendingSubjects.length > 0) {
-			const { error } = await supabase.from("subjects").upsert(
-				pendingSubjects.map((s: Subject) => ({
-					id: s.id,
-					name: s.name,
-					code: s.code,
-					updated_at: new Date().toISOString(),
-				})),
-				{ onConflict: "id" },
-			);
-			if (error) throw error;
-			uploadedCount += pendingSubjects.length;
-		}
+		// 4. Sync Subjects (Conflict on Code)
+		await syncTable(
+			"subjects",
+			subjects,
+			(s) => ({
+				id: s.id,
+				name: s.name,
+				code: s.code,
+				updated_at: new Date().toISOString(),
+			}),
+			"code",
+		);
 
-		// 5. Sync Attendance
-		const pendingAttendance = await db
-			.select()
-			.from(attendance)
-			.where(eq(attendance.syncStatus, "pending"));
-		if (pendingAttendance.length > 0) {
-			const { error } = await supabase.from("attendance").upsert(
-				pendingAttendance.map((a: Attendance) => ({
-					id: a.id,
-					student_id: a.studentId,
-					class_id: a.classId,
-					date: a.date,
-					status: a.status,
-					notes: a.notes,
-					recorded_by: a.recordedBy,
-					created_at: a.createdAt,
-					updated_at: new Date().toISOString(),
-				})),
-				{ onConflict: "id" },
-			);
-			if (error) throw error;
+		// 5. Sync Attendance (Manual)
+		await syncTable("attendance", attendance, (a) => ({
+			id: a.id,
+			student_id: a.studentId,
+			class_id: a.classId,
+			date: a.date,
+			status: a.status,
+			notes: a.notes,
+			recorded_by: a.recordedBy,
+			created_at: a.createdAt,
+			updated_at: new Date().toISOString(),
+		}));
 
-			// Mark as synced
-			for (const a of pendingAttendance) {
-				await db
-					.update(attendance)
-					.set({ syncStatus: "synced" })
-					.where(eq(attendance.id, a.id));
-			}
-			uploadedCount += pendingAttendance.length;
-		}
+		// 6. Sync Attendance Settings
+		await syncTable("attendance_settings", attendanceSettings, (s) => ({
+			id: s.id,
+			day_of_week: s.dayOfWeek,
+			start_time: s.startTime,
+			end_time: s.endTime,
+			late_threshold: s.lateThreshold,
+			entity_type: s.entityType,
+			is_active: s.isActive,
+			updated_at: new Date().toISOString(),
+		}));
+
+		// 7. Sync Holidays
+		await syncTable("holidays", holidays, (h) => ({
+			id: h.id,
+			date: h.date,
+			name: h.name,
+			updated_at: new Date().toISOString(),
+		}));
+
+		// 8. Sync Attendance Logs
+		await syncTable("attendance_logs", attendanceLogs, (l) => ({
+			id: l.id,
+			entity_id: l.entityId,
+			entity_type: l.entityType,
+			date: l.date,
+			check_in_time: l.checkInTime,
+			check_out_time: l.checkOutTime,
+			status: l.status,
+			late_duration: l.lateDuration,
+			notes: l.notes,
+			updated_at: new Date().toISOString(),
+		}));
 
 		return {
 			status: "success",
@@ -134,7 +161,7 @@ export async function pushToSupabase(): Promise<SyncResult> {
 			uploaded: uploadedCount,
 		};
 	} catch (error) {
-		console.error("Push error:", error);
+		console.error("Push error details:", JSON.stringify(error, null, 2));
 		return {
 			status: "error",
 			message: error instanceof Error ? error.message : "Failed to push data",
@@ -150,82 +177,93 @@ export async function pullFromSupabase(): Promise<SyncResult> {
 		const db = await getDb();
 		let downloadedCount = 0;
 
-		// 1. Pull Students
-		const { data: remoteStudents, error: studentsError } = await supabase
-			.from("students")
-			.select("*");
-		if (studentsError) throw studentsError;
-		if (remoteStudents && remoteStudents.length > 0) {
-			for (const s of remoteStudents) {
-				const existing = await db
-					.select()
-					.from(students)
-					.where(eq(students.id, s.id))
-					.limit(1);
-				if (existing.length === 0) {
-					await db.insert(students).values({
-						id: s.id,
-						nis: s.nis,
-						fullName: s.full_name,
-						gender: s.gender,
-						grade: s.grade,
-						parentName: s.parent_name,
-						parentPhone: s.parent_phone,
-					});
-					downloadedCount++;
-				}
-			}
-		}
+		const pullTable = async (
+			tableName: string,
+			drizzleTable: any,
+			mapFn: (remote: any) => any,
+		) => {
+			const { data: remoteData, error } = await supabase
+				.from(tableName)
+				.select("*");
+			if (error) throw error;
 
-		// 2. Pull Users
-		const { data: remoteUsers, error: usersError } = await supabase
-			.from("users")
-			.select("*");
-		if (usersError) throw usersError;
-		if (remoteUsers && remoteUsers.length > 0) {
-			for (const u of remoteUsers) {
-				const existing = await db
-					.select()
-					.from(users)
-					.where(eq(users.id, u.id))
-					.limit(1);
-				if (existing.length === 0) {
-					await db.insert(users).values({
-						id: u.id,
-						fullName: u.full_name,
-						email: u.email,
-						role: u.role,
-						passwordHash: u.password_hash,
-						syncStatus: "synced",
-					});
-					downloadedCount++;
-				}
-			}
-		}
+			if (remoteData && remoteData.length > 0) {
+				for (const remote of remoteData) {
+					const existing = await db
+						.select()
+						.from(drizzleTable)
+						.where(eq(drizzleTable.id, remote.id))
+						.limit(1);
 
-		// 3. Pull Classes
-		const { data: remoteClasses, error: classesError } = await supabase
-			.from("classes")
-			.select("*");
-		if (classesError) throw classesError;
-		if (remoteClasses && remoteClasses.length > 0) {
-			for (const c of remoteClasses) {
-				const existing = await db
-					.select()
-					.from(classes)
-					.where(eq(classes.id, c.id))
-					.limit(1);
-				if (existing.length === 0) {
-					await db.insert(classes).values({
-						id: c.id,
-						name: c.name,
-						academicYear: c.academic_year,
-						homeroomTeacherId: c.homeroom_teacher_id,
-					});
-					downloadedCount++;
+					if (existing.length === 0) {
+						await db.insert(drizzleTable).values({
+							...mapFn(remote),
+							syncStatus: "synced",
+						});
+						downloadedCount++;
+					}
 				}
 			}
-		}
+		};
+
+		// 1. Students
+		await pullTable("students", students, (s) => ({
+			id: s.id,
+			nis: s.nis,
+			fullName: s.full_name,
+			gender: s.gender,
+			grade: s.grade,
+			parentName: s.parent_name,
+			parentPhone: s.parent_phone,
+		}));
+
+		// 2. Users
+		await pullTable("users", users, (u) => ({
+			id: u.id,
+			fullName: u.full_name,
+			email: u.email,
+			role: u.role,
+			passwordHash: u.password_hash,
+		}));
+
+		// 3. Classes
+		await pullTable("classes", classes, (c) => ({
+			id: c.id,
+			name: c.name,
+			academicYear: c.academic_year,
+			homeroomTeacherId: c.homeroom_teacher_id,
+		}));
+
+		// 4. Attendance Settings
+		await pullTable("attendance_settings", attendanceSettings, (as) => ({
+			id: as.id,
+			dayOfWeek: as.day_of_week,
+			startTime: as.start_time,
+			endTime: as.end_time,
+			lateThreshold: as.late_threshold,
+			entityType: as.entity_type,
+			isActive: as.is_active,
+		}));
+
+		// 5. Holidays
+		await pullTable("holidays", holidays, (h) => ({
+			id: h.id,
+			date: h.date,
+			name: h.name,
+		}));
+
+		// 6. Attendance Logs
+		await pullTable("attendance_logs", attendanceLogs, (al) => ({
+			id: al.id,
+			entityId: al.entity_id,
+			entityType: al.entity_type,
+			date: al.date,
+			check_in_time: al.check_in_time,
+			check_out_time: al.check_out_time,
+			status: al.status,
+			lateDuration: al.late_duration,
+			notes: al.notes,
+		}));
 
 		return {
 			status: "success",

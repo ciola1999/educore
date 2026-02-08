@@ -31,7 +31,9 @@ describe("Auth Service", () => {
 
 		const result = await login("none@example.com", "password");
 		expect(result.success).toBe(false);
-		expect(result.error).toBe("Email tidak ditemukan");
+		if (!result.success) {
+			expect(result.error).toBe("Email tidak ditemukan");
+		}
 	});
 
 	it("should return error if password not set", async () => {
@@ -41,7 +43,9 @@ describe("Auth Service", () => {
 
 		const result = await login("test@example.com", "password");
 		expect(result.success).toBe(false);
-		expect(result.error).toBe("Password belum diatur. Hubungi admin.");
+		if (!result.success) {
+			expect(result.error).toBe("Password belum diatur. Hubungi admin.");
+		}
 	});
 
 	it("should return error if password incorrect", async () => {
@@ -52,7 +56,9 @@ describe("Auth Service", () => {
 
 		const result = await login("test@example.com", "wrong_password");
 		expect(result.success).toBe(false);
-		expect(result.error).toBe("Password salah");
+		if (!result.success) {
+			expect(result.error).toBe("Password salah");
+		}
 	});
 
 	it("should return success and user if credentials correct", async () => {
@@ -82,6 +88,8 @@ describe("Auth Service", () => {
 
 		const result = await login("test@example.com", "password");
 		expect(result.success).toBe(false);
-		expect(result.error).toBe("Terjadi kesalahan sistem");
+		if (!result.success) {
+			expect(result.error).toBe("Terjadi kesalahan sistem");
+		}
 	});
 });

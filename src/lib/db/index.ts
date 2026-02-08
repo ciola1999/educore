@@ -1,60 +1,63 @@
 import Database from "@tauri-apps/plugin-sql";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { count } from "drizzle-orm";
-import { users } from "./schema";
+import { drizzle } from "drizzle-orm/sqlite-proxy";
 // 👇 KITA IMPORT FUNGSI HASH ASLI DARI FILE YANG KAMU KIRIM TADI
-import { hashPassword } from "../auth/hash"; 
+import { hashPassword } from "../auth/hash";
+import { users } from "./schema";
 
 // Ganti nama DB ke v2 untuk memaksa reset ulang (karena data v1 hash-nya rusak)
-const DB_FILENAME = "educore_v2.db"; 
+const DB_FILENAME = "educore_v2.db";
 
 let _dbPromise: Promise<any> | null = null;
 
 export const getDb = async () => {
-  if (_dbPromise) return _dbPromise;
+	if (_dbPromise) return _dbPromise;
 
-  _dbPromise = (async () => {
-    try {
-      const sqlite = await Database.load(`sqlite:${DB_FILENAME}`);
+	_dbPromise = (async () => {
+		try {
+			const sqlite = await Database.load(`sqlite:${DB_FILENAME}`);
 
-      const db = drizzle(async (sql, params, method) => {
-        try {
-          const rows = await sqlite.select<any[]>(sql, params);
-          if (method === "run") {
-            const result = await sqlite.execute(sql, params);
-            return {
-              rows: [],
-              rowsAffected: result.rowsAffected,
-              insertId: result.lastInsertId,
-            };
-          }
-          const formattedRows = rows.map((row) => Object.values(row));
-          return { rows: formattedRows };
-        } catch (e: any) {
-          console.error("SQL Error:", e);
-          throw e;
-        }
-      }, { schema: await import("./schema") });
+			const db = drizzle(
+				async (sql, params, method) => {
+					try {
+						const rows = await sqlite.select<any[]>(sql, params);
+						if (method === "run") {
+							const result = await sqlite.execute(sql, params);
+							return {
+								rows: [],
+								rowsAffected: result.rowsAffected,
+								insertId: result.lastInsertId,
+							};
+						}
+						const formattedRows = rows.map((row) => Object.values(row));
+						return { rows: formattedRows };
+					} catch (e: any) {
+						console.error("SQL Error:", e);
+						throw e;
+					}
+				},
+				{ schema: await import("./schema") },
+			);
 
-      await initTables(sqlite);
-      await seedDatabase(db); // <-- Seeding akan dijalankan di sini
+			await initTables(sqlite);
+			await seedDatabase(db); // <-- Seeding akan dijalankan di sini
 
-      return db;
-    } catch (error) {
-      console.error("❌ Failed to connect/seed DB:", error);
-      _dbPromise = null;
-      throw error;
-    }
-  })();
+			return db;
+		} catch (error) {
+			console.error("❌ Failed to connect/seed DB:", error);
+			_dbPromise = null;
+			throw error;
+		}
+	})();
 
-  return _dbPromise;
+	return _dbPromise;
 };
 
 async function initTables(sqlite: Database) {
-  console.log("⚙️ Verifying Database Schema...");
+	console.log("⚙️ Verifying Database Schema...");
 
-  // USERS
-  await sqlite.execute(`
+	// USERS
+	await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id text PRIMARY KEY NOT NULL,
       full_name text NOT NULL,
@@ -68,8 +71,8 @@ async function initTables(sqlite: Database) {
     );
   `);
 
-  // STUDENTS
-  await sqlite.execute(`
+	// STUDENTS
+	await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS students (
       id text PRIMARY KEY NOT NULL,
       nis text NOT NULL UNIQUE,
@@ -85,8 +88,8 @@ async function initTables(sqlite: Database) {
     );
   `);
 
-  // CLASSES
-  await sqlite.execute(`
+	// CLASSES
+	await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS classes (
       id text PRIMARY KEY NOT NULL,
       name text NOT NULL,
@@ -99,8 +102,8 @@ async function initTables(sqlite: Database) {
     );
   `);
 
-  // SUBJECTS
-  await sqlite.execute(`
+	// SUBJECTS
+	await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS subjects (
       id text PRIMARY KEY NOT NULL,
       name text NOT NULL,
@@ -112,8 +115,8 @@ async function initTables(sqlite: Database) {
     );
   `);
 
-  // SCHEDULE
-  await sqlite.execute(`
+	// SCHEDULE
+	await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS schedule (
       id text PRIMARY KEY NOT NULL,
       class_id text NOT NULL REFERENCES classes(id),
@@ -129,8 +132,8 @@ async function initTables(sqlite: Database) {
     );
   `);
 
-  // ATTENDANCE
-  await sqlite.execute(`
+	// ATTENDANCE (Absensi Manual Murid)
+	await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS attendance (
       id text PRIMARY KEY NOT NULL,
       student_id text NOT NULL REFERENCES students(id),
@@ -146,34 +149,83 @@ async function initTables(sqlite: Database) {
     );
   `);
 
-  console.log("✅ Schema Verified.");
+	// ATTENDANCE_SETTINGS
+	await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS attendance_settings (
+      id text PRIMARY KEY NOT NULL,
+      day_of_week integer NOT NULL,
+      start_time text NOT NULL,
+      end_time text NOT NULL,
+      late_threshold text NOT NULL,
+      entity_type text NOT NULL,
+      is_active integer DEFAULT 1 NOT NULL,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
+
+	// HOLIDAYS
+	await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS holidays (
+      id text PRIMARY KEY NOT NULL,
+      date text NOT NULL,
+      name text NOT NULL,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
+
+	// ATTENDANCE_LOGS
+	await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS attendance_logs (
+      id text PRIMARY KEY NOT NULL,
+      entity_id text NOT NULL,
+      entity_type text NOT NULL,
+      date text NOT NULL,
+      check_in_time text,
+      check_out_time text,
+      status text,
+      late_duration integer,
+      notes text,
+      created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
+      deleted_at integer,
+      sync_status text DEFAULT 'pending' NOT NULL
+    );
+  `);
+
+	console.log("✅ Schema Verified.");
 }
 
 // 👇 INI BAGIAN UTAMA PERBAIKANNYA
 async function seedDatabase(db: any) {
-  try {
-    const result = await db.select({ count: count() }).from(users);
-    const userCount = result[0]?.count || 0;
+	try {
+		const result = await db.select({ count: count() }).from(users);
+		const userCount = result[0]?.count || 0;
 
-    if (userCount === 0) {
-      console.log("🌱 Seeding Super Admin...");
-      
-      // ✅ Generate Hash ASLI menggunakan fungsi dari hash.ts
-      const adminPasswordHash = await hashPassword("admin123"); 
-      
-      await db.insert(users).values({
-        id: crypto.randomUUID(), 
-        fullName: "Super Admin",
-        email: "admin@educore.school",
-        role: "admin",
-        passwordHash: adminPasswordHash, // Hash valid
-        syncStatus: "pending",
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      console.log("✅ Super Admin created (with valid bcrypt hash)!");
-    }
-  } catch (e) {
-    console.error("Seed error:", e);
-  }
+		if (userCount === 0) {
+			console.log("🌱 Seeding Super Admin...");
+
+			// ✅ Generate Hash ASLI menggunakan fungsi dari hash.ts
+			const adminPasswordHash = await hashPassword("admin123");
+
+			await db.insert(users).values({
+				id: crypto.randomUUID(),
+				fullName: "Super Admin",
+				email: "admin@educore.school",
+				role: "admin",
+				passwordHash: adminPasswordHash, // Hash valid
+				syncStatus: "pending",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			});
+			console.log("✅ Super Admin created (with valid bcrypt hash)!");
+		}
+	} catch (e) {
+		console.error("Seed error:", e);
+	}
 }

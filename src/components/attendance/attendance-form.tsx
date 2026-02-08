@@ -1,304 +1,218 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { getDb } from "@/lib/db";
-import { classes, students } from "@/lib/db/schema";
-import { recordBulkAttendance } from "@/lib/services/attendance";
-import { eq } from "drizzle-orm";
+import { useAttendanceForm } from "@/hooks/use-attendance-form";
+import type { AttendanceStatus } from "@/lib/validations/schemas";
 import { CalendarDays, Check, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-
-type AttendanceStatus = "present" | "sick" | "permission" | "alpha";
-
-interface StudentRecord {
-	id: string;
-	nis: string;
-	fullName: string;
-	status: AttendanceStatus;
-	notes: string;
-}
-
-interface ClassOption {
-	id: string;
-	name: string;
-}
 
 export function AttendanceForm() {
-	const [isMounted, setIsMounted] = useState(false);
-	const [loading, setLoading] = useState(true);
-	const [submitting, setSubmitting] = useState(false);
-	const [studentList, setStudentList] = useState<StudentRecord[]>([]);
-	const [selectedDate, setSelectedDate] = useState(
-		() => new Date().toISOString().split("T")[0],
-	);
-	const [selectedClass, setSelectedClass] = useState("");
-	const [classList, setClassList] = useState<ClassOption[]>([]);
+  const {
+    isMounted,
+    loading,
+    submitting,
+    studentList,
+    selectedDate,
+    setSelectedDate,
+    selectedClass,
+    setSelectedClass,
+    classList,
+    updateStatus,
+    setAllPresent,
+    handleSubmit,
+  } = useAttendanceForm();
 
-	useEffect(() => {
-		setIsMounted(true);
-		fetchClasses();
-	}, []);
+  if (!isMounted) return null;
 
-	// Fetch students when class changes
-	useEffect(() => {
-		if (selectedClass) {
-			fetchStudentsByClass(selectedClass);
-		}
-	}, [selectedClass]);
+  if (loading && classList.length === 0) {
+    return (
+      <div className="flex justify-center items-center py-20 text-zinc-500">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
-	async function fetchClasses() {
-		try {
-			const db = await getDb();
-			const result = await db
-				.select({ id: classes.id, name: classes.name })
-				.from(classes);
-			setClassList(result);
-			if (result.length > 0) {
-				setSelectedClass(result[0].id);
-			}
-		} catch (e) {
-			console.error("Failed to fetch classes:", e);
-		} finally {
-			setLoading(false);
-		}
-	}
+  const statusColors: Record<AttendanceStatus, string> = {
+    present: "bg-emerald-600 hover:bg-emerald-500",
+    sick: "bg-yellow-600 hover:bg-yellow-500",
+    permission: "bg-blue-600 hover:bg-blue-500",
+    alpha: "bg-red-600 hover:bg-red-500",
+  };
 
-	async function fetchStudentsByClass(classId: string) {
-		setLoading(true);
-		try {
-			const db = await getDb();
-			// Find the class name first
-			const classData = classList.find((c) => c.id === classId);
-			if (!classData) {
-				setStudentList([]);
-				setLoading(false);
-				return;
-			}
-			// Get students by grade (class name)
-			const result = await db
-				.select()
-				.from(students)
-				.where(eq(students.grade, classData.name));
-			const records: StudentRecord[] = result.map((s: any) => ({
-				id: s.id,
-				nis: s.nis,
-				fullName: s.fullName,
-				status: "present" as AttendanceStatus,
-				notes: "",
-			}));
-			setStudentList(records);
-		} catch (e) {
-			console.error("Failed to fetch students:", e);
-		} finally {
-			setLoading(false);
-		}
-	}
+  const statusLabels: Record<AttendanceStatus, string> = {
+    present: "P",
+    sick: "S",
+    permission: "I",
+    alpha: "A",
+  };
 
-	function updateStatus(studentId: string, status: AttendanceStatus) {
-		setStudentList((prev) =>
-			prev.map((s) => (s.id === studentId ? { ...s, status } : s)),
-		);
-	}
+  return (
+    <div className="space-y-6">
+      {/* Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-zinc-800/50">
+            <CalendarDays className="h-5 w-5 text-zinc-400" />
+          </div>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-400 text-sm font-medium">Class:</span>
+          <select
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
+            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all min-w-[140px]"
+          >
+            {classList.length === 0 ? (
+              <option value="">No classes available</option>
+            ) : (
+              classList.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <div className="sm:ml-auto flex gap-2">
+          <Button
+            onClick={setAllPresent}
+            variant="outline"
+            size="sm"
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
+          >
+            <Check className="h-4 w-4 mr-2" /> All Present
+          </Button>
+        </div>
+      </div>
 
-	async function handleSubmit() {
-		setSubmitting(true);
-		try {
-			const result = await recordBulkAttendance({
-				classId: selectedClass,
-				date: selectedDate,
-				recordedBy: "admin-001", // TODO: Get from auth context
-				records: studentList.map((s) => ({
-					studentId: s.id,
-					status: s.status,
-					notes: s.notes,
-				})),
-			});
+      {classList.length === 0 && (
+        <div className="text-center py-20 text-zinc-500 bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800">
+          <p className="mb-2 italic">No classes found.</p>
+          <p className="text-sm">
+            Please add classes first in{" "}
+            <span className="text-blue-400 hover:underline cursor-pointer">
+              Courses
+            </span>{" "}
+            menu.
+          </p>
+        </div>
+      )}
 
-			if (result.success) {
-				alert(`✅ Attendance saved for ${result.count} students!`);
-			} else {
-				alert(`❌ Failed: ${result.error}`);
-			}
-		} catch (e) {
-			console.error("Submit error:", e);
-			alert("Failed to save attendance");
-		} finally {
-			setSubmitting(false);
-		}
-	}
+      {classList.length > 0 && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 text-xs font-medium text-zinc-400 uppercase tracking-wider px-1">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-emerald-600"></span>{" "}
+              Present
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-yellow-600"></span> Sick
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-blue-600"></span>{" "}
+              Permission
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-red-600"></span> Alpha
+            </span>
+          </div>
 
-	if (!isMounted) return null;
+          {/* Student List */}
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-10 w-10 animate-spin text-blue-500/50" />
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {studentList.map((student, idx) => (
+                <div
+                  key={student.id}
+                  className="group flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-800/50 hover:border-zinc-700 transition-all duration-200"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <span className="w-6 text-zinc-600 text-xs font-mono font-bold">
+                      {(idx + 1).toString().padStart(2, "0")}
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-mono text-xs text-blue-400 font-semibold mb-0.5">
+                        {student.nis}
+                      </span>
+                      <span className="text-zinc-100 font-medium tracking-tight">
+                        {student.fullName}
+                      </span>
+                    </div>
+                  </div>
 
-	if (loading && classList.length === 0) {
-		return (
-			<div className="flex justify-center items-center py-20 text-zinc-500">
-				<Loader2 className="h-8 w-8 animate-spin" />
-			</div>
-		);
-	}
+                  <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 border-zinc-800/50 pt-3 sm:pt-0">
+                    <span className="sm:hidden text-xs text-zinc-500 font-medium">
+                      Status:
+                    </span>
+                    <div className="flex gap-1.5 p-1 rounded-lg bg-zinc-950/50 border border-zinc-800">
+                      {(
+                        [
+                          "present",
+                          "sick",
+                          "permission",
+                          "alpha",
+                        ] as AttendanceStatus[]
+                      ).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => updateStatus(student.id, status)}
+                          title={
+                            status.charAt(0).toUpperCase() + status.slice(1)
+                          }
+                          className={`w-9 h-9 sm:w-8 sm:h-8 rounded-md text-xs font-bold transition-all duration-200 ${
+                            student.status === status
+                              ? `${statusColors[status]} text-white shadow-lg shadow-${statusColors[status].split("-")[1]}-500/20 scale-105 sm:scale-110`
+                              : "bg-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                          }`}
+                        >
+                          {statusLabels[status]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
-	const statusColors: Record<AttendanceStatus, string> = {
-		present: "bg-emerald-600 hover:bg-emerald-500",
-		sick: "bg-yellow-600 hover:bg-yellow-500",
-		permission: "bg-blue-600 hover:bg-blue-500",
-		alpha: "bg-red-600 hover:bg-red-500",
-	};
+          {studentList.length === 0 && !loading && (
+            <div className="text-center py-20 text-zinc-500 bg-zinc-900/20 rounded-2xl border border-zinc-800/50">
+              <p className="italic">No students found in this class.</p>
+              <p className="text-sm mt-1">
+                Make sure student's Grade matches the class name.
+              </p>
+            </div>
+          )}
 
-	const statusLabels: Record<AttendanceStatus, string> = {
-		present: "P",
-		sick: "S",
-		permission: "I",
-		alpha: "A",
-	};
-
-	return (
-		<div className="space-y-6">
-			{/* Controls */}
-			<div className="flex items-center gap-4 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
-				<div className="flex items-center gap-2">
-					<CalendarDays className="h-5 w-5 text-zinc-400" />
-					<input
-						type="date"
-						value={selectedDate}
-						onChange={(e) => setSelectedDate(e.target.value)}
-						className="bg-zinc-950 border border-zinc-700 rounded-md px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-					/>
-				</div>
-				<div className="flex items-center gap-2">
-					<span className="text-zinc-400 text-sm">Class:</span>
-					<select
-						value={selectedClass}
-						onChange={(e) => setSelectedClass(e.target.value)}
-						className="bg-zinc-950 border border-zinc-700 rounded-md px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-blue-500"
-					>
-						{classList.length === 0 ? (
-							<option value="">No classes available</option>
-						) : (
-							classList.map((c) => (
-								<option key={c.id} value={c.id}>
-									{c.name}
-								</option>
-							))
-						)}
-					</select>
-				</div>
-				<div className="ml-auto flex gap-2">
-					<Button
-						onClick={() =>
-							setStudentList((prev) =>
-								prev.map((s) => ({ ...s, status: "present" })),
-							)
-						}
-						variant="outline"
-						size="sm"
-						className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-					>
-						<Check className="h-4 w-4 mr-1" /> All Present
-					</Button>
-				</div>
-			</div>
-
-			{classList.length === 0 && (
-				<div className="text-center py-12 text-zinc-500 bg-zinc-900/50 rounded-lg border border-dashed border-zinc-800">
-					No classes found. Please add classes first in{" "}
-					<span className="text-blue-400">Courses</span> menu.
-				</div>
-			)}
-
-			{classList.length > 0 && (
-				<>
-					{/* Legend */}
-					<div className="flex gap-4 text-sm">
-						<span className="flex items-center gap-1">
-							<span className="w-4 h-4 rounded bg-emerald-600"></span> Present
-						</span>
-						<span className="flex items-center gap-1">
-							<span className="w-4 h-4 rounded bg-yellow-600"></span> Sick
-						</span>
-						<span className="flex items-center gap-1">
-							<span className="w-4 h-4 rounded bg-blue-600"></span> Permission
-						</span>
-						<span className="flex items-center gap-1">
-							<span className="w-4 h-4 rounded bg-red-600"></span> Alpha
-						</span>
-					</div>
-
-					{/* Student List */}
-					{loading ? (
-						<div className="flex justify-center py-8">
-							<Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-						</div>
-					) : (
-						<div className="space-y-2">
-							{studentList.map((student, idx) => (
-								<div
-									key={student.id}
-									className="flex items-center gap-4 p-3 rounded-lg bg-zinc-900 border border-zinc-800"
-								>
-									<span className="w-8 text-zinc-500 text-sm font-mono">
-										{idx + 1}.
-									</span>
-									<span className="font-mono text-zinc-400 text-sm w-20">
-										{student.nis}
-									</span>
-									<span className="flex-1 text-white font-medium">
-										{student.fullName}
-									</span>
-									<div className="flex gap-1">
-										{(
-											[
-												"present",
-												"sick",
-												"permission",
-												"alpha",
-											] as AttendanceStatus[]
-										).map((status) => (
-											<button
-												key={status}
-												type="button"
-												onClick={() => updateStatus(student.id, status)}
-												className={`w-8 h-8 rounded-md text-xs font-bold transition-all ${
-													student.status === status
-														? statusColors[status] +
-															" text-white ring-2 ring-offset-2 ring-offset-zinc-900"
-														: "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-												}`}
-											>
-												{statusLabels[status]}
-											</button>
-										))}
-									</div>
-								</div>
-							))}
-						</div>
-					)}
-
-					{studentList.length === 0 && !loading && (
-						<div className="text-center py-12 text-zinc-500">
-							No students found in this class. Make sure student's Grade matches
-							the class name.
-						</div>
-					)}
-
-					{/* Submit Button */}
-					{studentList.length > 0 && (
-						<div className="flex justify-end pt-4 border-t border-zinc-800">
-							<Button
-								onClick={handleSubmit}
-								disabled={submitting}
-								className="bg-blue-600 hover:bg-blue-500 gap-2"
-							>
-								{submitting ? (
-									<Loader2 className="h-4 w-4 animate-spin" />
-								) : (
-									<Check className="h-4 w-4" />
-								)}
-								Save Attendance
-							</Button>
-						</div>
-					)}
-				</>
-			)}
-		</div>
-	);
+          {/* Submit Button */}
+          {studentList.length > 0 && (
+            <div className="flex justify-end pt-6 border-t border-zinc-800/50 mt-4">
+              <Button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-6 px-8 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 gap-3 min-w-[200px]"
+              >
+                {submitting ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Check className="h-5 w-5" />
+                )}
+                Save Attendance
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

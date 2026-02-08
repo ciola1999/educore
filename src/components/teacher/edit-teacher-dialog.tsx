@@ -23,6 +23,7 @@ import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface EditTeacherDialogProps {
 	teacher: {
@@ -47,7 +48,7 @@ export function EditTeacherDialog({
 	const [formData, setFormData] = useState({
 		fullName: "",
 		email: "",
-		role: "teacher" as "teacher" | "staff",
+		role: "teacher" as "admin" | "teacher" | "staff",
 	});
 
 	useEffect(() => {
@@ -55,7 +56,7 @@ export function EditTeacherDialog({
 			setFormData({
 				fullName: teacher.fullName,
 				email: teacher.email,
-				role: teacher.role as "teacher" | "staff",
+				role: teacher.role,
 			});
 		}
 	}, [teacher]);
@@ -73,19 +74,21 @@ export function EditTeacherDialog({
 					fullName: formData.fullName,
 					email: formData.email,
 					role: formData.role,
+					updatedAt: new Date(),
 				})
 				.where(eq(users.id, teacher.id));
 
 			onOpenChange(false);
 			onSuccess();
-			console.log("✅ Teacher updated!");
-		} catch (error: any) {
+			toast.success("Guru berhasil diperbarui");
+		} catch (error: unknown) {
 			console.error("❌ Update failed:", error);
-			const errorMessage = error?.message || String(error);
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
 			if (errorMessage.includes("UNIQUE constraint failed")) {
-				alert("Email already used!");
+				toast.error("Email sudah digunakan");
 			} else {
-				alert("Failed to update. Check console.");
+				toast.error("Gagal memperbarui data");
 			}
 		} finally {
 			setLoading(false);
@@ -94,30 +97,38 @@ export function EditTeacherDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800 text-white">
+			<DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800 text-white rounded-2xl shadow-2xl">
 				<DialogHeader>
-					<DialogTitle>Edit Teacher</DialogTitle>
+					<DialogTitle className="text-2xl font-bold">Edit Teacher</DialogTitle>
 					<DialogDescription className="text-zinc-400">
-						Update teacher information below.
+						Update teacher information below. Changes are saved instantly.
 					</DialogDescription>
 				</DialogHeader>
 
-				<form onSubmit={handleSubmit} className="grid gap-4 py-4">
+				<form
+					onSubmit={handleSubmit}
+					className="grid gap-6 py-6 border-y border-zinc-800 my-2"
+				>
 					<div className="grid gap-2">
-						<Label htmlFor="edit-fullName">Full Name</Label>
+						<Label htmlFor="edit-fullName" className="text-zinc-300">
+							Full Name
+						</Label>
 						<Input
 							id="edit-fullName"
 							value={formData.fullName}
 							onChange={(e) =>
 								setFormData((prev) => ({ ...prev, fullName: e.target.value }))
 							}
-							className="bg-zinc-950 border-zinc-700"
+							className="bg-zinc-950 border-zinc-800 h-11 rounded-xl focus:ring-blue-500/20"
+							placeholder="e.g. John Doe"
 							required
 						/>
 					</div>
 
 					<div className="grid gap-2">
-						<Label htmlFor="edit-email">Email</Label>
+						<Label htmlFor="edit-email" className="text-zinc-300">
+							Email Address
+						</Label>
 						<Input
 							id="edit-email"
 							type="email"
@@ -125,37 +136,39 @@ export function EditTeacherDialog({
 							onChange={(e) =>
 								setFormData((prev) => ({ ...prev, email: e.target.value }))
 							}
-							className="bg-zinc-950 border-zinc-700"
+							className="bg-zinc-950 border-zinc-800 h-11 rounded-xl focus:ring-blue-500/20"
+							placeholder="name@school.com"
 							required
 						/>
 					</div>
 
 					<div className="grid gap-2">
-						<Label>Role</Label>
+						<Label className="text-zinc-300">Role</Label>
 						<Select
 							value={formData.role}
-							onValueChange={(value: "teacher" | "staff") =>
+							onValueChange={(value: "admin" | "teacher" | "staff") =>
 								setFormData((prev) => ({ ...prev, role: value }))
 							}
 						>
-							<SelectTrigger className="bg-zinc-950 border-zinc-700">
+							<SelectTrigger className="bg-zinc-950 border-zinc-800 h-11 rounded-xl">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+							<SelectContent className="bg-zinc-900 border-zinc-800 text-white rounded-xl">
 								<SelectItem value="teacher">Teacher</SelectItem>
 								<SelectItem value="staff">Staff</SelectItem>
+								<SelectItem value="admin">Admin</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>
 
-					<DialogFooter className="mt-4">
+					<DialogFooter className="pt-2">
 						<Button
 							type="submit"
 							disabled={loading}
-							className="w-full bg-blue-600 hover:bg-blue-700"
+							className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-900/20"
 						>
 							{loading ? (
-								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+								<Loader2 className="mr-2 h-5 w-5 animate-spin" />
 							) : (
 								"Save Changes"
 							)}

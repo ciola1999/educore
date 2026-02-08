@@ -2,6 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -9,174 +15,227 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { getDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq, or } from "drizzle-orm";
+import { useTeacherList } from "@/hooks/use-teacher-list";
+import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
 import {
+	ChevronDown,
+	ChevronUp,
 	GraduationCap,
+	IdCard,
 	Loader2,
 	Pencil,
 	RefreshCw,
 	Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { IDCardView } from "../id-card/id-card-view";
 import { DeleteTeacherDialog } from "./delete-teacher-dialog";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
 
-interface Teacher {
-	id: string;
-	fullName: string;
-	email: string;
-	role: "admin" | "teacher" | "staff";
-}
-
 export function TeacherList() {
-	const [data, setData] = useState<Teacher[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [isMounted, setIsMounted] = useState(false);
+	const {
+		teachers,
+		loading,
+		sortBy,
+		sortOrder,
+		toggleSort,
+		editOpen,
+		setEditOpen,
+		editTeacher,
+		deleteOpen,
+		setDeleteOpen,
+		deleteTeacher,
+		handleEdit,
+		handleDelete,
+		fetchTeachers,
+	} = useTeacherList();
 
-	const [editOpen, setEditOpen] = useState(false);
-	const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
+	const [idCardOpen, setIdCardOpen] = useState(false);
+	const [selectedTeacherForCard, setSelectedTeacherForCard] =
+		useState<any>(null);
 
-	const [deleteOpen, setDeleteOpen] = useState(false);
-	const [deleteTeacher, setDeleteTeacher] = useState<Teacher | null>(null);
-
-	async function fetchTeachers() {
-		setLoading(true);
-		try {
-			const db = await getDb();
-			const result = await db
-				.select()
-				.from(users)
-				.where(or(eq(users.role, "teacher"), eq(users.role, "staff")));
-			setData(result as Teacher[]);
-		} catch (e) {
-			console.error("Failed to fetch teachers:", e);
-		} finally {
-			setLoading(false);
-		}
-	}
-
-	useEffect(() => {
-		setIsMounted(true);
-		fetchTeachers();
-	}, []);
-
-	function handleEdit(teacher: Teacher) {
-		setEditTeacher(teacher);
-		setEditOpen(true);
-	}
-
-	function handleDelete(teacher: Teacher) {
-		setDeleteTeacher(teacher);
-		setDeleteOpen(true);
-	}
-
-	if (!isMounted) return null;
-
-	if (loading && data.length === 0) {
+	if (loading && teachers.length === 0) {
 		return (
-			<div className="flex justify-center items-center py-20 text-zinc-500">
-				<Loader2 className="h-8 w-8 animate-spin" />
+			<div className="flex justify-center items-center py-24 text-zinc-500">
+				<Loader2 className="h-10 w-10 animate-spin text-blue-500" />
 			</div>
 		);
 	}
 
-	if (data.length === 0) {
+	if (teachers.length === 0) {
 		return (
-			<div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-12 flex flex-col items-center justify-center text-center space-y-4 min-h-[400px]">
-				<div className="p-4 rounded-full bg-zinc-800/50 ring-1 ring-zinc-700">
-					<GraduationCap className="h-10 w-10 text-zinc-500" />
+			<motion.div
+				initial={{ opacity: 0, y: 20 }}
+				animate={{ opacity: 1, y: 0 }}
+				className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 flex flex-col items-center justify-center text-center space-y-6"
+			>
+				<div className="p-6 rounded-full bg-linear-to-b from-zinc-800 to-zinc-900 ring-1 ring-zinc-700 shadow-xl">
+					<GraduationCap className="h-12 w-12 text-zinc-500" />
 				</div>
-				<div className="space-y-1">
-					<h3 className="text-xl font-medium text-white">No teachers found</h3>
+				<div className="space-y-2">
+					<h3 className="text-2xl font-semibold text-white">
+						No teachers found
+					</h3>
 					<p className="text-zinc-500 max-w-sm mx-auto">
-						Add teachers or staff members using the button above.
+						Add teachers or adjust your search/filters to see results.
 					</p>
 				</div>
-				<Button variant="outline" onClick={fetchTeachers} className="mt-4">
+				<Button
+					variant="secondary"
+					onClick={() => fetchTeachers()}
+					className="mt-4 px-8"
+				>
 					Refresh Data
 				</Button>
-			</div>
+			</motion.div>
 		);
 	}
 
 	const roleColors: Record<string, string> = {
-		teacher: "bg-pink-900/30 text-pink-300 ring-pink-800",
-		staff: "bg-orange-900/30 text-orange-300 ring-orange-800",
-		admin: "bg-violet-900/30 text-violet-300 ring-violet-800",
+		teacher: "bg-pink-500/10 text-pink-400 ring-pink-500/20",
+		staff: "bg-orange-500/10 text-orange-400 ring-orange-500/20",
+		admin: "bg-violet-500/10 text-violet-400 ring-violet-500/20",
+	};
+
+	const SortIcon = ({ column }: { column: string }) => {
+		if (sortBy !== column) return null;
+		return sortOrder === "asc" ? (
+			<ChevronUp className="h-4 w-4 ml-1" />
+		) : (
+			<ChevronDown className="h-4 w-4 ml-1" />
+		);
 	};
 
 	return (
 		<>
-			<div className="space-y-4">
-				<div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
+			<div className="space-y-6">
+				<div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 backdrop-blur-md overflow-hidden shadow-2xl">
 					<Table>
-						<TableHeader>
-							<TableRow className="border-zinc-800 hover:bg-zinc-900/50">
-								<TableHead className="text-zinc-400">Name</TableHead>
-								<TableHead className="text-zinc-400">Email</TableHead>
-								<TableHead className="text-zinc-400">Role</TableHead>
-								<TableHead className="text-zinc-400 text-right">
+						<TableHeader className="bg-zinc-900/50">
+							<TableRow className="border-zinc-800 hover:bg-transparent">
+								<TableHead
+									className="text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+									onClick={() => toggleSort("fullName")}
+								>
+									<div className="flex items-center">
+										Name <SortIcon column="fullName" />
+									</div>
+								</TableHead>
+								<TableHead
+									className="text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+									onClick={() => toggleSort("email")}
+								>
+									<div className="flex items-center">
+										Email <SortIcon column="email" />
+									</div>
+								</TableHead>
+								<TableHead className="text-zinc-400 font-medium">
+									Role
+								</TableHead>
+								<TableHead className="text-zinc-400 font-medium text-right">
 									Actions
 								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{data.map((teacher) => (
-								<TableRow
-									key={teacher.id}
-									className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
-								>
-									<TableCell className="font-medium text-white">
-										{teacher.fullName}
-									</TableCell>
-									<TableCell className="font-mono text-sm">
-										{teacher.email}
-									</TableCell>
-									<TableCell>
-										<span
-											className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ring-1 capitalize ${roleColors[teacher.role]}`}
-										>
-											{teacher.role}
-										</span>
-									</TableCell>
-									<TableCell className="text-right">
-										<div className="flex justify-end gap-2">
-											<Button
-												size="icon"
-												variant="ghost"
-												className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-800"
-												onClick={() => handleEdit(teacher)}
+							<AnimatePresence mode="popLayout">
+								{teachers.map((teacher, index) => (
+									<motion.tr
+										key={teacher.id}
+										initial={{ opacity: 0, y: 10 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={{ opacity: 0, scale: 0.95 }}
+										transition={{ delay: index * 0.05 }}
+										className="border-zinc-800 hover:bg-white/5 transition-colors group border-b"
+									>
+										<TableCell className="font-semibold text-white py-4">
+											{teacher.fullName}
+										</TableCell>
+										<TableCell className="text-zinc-400 font-mono text-sm">
+											{teacher.email}
+										</TableCell>
+										<TableCell>
+											<span
+												className={cn(
+													"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 capitalize shadow-xs",
+													roleColors[teacher.role] ||
+														"bg-zinc-800 text-zinc-400 ring-zinc-700",
+												)}
 											>
-												<Pencil className="h-4 w-4" />
-											</Button>
-											<Button
-												size="icon"
-												variant="ghost"
-												className="h-8 w-8 text-zinc-400 hover:text-red-400 hover:bg-red-900/20"
-												onClick={() => handleDelete(teacher)}
-											>
-												<Trash2 className="h-4 w-4" />
-											</Button>
-										</div>
-									</TableCell>
-								</TableRow>
-							))}
+												{teacher.role}
+											</span>
+										</TableCell>
+										<TableCell className="text-right">
+											<div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+												<Button
+													size="icon"
+													variant="ghost"
+													className="h-9 w-9 text-zinc-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg"
+													onClick={() => {
+														setSelectedTeacherForCard(teacher);
+														setIdCardOpen(true);
+													}}
+												>
+													<IdCard className="h-4 w-4" />
+												</Button>
+												<Button
+													size="icon"
+													variant="ghost"
+													className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg"
+													onClick={() => handleEdit(teacher)}
+												>
+													<Pencil className="h-4 w-4" />
+												</Button>
+												<Button
+													size="icon"
+													variant="ghost"
+													className="h-9 w-9 text-zinc-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg"
+													onClick={() => handleDelete(teacher)}
+												>
+													<Trash2 className="h-4 w-4" />
+												</Button>
+											</div>
+										</TableCell>
+									</motion.tr>
+								))}
+							</AnimatePresence>
 						</TableBody>
 					</Table>
 				</div>
-				<div className="flex justify-end">
+
+				<div className="flex justify-between items-center text-sm text-zinc-500 px-2">
+					<p>Showing {teachers.length} entries</p>
 					<Button
-						variant="outline"
+						variant="ghost"
 						size="sm"
-						onClick={fetchTeachers}
-						className="gap-2 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+						onClick={() => fetchTeachers()}
+						className="gap-2 text-zinc-400 hover:text-white"
 					>
-						<RefreshCw className="h-3 w-3" /> Refresh List
+						<RefreshCw
+							className={cn("h-4 w-4", loading && "animate-spin text-blue-500")}
+						/>
+						Refresh List
 					</Button>
 				</div>
 			</div>
+
+			<Dialog open={idCardOpen} onOpenChange={setIdCardOpen}>
+				<DialogContent className="bg-zinc-950 border-zinc-900 text-white max-w-lg">
+					<DialogHeader>
+						<DialogTitle>Preview ID Card</DialogTitle>
+					</DialogHeader>
+					<div className="py-6 flex justify-center">
+						{selectedTeacherForCard && (
+							<IDCardView
+								name={selectedTeacherForCard.fullName}
+								id={selectedTeacherForCard.id}
+								role={selectedTeacherForCard.role}
+							/>
+						)}
+					</div>
+				</DialogContent>
+			</Dialog>
 
 			<EditTeacherDialog
 				teacher={editTeacher}
