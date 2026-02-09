@@ -1,64 +1,75 @@
 import Database from "@tauri-apps/plugin-sql";
 import { count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
-// 👇 KITA IMPORT FUNGSI HASH ASLI DARI FILE YANG KAMU KIRIM TADI
-import { hashPassword } from "../auth/hash";
-import { users } from "./schema";
 
-// Ganti nama DB ke v2 untuk memaksa reset ulang (karena data v1 hash-nya rusak)
-const DB_FILENAME = "educore_v2.db";
+import { hashPassword } from "@/lib/auth/hash";
+import * as schema from "@/lib/db/schema";
+import { users } from "@/lib/db/schema";
 
-let _dbPromise: Promise<any> | null = null;
+// 📦 CONFIGURATION
+// Menggunakan V3 untuk memastikan fresh start (Clean Slate Architecture)
+const DB_FILENAME = "educore_v3.db";
+
+// Singleton Pattern untuk koneksi database
+let _dbPromise: Promise<ReturnType<typeof drizzle<typeof schema>>> | null = null;
 
 export const getDb = async () => {
-	if (_dbPromise) return _dbPromise;
+  if (_dbPromise) return _dbPromise;
 
-	_dbPromise = (async () => {
-		try {
-			const sqlite = await Database.load(`sqlite:${DB_FILENAME}`);
+  _dbPromise = (async () => {
+    try {
+      // 1. Load Driver Tauri
+      const sqlite = await Database.load(`sqlite:${DB_FILENAME}`);
 
-			const db = drizzle(
-				async (sql, params, method) => {
-					try {
-						const rows = await sqlite.select<any[]>(sql, params);
-						if (method === "run") {
-							const result = await sqlite.execute(sql, params);
-							return {
-								rows: [],
-								rowsAffected: result.rowsAffected,
-								insertId: result.lastInsertId,
-							};
-						}
-						const formattedRows = rows.map((row) => Object.values(row));
-						return { rows: formattedRows };
-					} catch (e: any) {
-						console.error("SQL Error:", e);
-						throw e;
-					}
-				},
-				{ schema: await import("./schema") },
-			);
+      // 2. Init Drizzle Proxy
+      const db = drizzle(
+        async (sql, params, method) => {
+          try {
+            const rows = await sqlite.select<any[]>(sql, params);
 
-			await initTables(sqlite);
-			await seedDatabase(db); // <-- Seeding akan dijalankan di sini
+            if (method === "run") {
+              const result = await sqlite.execute(sql, params);
+              return {
+                rows: [],
+                rowsAffected: result.rowsAffected,
+                insertId: result.lastInsertId,
+              };
+            }
 
-			return db;
-		} catch (error) {
-			console.error("❌ Failed to connect/seed DB:", error);
-			_dbPromise = null;
-			throw error;
-		}
-	})();
+            // Normalize rows for Drizzle
+            const formattedRows = rows.map((row) => Object.values(row));
+            return { rows: formattedRows };
+          } catch (e) {
+            console.error("[SQL_ERROR]", e);
+            throw e;
+          }
+        },
+        { schema },
+      );
 
-	return _dbPromise;
+      // 3. Migration & Seeding Strategy
+      await initTables(sqlite);
+      await seedDatabase(db);
+
+      return db;
+    } catch (error) {
+      console.error("❌ [DB_FATAL] Failed to connect/seed DB:", error);
+      _dbPromise = null;
+      throw error;
+    }
+  })();
+
+  return _dbPromise;
 };
 
+// 🛠️ INTERNAL MIGRATIONS
+// Manual SQL digunakan karena Tauri environment belum support full Drizzle Kit migration runtime.
 async function initTables(sqlite: Database) {
-	console.log("⚙️ Verifying Database Schema...");
+  console.info("⚙️ [SYSTEM] Verifying Database Schema...");
 
-	// USERS
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS users (
+  const tables = [
+    // 1. USERS
+    `CREATE TABLE IF NOT EXISTS users (
       id text PRIMARY KEY NOT NULL,
       full_name text NOT NULL,
       email text NOT NULL UNIQUE,
@@ -68,12 +79,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// STUDENTS
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS students (
+    // 2. STUDENTS
+    `CREATE TABLE IF NOT EXISTS students (
       id text PRIMARY KEY NOT NULL,
       nis text NOT NULL UNIQUE,
       full_name text NOT NULL,
@@ -85,12 +94,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// CLASSES
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS classes (
+    // 3. CLASSES
+    `CREATE TABLE IF NOT EXISTS classes (
       id text PRIMARY KEY NOT NULL,
       name text NOT NULL,
       academic_year text NOT NULL,
@@ -99,12 +106,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// SUBJECTS
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS subjects (
+    // 4. SUBJECTS
+    `CREATE TABLE IF NOT EXISTS subjects (
       id text PRIMARY KEY NOT NULL,
       name text NOT NULL,
       code text NOT NULL UNIQUE,
@@ -112,12 +117,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// SCHEDULE
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS schedule (
+    // 5. SCHEDULE
+    `CREATE TABLE IF NOT EXISTS schedule (
       id text PRIMARY KEY NOT NULL,
       class_id text NOT NULL REFERENCES classes(id),
       subject_id text NOT NULL REFERENCES subjects(id),
@@ -129,12 +132,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// ATTENDANCE (Absensi Manual Murid)
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS attendance (
+    // 6. ATTENDANCE (Jurnal Kelas)
+    `CREATE TABLE IF NOT EXISTS attendance (
       id text PRIMARY KEY NOT NULL,
       student_id text NOT NULL REFERENCES students(id),
       class_id text NOT NULL REFERENCES classes(id),
@@ -146,12 +147,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// ATTENDANCE_SETTINGS
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS attendance_settings (
+    // 7. ATTENDANCE_SETTINGS
+    `CREATE TABLE IF NOT EXISTS attendance_settings (
       id text PRIMARY KEY NOT NULL,
       day_of_week integer NOT NULL,
       start_time text NOT NULL,
@@ -163,12 +162,10 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// HOLIDAYS
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS holidays (
+    // 8. HOLIDAYS
+    `CREATE TABLE IF NOT EXISTS holidays (
       id text PRIMARY KEY NOT NULL,
       date text NOT NULL,
       name text NOT NULL,
@@ -176,56 +173,68 @@ async function initTables(sqlite: Database) {
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
 
-	// ATTENDANCE_LOGS
-	await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS attendance_logs (
+    // 9. STUDENT DAILY ATTENDANCE (Schema V3)
+    `CREATE TABLE IF NOT EXISTS student_daily_attendance (
       id text PRIMARY KEY NOT NULL,
-      entity_id text NOT NULL,
-      entity_type text NOT NULL,
+      student_id text NOT NULL REFERENCES students(id),
+      snapshot_student_name text,
+      snapshot_student_nis text,
       date text NOT NULL,
-      check_in_time text,
-      check_out_time text,
-      status text,
-      late_duration integer,
-      notes text,
+      check_in_time integer,
+      check_out_time integer,
+      status text DEFAULT 'PRESENT' NOT NULL,
+      late_duration integer DEFAULT 0,
       created_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       updated_at integer NOT NULL DEFAULT (strftime('%s', 'now')),
       deleted_at integer,
       sync_status text DEFAULT 'pending' NOT NULL
-    );
-  `);
+    );`,
+  ];
 
-	console.log("✅ Schema Verified.");
+  // Eksekusi Pembuatan Tabel
+  for (const query of tables) {
+    await sqlite.execute(query);
+  }
+
+  // Performance Indexes
+  await sqlite.execute(
+    `CREATE INDEX IF NOT EXISTS sda_date_idx ON student_daily_attendance(date);`
+  );
+  await sqlite.execute(
+    `CREATE INDEX IF NOT EXISTS sda_student_idx ON student_daily_attendance(student_id);`
+  );
+  await sqlite.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS unique_daily_student_attendance ON student_daily_attendance(student_id, date);`
+  );
+
+  console.info("✅ [SYSTEM] Schema V3 Verified.");
 }
 
-// 👇 INI BAGIAN UTAMA PERBAIKANNYA
-async function seedDatabase(db: any) {
-	try {
-		const result = await db.select({ count: count() }).from(users);
-		const userCount = result[0]?.count || 0;
+// 🌱 SEEDER
+async function seedDatabase(db: ReturnType<typeof drizzle<typeof schema>>) {
+  try {
+    const result = await db.select({ count: count() }).from(users);
+    const userCount = result[0]?.count || 0;
 
-		if (userCount === 0) {
-			console.log("🌱 Seeding Super Admin...");
+    if (userCount === 0) {
+      console.info("🌱 [SEED] Creating Super Admin...");
+      const adminPasswordHash = await hashPassword("admin123");
 
-			// ✅ Generate Hash ASLI menggunakan fungsi dari hash.ts
-			const adminPasswordHash = await hashPassword("admin123");
-
-			await db.insert(users).values({
-				id: crypto.randomUUID(),
-				fullName: "Super Admin",
-				email: "admin@educore.school",
-				role: "admin",
-				passwordHash: adminPasswordHash, // Hash valid
-				syncStatus: "pending",
-				createdAt: new Date(),
-				updatedAt: new Date(),
-			});
-			console.log("✅ Super Admin created (with valid bcrypt hash)!");
-		}
-	} catch (e) {
-		console.error("Seed error:", e);
-	}
+      await db.insert(users).values({
+        id: crypto.randomUUID(),
+        fullName: "Super Admin",
+        email: "admin@educore.school",
+        role: "admin",
+        passwordHash: adminPasswordHash,
+        syncStatus: "pending",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      console.info("✅ [SEED] Super Admin Ready!");
+    }
+  } catch (e) {
+    console.error("❌ [SEED_ERROR]", e);
+  }
 }

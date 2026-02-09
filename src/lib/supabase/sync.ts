@@ -2,10 +2,10 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db";
 import {
 	attendance,
-	attendanceLogs,
 	attendanceSettings,
 	classes,
 	holidays,
+	studentDailyAttendance,
 	students,
 	subjects,
 	users,
@@ -167,16 +167,16 @@ export async function pushToSupabase(): Promise<SyncResult> {
 		}));
 
 		// 8. Logs
-		await syncTable("attendance_logs", attendanceLogs, (l) => ({
+		await syncTable("student_daily_attendance", studentDailyAttendance, (l) => ({
 			id: l.id,
-			entity_id: l.entityId,
-			entity_type: l.entityType,
+			student_id: l.studentId,
 			date: l.date,
 			check_in_time: l.checkInTime,
 			check_out_time: l.checkOutTime,
 			status: l.status,
 			late_duration: l.lateDuration,
-			notes: l.notes,
+			snapshot_student_name: l.snapshotStudentName,
+			snapshot_student_nis: l.snapshotStudentNis,
 			updated_at: new Date().toISOString(),
 		}));
 
@@ -195,150 +195,184 @@ export async function pushToSupabase(): Promise<SyncResult> {
 }
 
 /**
- * Pull data from Supabase to local SQLite (Download)
- * ✅ FIXED: Supports UPSERT & Safe Date Parsing
+ * 2. PULL: Download data dari Supabase -> Local
+ * ✅ FIXED: Hanya update jika data Cloud LEBIH BARU (Timestamp Check)
  */
 export async function pullFromSupabase(): Promise<SyncResult> {
-	try {
-		const db = await getDb();
-		let downloadedCount = 0;
-		let updatedCount = 0;
+  try {
+    const db = await getDb();
+    let downloadedCount = 0;
+    let updatedCount = 0;
 
-		const pullTable = async (
-			tableName: string,
-			drizzleTable: any,
-			mapFn: (remote: any) => any,
-		) => {
-			// Ambil data Cloud
-			const { data: remoteData, error } = await supabase
-				.from(tableName)
-				.select("*");
-			if (error) throw error;
+    // Fungsi Generic untuk Download
+    const pullTable = async (
+      tableName: string,
+      drizzleTable: any,
+      mapFn: (remote: any) => any
+    ) => {
+      // Ambil semua data dari Cloud
+      const { data: remoteData, error } = await supabase
+        .from(tableName)
+        .select("*");
 
-			if (remoteData && remoteData.length > 0) {
-				for (const remote of remoteData) {
-					// Cek existing data di Local
-					const existing = await db
-						.select()
-						.from(drizzleTable)
-						.where(eq(drizzleTable.id, remote.id))
-						.limit(1);
+      if (error) throw error;
 
-					// Map data + set syncStatus = 'synced'
-					const mappedData = {
-						...mapFn(remote),
-						syncStatus: "synced",
-					};
+      if (remoteData && remoteData.length > 0) {
+        for (const remote of remoteData) {
+          // 1. Cek data existing di Local
+          const existing = await db
+            .select()
+            .from(drizzleTable)
+            .where(eq(drizzleTable.id, remote.id))
+            .limit(1);
 
-					if (existing.length === 0) {
-						// INSERT (New)
-						await db.insert(drizzleTable).values(mappedData);
-						downloadedCount++;
-					} else {
-						// UPDATE (Existing) - LWW Strategy
-						await db
-							.update(drizzleTable)
-							.set(mappedData)
-							.where(eq(drizzleTable.id, remote.id));
-						updatedCount++;
-					}
-				}
-			}
-		};
+          // Mapping data dari remote
+          const mappedData = {
+            ...mapFn(remote),
+            syncStatus: "synced", // Set status synced agar tidak dipush balik
+          };
 
-		// 1. Users
-		await pullTable("users", users, (u) => ({
-			id: u.id,
-			fullName: u.full_name,
-			email: u.email,
-			role: u.role,
-			passwordHash: u.password_hash,
-			// 👇 Gunakan safeDate di sini
-			updatedAt: safeDate(u.updated_at),
-			createdAt: safeDate(u.created_at),
-		}));
+          if (existing.length === 0) {
+            // A. INSERT (Data belum ada di lokal)
+            await db.insert(drizzleTable).values(mappedData);
+            downloadedCount++;
+          } else {
+            // B. UPDATE (Data sudah ada) -> CEK TIMESTAMP DULU!
+            const localItem = existing[0];
 
-		// 2. Students
-		await pullTable("students", students, (s) => ({
-			id: s.id,
-			nis: s.nis,
-			fullName: s.full_name,
-			gender: s.gender,
-			grade: s.grade,
-			parentName: s.parent_name,
-			parentPhone: s.parent_phone,
-			updatedAt: safeDate(s.updated_at),
-			createdAt: safeDate(s.created_at),
-		}));
+            // Konversi waktu ke miliseconds untuk perbandingan
+            const remoteTime = new Date(remote.updated_at).getTime();
+            const localTime = localItem.updatedAt
+              ? new Date(localItem.updatedAt).getTime()
+              : 0;
 
-		// 3. Classes
-		await pullTable("classes", classes, (c) => ({
-			id: c.id,
-			name: c.name,
-			academicYear: c.academic_year,
-			homeroomTeacherId: c.homeroom_teacher_id,
-			updatedAt: safeDate(c.updated_at),
-			createdAt: safeDate(c.created_at),
-		}));
+            // Toleransi perbedaan waktu (kadang beda ms sedikit karena proses save)
+            // Kita update HANYA JIKA data cloud lebih baru > 1 detik (1000ms)
+            // ATAU jika status lokal masih 'pending' (konflik, kita menangkan cloud/server wins)
+            const shouldUpdate =
+              remoteTime > localTime + 1000 || localItem.syncStatus === "pending";
 
-		// 4. Subjects
-		await pullTable("subjects", subjects, (s) => ({
-			id: s.id,
-			name: s.name,
-			code: s.code,
-			updatedAt: safeDate(s.updated_at),
-			createdAt: safeDate(s.created_at),
-		}));
+            if (shouldUpdate) {
+              await db
+                .update(drizzleTable)
+                .set(mappedData)
+                .where(eq(drizzleTable.id, remote.id));
+              updatedCount++;
+            }
+          }
+        }
+      }
+    };
 
-		// 5. Attendance Settings
-		await pullTable("attendance_settings", attendanceSettings, (as) => ({
-			id: as.id,
-			dayOfWeek: as.day_of_week,
-			startTime: as.start_time,
-			endTime: as.end_time,
-			lateThreshold: as.late_threshold,
-			entityType: as.entity_type,
-			isActive: as.is_active,
-			updatedAt: safeDate(as.updated_at),
-			createdAt: safeDate(as.created_at),
-		}));
+    // --- URUTAN PULL (Sama seperti sebelumnya) ---
 
-		// 6. Holidays
-		await pullTable("holidays", holidays, (h) => ({
-			id: h.id,
-			date: h.date,
-			name: h.name,
-			updatedAt: safeDate(h.updated_at),
-			createdAt: safeDate(h.created_at),
-		}));
+    // 1. Users
+    await pullTable("users", users, (u) => ({
+      id: u.id,
+      fullName: u.full_name,
+      email: u.email,
+      role: u.role,
+      passwordHash: u.password_hash,
+      updatedAt: safeDate(u.updated_at),
+      createdAt: safeDate(u.created_at),
+    }));
 
-		// 7. Attendance Logs
-		await pullTable("attendance_logs", attendanceLogs, (al) => ({
-			id: al.id,
-			entityId: al.entity_id,
-			entityType: al.entity_type,
-			date: al.date,
-			checkInTime: al.check_in_time,
-			checkOutTime: al.check_out_time,
-			status: al.status,
-			lateDuration: al.late_duration,
-			notes: al.notes,
-			updatedAt: safeDate(al.updated_at),
-			createdAt: safeDate(al.created_at),
-		}));
+    // 2. Students
+    await pullTable("students", students, (s) => ({
+      id: s.id,
+      nis: s.nis,
+      fullName: s.full_name,
+      gender: s.gender,
+      grade: s.grade,
+      parentName: s.parent_name,
+      parentPhone: s.parent_phone,
+      updatedAt: safeDate(s.updated_at),
+      createdAt: safeDate(s.created_at),
+    }));
 
-		return {
-			status: "success",
-			message: `Downloaded ${downloadedCount} new, ${updatedCount} updated.`,
-			downloaded: downloadedCount + updatedCount,
-		};
-	} catch (error) {
-		console.error("Pull error:", error);
-		return {
-			status: "error",
-			message: error instanceof Error ? error.message : "Failed to pull data",
-		};
-	}
+    // 3. Classes
+    await pullTable("classes", classes, (c) => ({
+      id: c.id,
+      name: c.name,
+      academicYear: c.academic_year,
+      homeroomTeacherId: c.homeroom_teacher_id,
+      updatedAt: safeDate(c.updated_at),
+      createdAt: safeDate(c.created_at),
+    }));
+
+    // 4. Subjects
+    await pullTable("subjects", subjects, (s) => ({
+      id: s.id,
+      name: s.name,
+      code: s.code,
+      updatedAt: safeDate(s.updated_at),
+      createdAt: safeDate(s.created_at),
+    }));
+
+    // 5. Settings
+    await pullTable("attendance_settings", attendanceSettings, (s) => ({
+      id: s.id,
+      dayOfWeek: s.day_of_week,
+      startTime: s.start_time,
+      endTime: s.end_time,
+      lateThreshold: s.late_threshold,
+      entityType: s.entity_type,
+      isActive: s.is_active,
+      updatedAt: safeDate(s.updated_at),
+      createdAt: safeDate(s.created_at),
+    }));
+
+    // 6. Holidays
+    await pullTable("holidays", holidays, (h) => ({
+      id: h.id,
+      date: h.date,
+      name: h.name,
+      updatedAt: safeDate(h.updated_at),
+      createdAt: safeDate(h.created_at),
+    }));
+
+    // 7. Student Daily Attendance
+    await pullTable("student_daily_attendance", studentDailyAttendance, (a) => ({
+      id: a.id,
+      studentId: a.student_id,
+      date: a.date,
+      checkInTime: safeDate(a.check_in_time),
+      checkOutTime: a.check_out_time ? safeDate(a.check_out_time) : null,
+      status: a.status,
+      lateDuration: a.late_duration,
+      snapshotStudentName: a.snapshot_student_name,
+      snapshotStudentNis: a.snapshot_student_nis,
+      updatedAt: safeDate(a.updated_at),
+    }));
+
+    // 8. Manual Attendance
+    await pullTable("attendance", attendance, (a) => ({
+      id: a.id,
+      studentId: a.student_id,
+      classId: a.class_id,
+      date: a.date,
+      status: a.status,
+      notes: a.notes,
+      recordedBy: a.recorded_by,
+      updatedAt: safeDate(a.updated_at),
+      createdAt: safeDate(a.created_at),
+    }));
+
+    return {
+      status: "success",
+      message:
+        downloadedCount + updatedCount === 0
+          ? "Data sudah up-to-date."
+          : `Sync: ${downloadedCount} baru, ${updatedCount} diupdate.`,
+      downloaded: downloadedCount + updatedCount,
+    };
+  } catch (error) {
+    console.error("Pull error:", error);
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Gagal download data",
+    };
+  }
 }
 
 /**

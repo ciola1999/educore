@@ -1,6 +1,6 @@
 "use client";
 
-import { processQRScan, type ScanResult } from "@/lib/services/attendance-v2";
+import { processQRScan, type ScanResult } from "@/lib/services/attendance";
 import { AnimatePresence, motion } from "framer-motion";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { CheckCircle2, Loader2, Scan, User, XCircle } from "lucide-react";

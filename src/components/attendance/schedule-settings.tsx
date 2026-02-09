@@ -15,7 +15,7 @@ import {
 	deleteAttendanceSetting,
 	getAttendanceSettings,
 	upsertAttendanceSetting,
-} from "@/lib/services/attendance-v2";
+} from "@/lib/services/attendance";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";

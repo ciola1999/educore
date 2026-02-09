@@ -19,7 +19,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { createStudent, type InsertStudent } from "@/lib/services/student";
+import { createStudent, type NewStudent } from "@/lib/services/student";
 import { Loader2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,14 +33,14 @@ export function AddStudentDialog() {
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
-		const data: InsertStudent = {
+		const data = {
 			nis: formData.get("nis") as string,
 			fullName: formData.get("fullName") as string,
 			gender: formData.get("gender") as "L" | "P",
 			grade: formData.get("grade") as string,
 			parentName: (formData.get("parentName") as string) || null,
 			parentPhone: (formData.get("parentPhone") as string) || null,
-		};
+		} as NewStudent;
 
 		try {
 			await createStudent(data);
