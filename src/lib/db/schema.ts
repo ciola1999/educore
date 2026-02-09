@@ -1,18 +1,23 @@
 // Project\educore\src\lib\db\schema.ts
 
-import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // --- SHARED COLUMNS (Sync Protocol) ---
 // Kita gunakan spread object agar tidak mengulang kode
+// --- SHARED COLUMNS (Sync Protocol) ---
 const syncMetadata = {
+	// Simpan sebagai Integer (ms). Hapus default SQL 'strftime' agar konsisten dengan JS Date.now()
 	createdAt: integer("created_at", { mode: "timestamp" })
-		.default(sql`(strftime('%s', 'now'))`)
+		.$defaultFn(() => new Date())
 		.notNull(),
+
 	updatedAt: integer("updated_at", { mode: "timestamp" })
-		.default(sql`(strftime('%s', 'now'))`)
+		.$defaultFn(() => new Date())
+		.$onUpdateFn(() => new Date()) // Auto-update saat edit data
 		.notNull(),
-	deletedAt: integer("deleted_at", { mode: "timestamp" }), // Soft Delete (null = aktif)
+
+	deletedAt: integer("deleted_at", { mode: "timestamp" }),
+
 	syncStatus: text("sync_status", { enum: ["synced", "pending", "error"] })
 		.default("pending")
 		.notNull(),

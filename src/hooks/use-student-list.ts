@@ -1,85 +1,88 @@
 "use client";
 
-import { getStudents, type Student } from "@/lib/services/student";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+// ✅ FIX 1: Sort Imports A-Z (Biome Compliance)
+// ✅ FIX 2: Rename 'deleteStudent' -> 'deleteStudentService' (Collision Fix)
+import {
+	deleteStudent as deleteStudentService,
+	getStudents,
+	type Student,
+} from "@/lib/services/student";
+
+// Helper: Custom Debounce Hook
+function useDebounce<T>(value: T, delay: number): T {
+	const [debouncedValue, setDebouncedValue] = useState(value);
+	useEffect(() => {
+		const handler = setTimeout(() => setDebouncedValue(value), delay);
+		return () => clearTimeout(handler);
+	}, [value, delay]);
+	return debouncedValue;
+}
 
 export function useStudentList() {
 	// --- STATE ---
 	const [data, setData] = useState<Student[]>([]);
 	const [loading, setLoading] = useState(true);
+
+	// Pagination & Filter State
 	const [searchQuery, setSearchQuery] = useState("");
 	const [currentPage, setCurrentPage] = useState(1);
+	const [totalCount, setTotalCount] = useState(0);
+	const [totalPages, setTotalPages] = useState(1);
 	const itemsPerPage = 10;
 
 	// Sorting State
 	const [sortConfig, setSortConfig] = useState<{
 		key: keyof Student;
 		direction: "asc" | "desc";
-	} | null>({ key: "createdAt", direction: "desc" });
+	}>({ key: "updatedAt", direction: "desc" });
+
+	const debouncedSearch = useDebounce(searchQuery, 500);
 
 	// Dialog States
 	const [editOpen, setEditOpen] = useState(false);
 	const [editStudent, setEditStudent] = useState<Student | null>(null);
 	const [deleteOpen, setDeleteOpen] = useState(false);
+	// State ini namanya 'deleteStudent' (Objek), bukan fungsi
 	const [deleteStudent, setDeleteStudent] = useState<Student | null>(null);
 
 	// --- FETCH DATA ---
 	const fetchStudents = useCallback(async () => {
 		setLoading(true);
 		try {
-			const result = await getStudents();
-			setData(result);
+			const result = await getStudents({
+				page: currentPage,
+				limit: itemsPerPage,
+				search: debouncedSearch,
+				sortBy: sortConfig.key,
+				sortDir: sortConfig.direction,
+			});
+
+			setData(result.data);
+			setTotalCount(result.total);
+			setTotalPages(result.totalPages);
 		} catch (e) {
 			console.error("Failed to fetch students:", e);
 			toast.error("Gagal memuat data siswa");
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [currentPage, debouncedSearch, sortConfig]);
 
+	// Trigger fetch saat dependencies berubah
 	useEffect(() => {
 		fetchStudents();
 	}, [fetchStudents]);
 
-	// --- FILTER & SORTING LOGIC ---
-	const filteredData = useMemo(() => {
-		// 1. Search Filter
-		const result = data.filter((student) => {
-			const search = searchQuery.toLowerCase();
-			return (
-				student.fullName.toLowerCase().includes(search) ||
-				student.nis.includes(search) ||
-				student.grade.toLowerCase().includes(search)
-			);
-		});
-
-		// 2. Sorting
-		if (sortConfig) {
-			result.sort((a, b) => {
-				const aVal = a[sortConfig.key];
-				const bVal = b[sortConfig.key];
-
-				if (aVal === bVal) return 0;
-
-				if (aVal === null || aVal === undefined) return 1;
-				if (bVal === null || bVal === undefined) return -1;
-
-				const comparison = aVal < bVal ? -1 : 1;
-				return sortConfig.direction === "asc" ? comparison : -comparison;
-			});
-		}
-
-		return result;
-	}, [data, searchQuery, sortConfig]);
-
-	const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-	const paginatedData = filteredData.slice(
-		(currentPage - 1) * itemsPerPage,
-		currentPage * itemsPerPage,
-	);
-
 	// --- HANDLERS ---
+
+	// ✅ FIX 3: Pindahkan reset page ke sini (Hapus useEffect berlebih)
+	const handleSearchChange = useCallback((value: string) => {
+		setSearchQuery(value);
+		setCurrentPage(1); // Reset ke halaman 1 saat mengetik
+	}, []);
+
 	const handleEdit = useCallback((student: Student) => {
 		setEditStudent(student);
 		setEditOpen(true);
@@ -90,47 +93,79 @@ export function useStudentList() {
 		setDeleteOpen(true);
 	}, []);
 
-	const handleSearchChange = useCallback((value: string) => {
-		setSearchQuery(value);
-		setCurrentPage(1);
-	}, []);
+	const onEditSuccess = useCallback(() => {
+		setEditOpen(false);
+		toast.success("Data siswa berhasil diperbarui");
+		fetchStudents();
+	}, [fetchStudents]);
+
+	const onDeleteSuccess = useCallback(async () => {
+		// deleteStudent di sini adalah STATE (Objek Student)
+		if (deleteStudent) {
+			try {
+				// ✅ FIX 4: Panggil 'deleteStudentService' (Fungsi API)
+				await deleteStudentService(deleteStudent.id);
+
+				setDeleteOpen(false);
+				setDeleteStudent(null); // Cleanup state
+				toast.success("Siswa berhasil dihapus");
+
+				// Cek jika halaman kosong setelah delete, mundur 1 halaman
+				if (data.length === 1 && currentPage > 1) {
+					setCurrentPage((p) => p - 1);
+				} else {
+					fetchStudents();
+				}
+			} catch (e) {
+				console.error(e);
+				toast.error("Gagal menghapus siswa");
+			}
+		}
+	}, [deleteStudent, fetchStudents, currentPage, data.length]);
 
 	const handleSort = useCallback((key: keyof Student) => {
-		setSortConfig((current) => {
-			if (current?.key === key) {
-				if (current.direction === "asc") {
-					return { key, direction: "desc" };
-				}
-				return null; // Reset sort
-			}
-			return { key, direction: "asc" };
-		});
+		setSortConfig((current) => ({
+			key,
+			direction:
+				current.key === key && current.direction === "asc" ? "desc" : "asc",
+		}));
+	}, []);
+
+	const [idCardOpen, setIdCardOpen] = useState(false);
+	const [selectedStudentForCard, setSelectedStudentForCard] =
+		useState<Student | null>(null);
+
+	// Tambahkan Handler
+	const handleShowIdCard = useCallback((student: Student) => {
+		setSelectedStudentForCard(student);
+		setIdCardOpen(true);
 	}, []);
 
 	return {
-		// State
 		loading,
 		searchQuery,
 		currentPage,
 		totalPages,
-		paginatedData,
-		totalCount: filteredData.length,
+		paginatedData: data,
+		totalCount,
 		sortConfig,
-
-		// Dialog State
 		editOpen,
 		setEditOpen,
 		editStudent,
 		deleteOpen,
 		setDeleteOpen,
 		deleteStudent,
-
-		// Handlers
 		fetchStudents,
 		handleEdit,
+		onEditSuccess,
 		handleDelete,
+		onDeleteSuccess,
 		handleSearchChange,
 		handleSort,
 		setCurrentPage,
+		idCardOpen,
+		setIdCardOpen,
+		selectedStudentForCard,
+		handleShowIdCard,
 	};
 }

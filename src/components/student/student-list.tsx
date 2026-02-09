@@ -1,5 +1,24 @@
+// Project\educore\src\components\student\student-list.tsx
+
 "use client";
 
+import { AnimatePresence, motion } from "framer-motion";
+import {
+	ArrowDown,
+	ArrowUp,
+	ArrowUpDown,
+	ChevronLeft,
+	ChevronRight,
+	Filter,
+	Loader2,
+	Pencil,
+	QrCode, // ✅ 1. Import Icon QR
+	RefreshCw,
+	Search,
+	Trash2,
+} from "lucide-react";
+// ✅ 2. Import Dialog ID Card (Pastikan path import sesuai lokasi file Anda)
+import { StudentIdDialog } from "@/components/student/student-id-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,22 +30,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useStudentList } from "@/hooks/use-student-list";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-	ArrowDown,
-	ArrowUp,
-	ArrowUpDown,
-	ChevronLeft,
-	ChevronRight,
-	Filter,
-	Loader2,
-	Pencil,
-	RefreshCw,
-	Search,
-	Trash2,
-} from "lucide-react";
 import { Badge } from "../ui/badge";
-
 // Dialogs
 import { DeleteStudentDialog } from "./delete-student-dialog";
 import { EditStudentDialog } from "./edit-student-dialog";
@@ -55,12 +59,19 @@ export function StudentList() {
 		paginatedData,
 		totalCount,
 		sortConfig,
+		// --- Edit & Delete States ---
 		editOpen,
 		setEditOpen,
 		editStudent,
 		deleteOpen,
 		setDeleteOpen,
 		deleteStudent,
+		// --- ✅ 3. ID Card States (Dari Hook yang baru diupdate) ---
+		idCardOpen,
+		setIdCardOpen,
+		selectedStudentForCard,
+		handleShowIdCard,
+		// --- Handlers ---
 		fetchStudents,
 		handleEdit,
 		handleDelete,
@@ -229,7 +240,19 @@ export function StudentList() {
 											{student.parentName || "-"}
 										</TableCell>
 										<TableCell className="text-right">
-											<div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+											{/* --- ACTION BUTTONS --- */}
+											<div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+												{/* ✅ 4. Tombol ID CARD Baru */}
+												<Button
+													size="icon"
+													variant="ghost"
+													className="h-9 w-9 text-zinc-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-xl"
+													onClick={() => handleShowIdCard(student)}
+													title="Generate ID Card"
+												>
+													<QrCode className="h-4 w-4" />
+												</Button>
+
 												<Button
 													size="icon"
 													variant="ghost"
@@ -299,6 +322,13 @@ export function StudentList() {
 				open={deleteOpen}
 				onOpenChange={setDeleteOpen}
 				onSuccess={fetchStudents}
+			/>
+
+			{/* ✅ 5. Render Dialog ID Card Disini */}
+			<StudentIdDialog
+				student={selectedStudentForCard}
+				open={idCardOpen}
+				onOpenChange={setIdCardOpen}
 			/>
 		</div>
 	);
