@@ -55,9 +55,18 @@ export type UserSelect = z.infer<typeof userSelectSchema>;
 export const studentInsertSchema = z.object({
   id: z.string().uuid().optional(),
   nis: z.string().min(5, "NIS minimal 5 karakter"),
+  nisn: z
+    .string()
+    .regex(/^[0-9]{10}$/, "NISN harus 10 digit angka")
+    .optional()
+    .or(z.literal("")),
+  email: z.string().email("Email tidak valid").optional().or(z.literal("")),
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   gender: GenderEnum,
   grade: z.string().min(1, "Kelas wajib diisi"),
+  tempatLahir: z.string().max(100).optional(),
+  tanggalLahir: z.coerce.date().optional(),
+  alamat: z.string().max(255).optional(),
   parentName: z.string().optional(),
   parentPhone: z
     .string()

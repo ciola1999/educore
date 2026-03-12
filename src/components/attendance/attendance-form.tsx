@@ -1,11 +1,24 @@
 "use client";
 
+import {
+  CalendarDays,
+  Check,
+  Download,
+  FileSpreadsheet,
+  LayoutList,
+  Loader2,
+} from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAttendanceForm } from "@/hooks/use-attendance-form";
 import type { AttendanceStatus } from "@/lib/validations/schemas";
-import { CalendarDays, Check, Loader2 } from "lucide-react";
 
 export function AttendanceForm() {
+  const [viewMode, setViewMode] = useState<"compact" | "detailed">("detailed");
+  const [exportFilter, setExportFilter] = useState<AttendanceStatus | "all">(
+    "all",
+  );
   const {
     isMounted,
     loading,
@@ -45,6 +58,130 @@ export function AttendanceForm() {
     alpha: "A",
   };
 
+  const formatBirthInfo = (
+    tempatLahir?: string | null,
+    tanggalLahir?: Date | null,
+  ) => {
+    const place = tempatLahir?.trim();
+    const date = tanggalLahir
+      ? new Intl.DateTimeFormat("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }).format(new Date(tanggalLahir))
+      : null;
+
+    if (place && date) return `${place}, ${date}`;
+    if (place) return place;
+    if (date) return date;
+    return "-";
+  };
+
+  const getFilteredStudentsForExport = () => {
+    if (exportFilter === "all") {
+      return studentList;
+    }
+
+    return studentList.filter((student) => student.status === exportFilter);
+  };
+
+  const getExportRows = () => {
+    const className =
+      classList.find((classItem) => classItem.id === selectedClass)?.name ||
+      "unknown-class";
+
+    const filteredStudents = getFilteredStudentsForExport();
+
+    return {
+      className,
+      rows: filteredStudents.map((student) => ({
+        Tanggal: selectedDate,
+        Kelas: className,
+        NIS: student.nis,
+        NISN: student.nisn || "",
+        Nama: student.fullName,
+        "Tempat/Tgl Lahir": formatBirthInfo(
+          student.tempatLahir,
+          student.tanggalLahir,
+        ),
+        "Nama Wali": student.parentName || "",
+        "No HP Wali": student.parentPhone || "",
+        Alamat: student.alamat || "",
+        Status: student.status,
+        Catatan: student.notes || "",
+      })),
+    };
+  };
+
+  const handleExportCsv = () => {
+    if (!selectedClass || studentList.length === 0) {
+      toast.error("Belum ada data siswa untuk diekspor");
+      return;
+    }
+
+    const { className, rows } = getExportRows();
+    if (rows.length === 0) {
+      toast.error("Tidak ada data sesuai filter export");
+      return;
+    }
+
+    const escapeCsvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
+    const headers = Object.keys(rows[0]);
+    const csvRows = rows.map((row) =>
+      headers
+        .map((header) => escapeCsvCell(String(row[header as keyof typeof row])))
+        .join(","),
+    );
+
+    const csvContent = [
+      headers.map((header) => escapeCsvCell(header)).join(","),
+      ...csvRows,
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `attendance-${className}-${selectedDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success("Laporan absensi berhasil diekspor");
+  };
+
+  const handleExportXlsx = async () => {
+    if (!selectedClass || studentList.length === 0) {
+      toast.error("Belum ada data siswa untuk diekspor");
+      return;
+    }
+
+    const { className, rows } = getExportRows();
+    if (rows.length === 0) {
+      toast.error("Tidak ada data sesuai filter export");
+      return;
+    }
+
+    try {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+
+      const filterLabel = exportFilter === "all" ? "all" : exportFilter;
+      XLSX.writeFile(
+        workbook,
+        `attendance-${className}-${selectedDate}-${filterLabel}.xlsx`,
+      );
+      toast.success("Laporan Excel berhasil diekspor");
+    } catch (error) {
+      console.error("❌ Export XLSX gagal:", error);
+      toast.error("Gagal export Excel");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Controls */}
@@ -79,6 +216,49 @@ export function AttendanceForm() {
           </select>
         </div>
         <div className="sm:ml-auto flex gap-2">
+          <select
+            value={exportFilter}
+            onChange={(e) =>
+              setExportFilter(e.target.value as AttendanceStatus | "all")
+            }
+            className="h-9 bg-zinc-950 border border-zinc-700 rounded-lg px-3 text-xs text-zinc-300 focus:ring-2 focus:ring-blue-500"
+            aria-label="Export status filter"
+          >
+            <option value="all">Export: Semua Status</option>
+            <option value="present">Hanya Present</option>
+            <option value="sick">Hanya Sakit</option>
+            <option value="permission">Hanya Izin</option>
+            <option value="alpha">Hanya Alpha</option>
+          </select>
+          <Button
+            onClick={() =>
+              setViewMode((prevMode) =>
+                prevMode === "detailed" ? "compact" : "detailed",
+              )
+            }
+            variant="outline"
+            size="sm"
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
+          >
+            <LayoutList className="h-4 w-4 mr-2" />
+            {viewMode === "detailed" ? "Compact View" : "Detailed View"}
+          </Button>
+          <Button
+            onClick={handleExportCsv}
+            variant="outline"
+            size="sm"
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
+          >
+            <Download className="h-4 w-4 mr-2" /> Export CSV
+          </Button>
+          <Button
+            onClick={handleExportXlsx}
+            variant="outline"
+            size="sm"
+            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" /> Export XLSX
+          </Button>
           <Button
             onClick={setAllPresent}
             variant="outline"
@@ -142,10 +322,32 @@ export function AttendanceForm() {
                     <div className="flex flex-col">
                       <span className="font-mono text-xs text-blue-400 font-semibold mb-0.5">
                         {student.nis}
+                        {student.nisn ? ` • NISN ${student.nisn}` : ""}
                       </span>
                       <span className="text-zinc-100 font-medium tracking-tight">
                         {student.fullName}
                       </span>
+                      {viewMode === "detailed" ? (
+                        <>
+                          <span className="text-[11px] text-zinc-500">
+                            {formatBirthInfo(
+                              student.tempatLahir,
+                              student.tanggalLahir,
+                            )}
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            {student.parentName || "-"}
+                            {student.parentPhone
+                              ? ` • ${student.parentPhone}`
+                              : ""}
+                          </span>
+                          {student.alamat ? (
+                            <span className="text-[11px] text-zinc-600 line-clamp-1 max-w-[300px]">
+                              {student.alamat}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : null}
                     </div>
                   </div>
 

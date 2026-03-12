@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2, Lock, Mail, UserCircle, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAddTeacherHook } from "@/hooks/use-add-teacher";
-import { Loader2, Lock, Mail, UserCircle, UserPlus } from "lucide-react";
 
 export function AddTeacherDialog() {
   const { open, setOpen, loading, form, onSubmit } = useAddTeacherHook();

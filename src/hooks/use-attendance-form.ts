@@ -1,20 +1,25 @@
 "use client";
 
+import { and, eq, isNull, or } from "drizzle-orm";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { getDb } from "@/lib/db";
 import { classes, students } from "@/lib/db/schema";
 import { recordBulkAttendance } from "@/lib/services/attendance";
-import type {
-  AttendanceStatus,
-  StudentSelect,
-} from "@/lib/validations/schemas";
-import { eq } from "drizzle-orm";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
+import type { AttendanceStatus } from "@/lib/validations/schemas";
 
 export interface StudentRecord {
   id: string;
   nis: string;
+  nisn?: string | null;
   fullName: string;
+  grade: string;
+  tempatLahir?: string | null;
+  tanggalLahir?: Date | null;
+  alamat?: string | null;
+  parentName?: string | null;
+  parentPhone?: string | null;
   status: AttendanceStatus;
   notes: string;
 }
@@ -34,13 +39,20 @@ export function useAttendanceForm() {
   );
   const [selectedClass, setSelectedClass] = useState("");
   const [classList, setClassList] = useState<ClassOption[]>([]);
+  const [projectionSynced, setProjectionSynced] = useState(false);
 
   const fetchClasses = useCallback(async () => {
     try {
+      if (!projectionSynced) {
+        await syncUsersToStudentsProjection();
+        setProjectionSynced(true);
+      }
+
       const db = await getDb();
       const result = await db
         .select({ id: classes.id, name: classes.name })
-        .from(classes);
+        .from(classes)
+        .where(and(eq(classes.isActive, true), isNull(classes.deletedAt)));
       setClassList(result);
       if (result.length > 0 && !selectedClass) {
         setSelectedClass(result[0].id);
@@ -51,7 +63,7 @@ export function useAttendanceForm() {
     } finally {
       setLoading(false);
     }
-  }, [selectedClass]);
+  }, [projectionSynced, selectedClass]);
 
   const fetchStudentsByClass = useCallback(
     async (classId: string) => {
@@ -68,17 +80,30 @@ export function useAttendanceForm() {
         const result = await db
           .select()
           .from(students)
-          .where(eq(students.grade, classData.name));
+          .where(
+            and(
+              or(
+                eq(students.grade, classData.name),
+                eq(students.grade, classData.id),
+              ),
+              isNull(students.deletedAt),
+            ),
+          );
 
-        const records: StudentRecord[] = (result as StudentSelect[]).map(
-          (s) => ({
-            id: s.id,
-            nis: s.nis,
-            fullName: s.fullName,
-            status: "present",
-            notes: "",
-          }),
-        );
+        const records: StudentRecord[] = result.map((s) => ({
+          id: s.id,
+          nis: s.nis,
+          nisn: s.nisn,
+          fullName: s.fullName,
+          grade: s.grade,
+          tempatLahir: s.tempatLahir,
+          tanggalLahir: s.tanggalLahir,
+          alamat: s.alamat,
+          parentName: s.parentName,
+          parentPhone: s.parentPhone,
+          status: "present",
+          notes: "",
+        }));
         setStudentList(records);
       } catch (e) {
         console.error("Failed to fetch students:", e);
@@ -128,14 +153,14 @@ export function useAttendanceForm() {
       });
 
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(result.message);
       }
       return result;
     };
 
     toast.promise(promise(), {
       loading: "Saving attendance...",
-      success: (data) => `Attendance saved for ${data.count} students!`,
+      success: () => `Attendance saved for ${studentList.length} students!`,
       error: (err) => `Failed: ${err.message}`,
     });
 

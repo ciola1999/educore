@@ -92,12 +92,8 @@
           "name": "attendance_student_id_students_id_fk",
           "tableFrom": "attendance",
           "tableTo": "students",
-          "columnsFrom": [
-            "student_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["student_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -105,12 +101,8 @@
           "name": "attendance_class_id_classes_id_fk",
           "tableFrom": "attendance",
           "tableTo": "classes",
-          "columnsFrom": [
-            "class_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["class_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -218,26 +210,17 @@
       "indexes": {
         "att_log_search_idx": {
           "name": "att_log_search_idx",
-          "columns": [
-            "entity_id",
-            "date"
-          ],
+          "columns": ["entity_id", "date"],
           "isUnique": false
         },
         "att_log_date_idx": {
           "name": "att_log_date_idx",
-          "columns": [
-            "date"
-          ],
+          "columns": ["date"],
           "isUnique": false
         },
         "unique_daily_log": {
           "name": "unique_daily_log",
-          "columns": [
-            "entity_id",
-            "entity_type",
-            "date"
-          ],
+          "columns": ["entity_id", "entity_type", "date"],
           "isUnique": true
         }
       },
@@ -402,12 +385,8 @@
           "name": "classes_homeroom_teacher_id_users_id_fk",
           "tableFrom": "classes",
           "tableTo": "users",
-          "columnsFrom": [
-            "homeroom_teacher_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["homeroom_teacher_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -564,12 +543,8 @@
           "name": "schedule_class_id_classes_id_fk",
           "tableFrom": "schedule",
           "tableTo": "classes",
-          "columnsFrom": [
-            "class_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["class_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -577,12 +552,8 @@
           "name": "schedule_subject_id_subjects_id_fk",
           "tableFrom": "schedule",
           "tableTo": "subjects",
-          "columnsFrom": [
-            "subject_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["subject_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -590,12 +561,8 @@
           "name": "schedule_teacher_id_users_id_fk",
           "tableFrom": "schedule",
           "tableTo": "users",
-          "columnsFrom": [
-            "teacher_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["teacher_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -689,9 +656,7 @@
       "indexes": {
         "students_nis_unique": {
           "name": "students_nis_unique",
-          "columns": [
-            "nis"
-          ],
+          "columns": ["nis"],
           "isUnique": true
         }
       },
@@ -757,9 +722,7 @@
       "indexes": {
         "subjects_code_unique": {
           "name": "subjects_code_unique",
-          "columns": [
-            "code"
-          ],
+          "columns": ["code"],
           "isUnique": true
         }
       },
@@ -840,9 +803,7 @@
       "indexes": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         }
       },

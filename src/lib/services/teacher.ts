@@ -1,11 +1,11 @@
+import { and, asc, desc, eq, like, or } from "drizzle-orm";
 import { hashPassword } from "@/lib/auth/hash";
 import { getDb } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import {
-	type UserInsertInput,
-	userInsertSchema,
+  type UserInsertInput,
+  userInsertSchema,
 } from "@/lib/validations/schemas";
-import { and, asc, desc, eq, like, or } from "drizzle-orm";
 
 // --- TYPES ---
 
@@ -80,18 +80,19 @@ export async function addTeacher(
 
     // 1. Validate data with Zod (Fail Fast)
     const validation = userInsertSchema.safeParse(data);
-    
+
     if (!validation.success) {
       // ✅ FIX: Menggunakan Template Literal & 'issues' (bukan errors) agar Type-Safe
-      const errorMessage = validation.error.issues[0]?.message || "Input tidak valid";
-      
+      const errorMessage =
+        validation.error.issues[0]?.message || "Input tidak valid";
+
       return {
         success: false,
         error: `Data tidak valid: ${errorMessage}`,
         code: "VALIDATION_ERROR",
       };
     }
-    
+
     const validated = validation.data;
 
     // 2. Check for existing email manually
@@ -111,7 +112,9 @@ export async function addTeacher(
 
     // 3. Prepare data
     const id = validated.id || crypto.randomUUID(); // ✅ Always Generate ID manually for SQLite Proxy
-    const passwordHash = validated.password ? await hashPassword(validated.password) : null;
+    const passwordHash = validated.password
+      ? await hashPassword(validated.password)
+      : null;
 
     // 4. Insert
     await db.insert(users).values({
@@ -126,7 +129,6 @@ export async function addTeacher(
     });
 
     return { success: true, id };
-
   } catch (error: any) {
     console.error("[SERVICE_ERROR] addTeacher:", error);
 

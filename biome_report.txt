@@ -1,0 +1,341 @@
+vitest.config.ts:2:18 lint/style/useNodejsImportProtocol  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+    1 │ import react from "@vitejs/plugin-react";
+  > 2 │ import path from "path";
+      │                  ^^^^^^
+    3 │ import { defineConfig } from "vitest/config";
+    4 │ 
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1  1 │   import react from "@vitejs/plugin-react";
+     2    │ - import·path·from·"path";
+        2 │ + import·path·from·"node:path";
+     3  3 │   import { defineConfig } from "vitest/config";
+     4  4 │   
+  
+
+src\components\academic\class-list.tsx:19:36 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    18 │ export function ClassList() {
+  > 19 │   const [data, setData] = useState<any[]>([]);
+       │                                    ^^^
+    20 │   const [loading, setLoading] = useState(true);
+    21 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\components\academic\edit-class-dialog.tsx:33:14 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    31 │   onSuccess,
+    32 │ }: {
+  > 33 │   classData: any;
+       │              ^^^
+    34 │   onSuccess: () => void;
+    35 │ }) {
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\components\academic\edit-subject-dialog.tsx:23:16 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    21 │   onSuccess,
+    22 │ }: {
+  > 23 │   subjectData: any;
+       │                ^^^
+    24 │   onSuccess: () => void;
+    25 │ }) {
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\components\academic\subject-list.tsx:19:36 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    18 │ export function SubjectList() {
+  > 19 │   const [data, setData] = useState<any[]>([]);
+       │                                    ^^^
+    20 │   const [loading, setLoading] = useState(true);
+    21 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\components\attendance\holiday-manager.tsx:12:44 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    11 │ export function HolidayManager() {
+  > 12 │   const [holidays, setHolidays] = useState<any[]>([]);
+       │                                            ^^^
+    13 │   const [loading, setLoading] = useState(true);
+    14 │   const [adding, setAdding] = useState(false);
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:54:26 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    52 │ // --- HELPER: SAFE DATE PARSER ---
+    53 │ // Mencegah error NaN dan otomatis konversi Seconds -> Milliseconds
+  > 54 │ const safeDate = (value: any): Date => {
+       │                          ^^^
+    55 │   if (!value) return new Date(); // Fallback: Jika null, pakai waktu sekarang
+    56 │ 
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:87:21 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    85 │     const syncTable = async (
+    86 │       tableName: string,
+  > 87 │       drizzleTable: any,
+       │                     ^^^
+    88 │       mapFn: (data: any) => any,
+    89 │       onConflict: string = "id",
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:88:21 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    86 │       tableName: string,
+    87 │       drizzleTable: any,
+  > 88 │       mapFn: (data: any) => any,
+       │                     ^^^
+    89 │       onConflict: string = "id",
+    90 │     ) => {
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:88:29 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    86 │       tableName: string,
+    87 │       drizzleTable: any,
+  > 88 │       mapFn: (data: any) => any,
+       │                             ^^^
+    89 │       onConflict: string = "id",
+    90 │     ) => {
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:410:21 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    408 │     const pullTable = async (
+    409 │       tableName: string,
+  > 410 │       drizzleTable: any,
+        │                     ^^^
+    411 │       mapFn: (remote: any) => any,
+    412 │     ) => {
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:411:23 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    409 │       tableName: string,
+    410 │       drizzleTable: any,
+  > 411 │       mapFn: (remote: any) => any,
+        │                       ^^^
+    412 │     ) => {
+    413 │       // Ambil semua data dari Cloud
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:411:31 lint/suspicious/noExplicitAny ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Unexpected any. Specify a different type.
+  
+    409 │       tableName: string,
+    410 │       drizzleTable: any,
+  > 411 │       mapFn: (remote: any) => any,
+        │                               ^^^
+    412 │     ) => {
+    413 │       // Ambil semua data dari Cloud
+  
+  i any disables many type checking rules. Its use should be avoided.
+  
+
+src\lib\supabase\sync.ts:36:3 lint/correctness/noUnusedImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Several of these imports are unused.
+  
+    34 │   rolePermissions,
+    35 │   roles,
+  > 36 │   schedule,
+       │   ^^^^^^^^
+    37 │   semester,
+    38 │   stokBarang,
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+     34  34 │     rolePermissions,
+     35  35 │     roles,
+     36     │ - ··schedule,
+     37  36 │     semester,
+     38  37 │     stokBarang,
+  
+
+src\app\globals.css:5:2 lint/suspicious/noUnknownAtRules ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Unexpected unknown at-rule: custom-variant 
+  
+    3 │ @import "shadcn/tailwind.css";
+    4 │ 
+  > 5 │ @custom-variant dark (&:is(.dark *));
+      │  ^^^^^^^^^^^^^^
+    6 │ 
+    7 │ @theme inline {
+  
+  i custom-variant is not a standard CSS at-rule, which may lead to unexpected styling results or failure to interpret the styles as intended.
+  
+  i See MDN web docs for a known list of at-rules.
+  
+  i To fix this issue, consider removing the unknown at-rule.
+  
+
+src\app\globals.css:7:2 lint/suspicious/noUnknownAtRules ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Unexpected unknown at-rule: theme 
+  
+    5 │ @custom-variant dark (&:is(.dark *));
+    6 │ 
+  > 7 │ @theme inline {
+      │  ^^^^^
+    8 │   --radius-sm: calc(var(--radius) - 4px);
+    9 │   --radius-md: calc(var(--radius) - 2px);
+  
+  i theme is not a standard CSS at-rule, which may lead to unexpected styling results or failure to interpret the styles as intended.
+  
+  i See MDN web docs for a known list of at-rules.
+  
+  i To fix this issue, consider removing the unknown at-rule.
+  
+
+src\app\globals.css:119:6 lint/suspicious/noUnknownAtRules ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Unexpected unknown at-rule: apply 
+  
+    117 │ @layer base {
+    118 │   * {
+  > 119 │     @apply border-border outline-ring/50;
+        │      ^^^^^
+    120 │   }
+    121 │   body {
+  
+  i apply is not a standard CSS at-rule, which may lead to unexpected styling results or failure to interpret the styles as intended.
+  
+  i See MDN web docs for a known list of at-rules.
+  
+  i To fix this issue, consider removing the unknown at-rule.
+  
+
+src\app\globals.css:122:6 lint/suspicious/noUnknownAtRules ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Unexpected unknown at-rule: apply 
+  
+    120 │   }
+    121 │   body {
+  > 122 │     @apply bg-background text-foreground;
+        │      ^^^^^
+    123 │   }
+    124 │ }
+  
+  i apply is not a standard CSS at-rule, which may lead to unexpected styling results or failure to interpret the styles as intended.
+  
+  i See MDN web docs for a known list of at-rules.
+  
+  i To fix this issue, consider removing the unknown at-rule.
+  
+
+src\components\academic\class-list.tsx:34:3 lint/correctness/useExhaustiveDependencies  FIXABLE  ━━━━━━━━━━
+
+  × This hook does not specify its dependency on fetchData.
+  
+    32 │   }
+    33 │ 
+  > 34 │   useEffect(() => {
+       │   ^^^^^^^^^
+    35 │     fetchData();
+    36 │   }, []);
+  
+  i This dependency is being used here, but is not specified in the hook dependency list.
+  
+    34 │   useEffect(() => {
+  > 35 │     fetchData();
+       │     ^^^^^^^^^
+    36 │   }, []);
+    37 │ 
+  
+  i Either include it or remove the dependency array.
+  
+  i Unsafe fix: Add the missing dependency to the list.
+  
+    36 │ ··},·[fetchData]);
+       │       +++++++++   
+
+src\components\academic\edit-class-dialog.tsx:42:3 lint/correctness/useExhaustiveDependencies  FIXABLE  ━━━━━━━━━━
+
+  × This hook does not specify its dependency on fetchTeachers.
+  
+    40 │   );
+    41 │ 
+  > 42 │   useEffect(() => {
+       │   ^^^^^^^^^
+    43 │     if (open) {
+    44 │       fetchTeachers();
+  
+  i This dependency is being used here, but is not specified in the hook dependency list.
+  
+    42 │   useEffect(() => {
+    43 │     if (open) {
+  > 44 │       fetchTeachers();
+       │       ^^^^^^^^^^^^^
+    45 │     }
+    46 │   }, [open]);
+  
+  i Unsafe fix: Add the missing dependency to the list.
+  
+    46 │ ··},·[open,·fetchTeachers]);
+       │           +++++++++++++++   
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 42.
+Checked 91 files in 1435ms. No fixes applied.
+Found 6 errors.
+Found 53 warnings.
+check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+

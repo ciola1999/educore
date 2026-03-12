@@ -1,41 +1,49 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // Import Logic Baru (Local DB & Store)
-import { login } from '@/lib/auth/service';
-import { useStore } from '@/lib/store/use-store';
+import { login } from "@/lib/auth/service";
+import { useStore } from "@/lib/store/use-store";
 
 // --- SENSORY UTILS (Fitur Baru) ---
 const triggerErrorHaptic = () => {
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
     navigator.vibrate([100, 50, 100]); // Getar bzz-bzz
   }
 };
 
 const playSuccessSound = () => {
-  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+  const AudioContext =
+    window.AudioContext || (window as any).webkitAudioContext;
   if (AudioContext) {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    
+
     // Nada Futuristik Halus
-    osc.type = 'sine';
+    osc.type = "sine";
     osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
     osc.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.1); // Slide ke E5
-    
+
     gain.gain.setValueAtTime(0.05, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-    
+
     osc.start();
     osc.stop(ctx.currentTime + 0.2);
   }
@@ -43,17 +51,17 @@ const playSuccessSound = () => {
 
 export function LoginForm() {
   const router = useRouter();
-  
+
   // Menggunakan Global Store untuk simpan sesi
   const setAuth = useStore((state) => state.login);
-  
+
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   async function onSubmit(event: React.SyntheticEvent) {
     event.preventDefault();
     setIsLoading(true);
-    setError('');
+    setError("");
 
     const target = event.target as typeof event.target & {
       email: { value: string };
@@ -68,21 +76,21 @@ export function LoginForm() {
       const result = await login(email, password);
 
       // CUKUP CEK SUCCESS SAJA
-      if (result.success) { 
+      if (result.success) {
         // ✅ SUKSES: TypeScript otomatis tahu di sini ada result.user
-        playSuccessSound(); 
-        setAuth(result.user); 
-        router.push('/dashboard');
+        playSuccessSound();
+        setAuth(result.user);
+        router.push("/dashboard");
       } else {
         // ❌ GAGAL: TypeScript otomatis tahu di sini ada result.error
-        triggerErrorHaptic(); 
+        triggerErrorHaptic();
         setError(result.error); // Error merah akan hilang di sini
         setIsLoading(false);
       }
     } catch (e) {
       triggerErrorHaptic();
-      console.error('Login error:', e);
-      setError('Terjadi kesalahan sistem');
+      console.error("Login error:", e);
+      setError("Terjadi kesalahan sistem");
       setIsLoading(false);
     }
   }
@@ -132,14 +140,17 @@ export function LoginForm() {
           </div>
         </CardContent>
         <CardFooter className="pt-6">
-          <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-[0.98]" disabled={isLoading}>
+          <Button
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-[0.98]"
+            disabled={isLoading}
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Verifying...
               </>
             ) : (
-              'Masuk'
+              "Masuk"
             )}
           </Button>
         </CardFooter>

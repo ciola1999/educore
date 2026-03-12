@@ -1,9 +1,9 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import type { User } from '../db/schema'; // Pastikan path ini benar ke schema kamu
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+import type { User } from "../db/schema"; // Pastikan path ini benar ke schema kamu
 
 // Kita ambil tipe User dari DB, tapi buang passwordHash demi keamanan
-export type UserSession = Omit<User, 'passwordHash'>;
+export type UserSession = Omit<User, "passwordHash">;
 
 interface AppState {
   // Session
@@ -35,17 +35,17 @@ export const useStore = create<AppState>()(
       setLastSync: (date) => set({ lastSync: date }),
     }),
     {
-      name: 'educore-storage',
+      name: "educore-storage",
       // Kita gunakan sessionStorage agar sesi hilang jika window ditutup (lebih aman untuk sekolah)
       // Jika ingin tetap login meski browser ditutup, hapus baris 'storage' ini.
-      storage: createJSONStorage(() => sessionStorage), 
-      
+      storage: createJSONStorage(() => sessionStorage),
+
       // Persist user & lastSync, tapi jangan persist status syncing (karena itu state sementara)
-      partialize: (state) => ({ 
-        user: state.user, 
+      partialize: (state) => ({
+        user: state.user,
         isAuthenticated: state.isAuthenticated,
-        lastSync: state.lastSync 
-      }), 
-    }
-  )
+        lastSync: state.lastSync,
+      }),
+    },
+  ),
 );

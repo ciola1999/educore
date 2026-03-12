@@ -1,3 +1,2 @@
-export * from './use-attendance';
-export { useAuth } from './use-auth';
-
+export * from "./use-attendance";
+export { useAuth } from "./use-auth";

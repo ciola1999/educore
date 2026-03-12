@@ -2,170 +2,177 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import type { Student } from "@/core/db/schema";
 // ✅ FIX 1: Sort Imports A-Z (Biome Compliance)
 // ✅ FIX 2: Rename 'deleteStudent' -> 'deleteStudentService' (Collision Fix)
 import {
-	deleteStudent as deleteStudentService,
-	getStudents,
-	type Student,
-} from "@/lib/services/student";
+  deleteStudent as deleteStudentService,
+  getStudents,
+} from "@/core/services/student-service";
+import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
 
 // Helper: Custom Debounce Hook
 function useDebounce<T>(value: T, delay: number): T {
-	const [debouncedValue, setDebouncedValue] = useState(value);
-	useEffect(() => {
-		const handler = setTimeout(() => setDebouncedValue(value), delay);
-		return () => clearTimeout(handler);
-	}, [value, delay]);
-	return debouncedValue;
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 export function useStudentList() {
-	// --- STATE ---
-	const [data, setData] = useState<Student[]>([]);
-	const [loading, setLoading] = useState(true);
+  // --- STATE ---
+  const [data, setData] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
 
-	// Pagination & Filter State
-	const [searchQuery, setSearchQuery] = useState("");
-	const [currentPage, setCurrentPage] = useState(1);
-	const [totalCount, setTotalCount] = useState(0);
-	const [totalPages, setTotalPages] = useState(1);
-	const itemsPerPage = 10;
+  // Pagination & Filter State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
 
-	// Sorting State
-	const [sortConfig, setSortConfig] = useState<{
-		key: keyof Student;
-		direction: "asc" | "desc";
-	}>({ key: "updatedAt", direction: "desc" });
+  // Sorting State
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof Student;
+    direction: "asc" | "desc";
+  }>({ key: "updatedAt", direction: "desc" });
 
-	const debouncedSearch = useDebounce(searchQuery, 500);
+  const debouncedSearch = useDebounce(searchQuery, 500);
 
-	// Dialog States
-	const [editOpen, setEditOpen] = useState(false);
-	const [editStudent, setEditStudent] = useState<Student | null>(null);
-	const [deleteOpen, setDeleteOpen] = useState(false);
-	// State ini namanya 'deleteStudent' (Objek), bukan fungsi
-	const [deleteStudent, setDeleteStudent] = useState<Student | null>(null);
+  // Dialog States
+  const [editOpen, setEditOpen] = useState(false);
+  const [editStudent, setEditStudent] = useState<Student | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  // State ini namanya 'deleteStudent' (Objek), bukan fungsi
+  const [deleteStudent, setDeleteStudent] = useState<Student | null>(null);
+  const [projectionSynced, setProjectionSynced] = useState(false);
 
-	// --- FETCH DATA ---
-	const fetchStudents = useCallback(async () => {
-		setLoading(true);
-		try {
-			const result = await getStudents({
-				page: currentPage,
-				limit: itemsPerPage,
-				search: debouncedSearch,
-				sortBy: sortConfig.key,
-				sortDir: sortConfig.direction,
-			});
+  // --- FETCH DATA ---
+  const fetchStudents = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (!projectionSynced) {
+        await syncUsersToStudentsProjection();
+        setProjectionSynced(true);
+      }
 
-			setData(result.data);
-			setTotalCount(result.total);
-			setTotalPages(result.totalPages);
-		} catch (e) {
-			console.error("Failed to fetch students:", e);
-			toast.error("Gagal memuat data siswa");
-		} finally {
-			setLoading(false);
-		}
-	}, [currentPage, debouncedSearch, sortConfig]);
+      const result = await getStudents({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: debouncedSearch,
+        sortBy: sortConfig.key as any,
+        sortDir: sortConfig.direction,
+      });
 
-	// Trigger fetch saat dependencies berubah
-	useEffect(() => {
-		fetchStudents();
-	}, [fetchStudents]);
+      setData(result.data);
+      setTotalCount(result.total);
+      setTotalPages(result.totalPages);
+    } catch (e) {
+      console.error("Failed to fetch students:", e);
+      toast.error("Gagal memuat data siswa");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, debouncedSearch, projectionSynced, sortConfig]);
 
-	// --- HANDLERS ---
+  // Trigger fetch saat dependencies berubah
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
 
-	// ✅ FIX 3: Pindahkan reset page ke sini (Hapus useEffect berlebih)
-	const handleSearchChange = useCallback((value: string) => {
-		setSearchQuery(value);
-		setCurrentPage(1); // Reset ke halaman 1 saat mengetik
-	}, []);
+  // --- HANDLERS ---
 
-	const handleEdit = useCallback((student: Student) => {
-		setEditStudent(student);
-		setEditOpen(true);
-	}, []);
+  // ✅ FIX 3: Pindahkan reset page ke sini (Hapus useEffect berlebih)
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1); // Reset ke halaman 1 saat mengetik
+  }, []);
 
-	const handleDelete = useCallback((student: Student) => {
-		setDeleteStudent(student);
-		setDeleteOpen(true);
-	}, []);
+  const handleEdit = useCallback((student: Student) => {
+    setEditStudent(student);
+    setEditOpen(true);
+  }, []);
 
-	const onEditSuccess = useCallback(() => {
-		setEditOpen(false);
-		toast.success("Data siswa berhasil diperbarui");
-		fetchStudents();
-	}, [fetchStudents]);
+  const handleDelete = useCallback((student: Student) => {
+    setDeleteStudent(student);
+    setDeleteOpen(true);
+  }, []);
 
-	const onDeleteSuccess = useCallback(async () => {
-		// deleteStudent di sini adalah STATE (Objek Student)
-		if (deleteStudent) {
-			try {
-				// ✅ FIX 4: Panggil 'deleteStudentService' (Fungsi API)
-				await deleteStudentService(deleteStudent.id);
+  const onEditSuccess = useCallback(() => {
+    setEditOpen(false);
+    toast.success("Data siswa berhasil diperbarui");
+    fetchStudents();
+  }, [fetchStudents]);
 
-				setDeleteOpen(false);
-				setDeleteStudent(null); // Cleanup state
-				toast.success("Siswa berhasil dihapus");
+  const onDeleteSuccess = useCallback(async () => {
+    // deleteStudent di sini adalah STATE (Objek Student)
+    if (deleteStudent) {
+      try {
+        // ✅ FIX 4: Panggil 'deleteStudentService' (Fungsi API)
+        await deleteStudentService(deleteStudent.id);
 
-				// Cek jika halaman kosong setelah delete, mundur 1 halaman
-				if (data.length === 1 && currentPage > 1) {
-					setCurrentPage((p) => p - 1);
-				} else {
-					fetchStudents();
-				}
-			} catch (e) {
-				console.error(e);
-				toast.error("Gagal menghapus siswa");
-			}
-		}
-	}, [deleteStudent, fetchStudents, currentPage, data.length]);
+        setDeleteOpen(false);
+        setDeleteStudent(null); // Cleanup state
+        toast.success("Siswa berhasil dihapus");
 
-	const handleSort = useCallback((key: keyof Student) => {
-		setSortConfig((current) => ({
-			key,
-			direction:
-				current.key === key && current.direction === "asc" ? "desc" : "asc",
-		}));
-	}, []);
+        // Cek jika halaman kosong setelah delete, mundur 1 halaman
+        if (data.length === 1 && currentPage > 1) {
+          setCurrentPage((p) => p - 1);
+        } else {
+          fetchStudents();
+        }
+      } catch (e) {
+        console.error(e);
+        toast.error("Gagal menghapus siswa");
+      }
+    }
+  }, [deleteStudent, fetchStudents, currentPage, data.length]);
 
-	const [idCardOpen, setIdCardOpen] = useState(false);
-	const [selectedStudentForCard, setSelectedStudentForCard] =
-		useState<Student | null>(null);
+  const handleSort = useCallback((key: keyof Student) => {
+    setSortConfig((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  }, []);
 
-	// Tambahkan Handler
-	const handleShowIdCard = useCallback((student: Student) => {
-		setSelectedStudentForCard(student);
-		setIdCardOpen(true);
-	}, []);
+  const [idCardOpen, setIdCardOpen] = useState(false);
+  const [selectedStudentForCard, setSelectedStudentForCard] =
+    useState<Student | null>(null);
 
-	return {
-		loading,
-		searchQuery,
-		currentPage,
-		totalPages,
-		paginatedData: data,
-		totalCount,
-		sortConfig,
-		editOpen,
-		setEditOpen,
-		editStudent,
-		deleteOpen,
-		setDeleteOpen,
-		deleteStudent,
-		fetchStudents,
-		handleEdit,
-		onEditSuccess,
-		handleDelete,
-		onDeleteSuccess,
-		handleSearchChange,
-		handleSort,
-		setCurrentPage,
-		idCardOpen,
-		setIdCardOpen,
-		selectedStudentForCard,
-		handleShowIdCard,
-	};
+  // Tambahkan Handler
+  const handleShowIdCard = useCallback((student: Student) => {
+    setSelectedStudentForCard(student);
+    setIdCardOpen(true);
+  }, []);
+
+  return {
+    loading,
+    searchQuery,
+    currentPage,
+    totalPages,
+    paginatedData: data,
+    totalCount,
+    sortConfig,
+    editOpen,
+    setEditOpen,
+    editStudent,
+    deleteOpen,
+    setDeleteOpen,
+    deleteStudent,
+    fetchStudents,
+    handleEdit,
+    onEditSuccess,
+    handleDelete,
+    onDeleteSuccess,
+    handleSearchChange,
+    handleSort,
+    setCurrentPage,
+    idCardOpen,
+    setIdCardOpen,
+    selectedStudentForCard,
+    handleShowIdCard,
+  };
 }
