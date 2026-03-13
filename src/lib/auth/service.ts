@@ -29,13 +29,17 @@ export async function login(
     }
 
     const user = result[0];
+    // biome-ignore lint/suspicious/noExplicitAny: Raw SQL results may contain snake_case keys
+    const rawUser = user as any;
+    
+    const passwordHash = user.passwordHash || rawUser.password_hash;
 
     // Check if password is set
-    if (!user.passwordHash) {
+    if (!passwordHash) {
       return { success: false, error: "Password belum diatur. Hubungi admin." };
     }
 
-    const isValid = await verifyPassword(password, user.passwordHash);
+    const isValid = await verifyPassword(password, passwordHash);
 
     if (!isValid) {
       return { success: false, error: "Password salah" };

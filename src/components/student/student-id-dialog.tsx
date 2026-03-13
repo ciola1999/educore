@@ -13,11 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  getOrCreateStudentCard,
-  type Student,
-  type StudentQrPayload,
-} from "@/lib/services/student";
+import { getOrCreateStudentCard } from "@/core/services/student-service";
+import type { Student, StudentIdCard } from "@/core/db/schema";
 
 interface StudentIdDialogProps {
   open: boolean;
@@ -31,7 +28,7 @@ export function StudentIdDialog({
   student,
 }: StudentIdDialogProps) {
   const printRef = useRef<HTMLDivElement>(null);
-  const [cardPayload, setCardPayload] = useState<StudentQrPayload | null>(null);
+  const [cardPayload, setCardPayload] = useState<StudentIdCard | null>(null);
   const [loadingCard, setLoadingCard] = useState(false);
 
   // Hook untuk menghandle print area spesifik
@@ -56,7 +53,7 @@ export function StudentIdDialog({
           return;
         }
 
-        setCardPayload(payload);
+        setCardPayload(payload as any);
       } catch (error) {
         console.error("❌ Gagal membuat kartu siswa:", error);
         toast.error("Gagal menyiapkan QR card siswa");
@@ -112,7 +109,7 @@ export function StudentIdDialog({
                 cardPayload
                   ? JSON.stringify({
                       studentId: cardPayload.studentId,
-                      nis: cardPayload.nis,
+                      nis: student.nis, // Use from student prop
                       token: cardPayload.token,
                       cardNumber: cardPayload.cardNumber,
                     })

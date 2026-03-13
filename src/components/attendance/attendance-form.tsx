@@ -373,7 +373,7 @@ export function AttendanceForm() {
                           }
                           className={`w-9 h-9 sm:w-8 sm:h-8 rounded-md text-xs font-bold transition-all duration-200 ${
                             student.status === status
-                              ? `${statusColors[status]} text-white shadow-lg shadow-${statusColors[status].split("-")[1]}-500/20 scale-105 sm:scale-110`
+                              ? `${statusColors[status]} text-white shadow-lg scale-105 sm:scale-110`
                               : "bg-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
                           }`}
                         >

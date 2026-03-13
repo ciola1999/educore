@@ -58,3 +58,43 @@ export const attendanceSettingsSchema = z.object({
 });
 
 export type AttendanceSettingsInput = z.infer<typeof attendanceSettingsSchema>;
+
+export const attendanceRecordSchema = z.object({
+  studentId: z.string().uuid(),
+  status: z.enum(["present", "sick", "permission", "alpha"]),
+  notes: z.string().max(500).optional(),
+});
+
+export const bulkAttendanceSchema = z.object({
+  classId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  recordedBy: z.string().uuid(),
+  records: z.array(attendanceRecordSchema).min(1).max(500),
+});
+
+export type BulkAttendanceInput = z.infer<typeof bulkAttendanceSchema>;
+
+export const holidayInputSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  name: z.string().min(2).max(120),
+});
+
+// --- STUDENT MANAGEMENT (Elite 2026) ---
+export const studentInputSchema = z.object({
+  id: z.string().optional(),
+  nis: z.string().min(3, "NIS minimal 3 karakter"),
+  fullName: z.string().min(3, "Nama minimal 3 karakter"),
+  gender: GenderEnum,
+  grade: z.string().min(1, "Kelas wajib diisi"),
+  parentName: z.string().nullable().optional(),
+  parentPhone: z.string().nullable().optional(),
+  nisn: z.string().nullable().optional(),
+  tempatLahir: z.string().nullable().optional(),
+  tanggalLahir: z.coerce.date().nullable().optional(),
+  alamat: z.string().nullable().optional(),
+  email: z.string().email("Email tidak valid").nullable().optional(),
+});
+
+export type StudentInput = z.infer<typeof studentInputSchema>;
+
+export const bulkStudentSchema = z.array(studentInputSchema);

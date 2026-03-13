@@ -1,10 +1,10 @@
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  schema: "./src/lib/db/schema.ts", // Lokasi file skema kita nanti
-  out: "./drizzle", // Folder output migrasi
+  schema: "./src/core/db/schema.ts",
+  out: "./drizzle",
   dialect: "sqlite",
   dbCredentials: {
-    url: "educore.db", // File database lokal
+    url: "educore.db",
   },
 });

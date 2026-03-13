@@ -18,6 +18,8 @@
     "@paralleldrive/cuid2": "^3.3.0",
     "@supabase/supabase-js": "^2.95.3",
     "@tailwindcss/postcss": "^4.1.18",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-fs": "^2.4.5",
     "@tauri-apps/plugin-sql": "~2",
     "badge": "^1.0.3",
     "bcryptjs": "^3.0.3",

@@ -13,12 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { AttendanceSetting } from "@/lib/db/schema";
 import {
   deleteAttendanceSetting,
   getAttendanceSettings,
   upsertAttendanceSetting,
-} from "@/lib/services/attendance";
+} from "@/core/services/attendance-service";
+import type { AttendanceSetting } from "@/lib/db/schema";
 
 export function ScheduleSettings() {
   const [settings, setSettings] = useState<AttendanceSetting[]>([]);
@@ -39,15 +39,17 @@ export function ScheduleSettings() {
     try {
       const data = await getAttendanceSettings();
       setSettings(data);
-    } catch {
-      toast.error("Failed to load settings");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to load settings";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
 
   async function handleAdd() {
@@ -68,7 +70,6 @@ export function ScheduleSettings() {
   }
 
   async function handleDelete(id: string) {
-    console.log("Delete triggered for ID:", id);
     try {
       if (id.startsWith("temp-")) {
         setSettings((prev) => prev.filter((s) => s.id !== id));
@@ -78,24 +79,25 @@ export function ScheduleSettings() {
       await deleteAttendanceSetting(id);
       toast.success("Setting deleted");
       await loadSettings();
-    } catch (error) {
-      console.error("Delete error:", error);
-      toast.error("Failed to delete setting");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete setting";
+      toast.error(errorMessage);
     } finally {
       setSaving(null);
     }
   }
 
   async function handleSave(setting: AttendanceSetting) {
-    console.log("Save triggered for setting:", setting);
     setSaving(setting.id);
     try {
       await upsertAttendanceSetting(setting);
       toast.success("Setting saved");
       await loadSettings();
-    } catch (error: any) {
-      console.error("Save error:", error);
-      toast.error(error.message || "Failed to save setting");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to save setting";
+      toast.error(errorMessage);
     } finally {
       setSaving(null);
     }
@@ -131,7 +133,7 @@ export function ScheduleSettings() {
                 value={s.dayOfWeek.toString()}
                 onValueChange={(val) => {
                   const newSettings = [...settings];
-                  newSettings[idx].dayOfWeek = parseInt(val);
+                  newSettings[idx].dayOfWeek = Number.parseInt(val, 10);
                   setSettings(newSettings);
                 }}
               >

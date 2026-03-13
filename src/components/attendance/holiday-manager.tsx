@@ -6,7 +6,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addHoliday, getHolidays } from "@/lib/services/attendance";
+import {
+  addHoliday,
+  deleteHoliday,
+  getHolidays,
+} from "@/core/services/attendance-service";
 
 export function HolidayManager() {
   const [holidays, setHolidays] = useState<
@@ -18,6 +22,7 @@ export function HolidayManager() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
 
   const loadHolidays = useCallback(async () => {
@@ -37,17 +42,38 @@ export function HolidayManager() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (!newHoliday.date || !newHoliday.name) return;
+    if (!newHoliday.date || !newHoliday.name.trim()) {
+      toast.error("Tanggal dan nama hari libur wajib diisi");
+      return;
+    }
+
     setAdding(true);
     try {
-      await addHoliday(newHoliday.date, newHoliday.name);
+      await addHoliday(newHoliday.date, newHoliday.name.trim());
       toast.success("Holiday added");
       setNewHoliday({ date: "", name: "" });
-      loadHolidays();
-    } catch {
-      toast.error("Failed to add holiday");
+      await loadHolidays();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to add holiday";
+      toast.error(errorMessage);
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteHoliday(id);
+      toast.success("Holiday deleted");
+      await loadHolidays();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete holiday";
+      toast.error(errorMessage);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -133,9 +159,15 @@ export function HolidayManager() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  onClick={() => handleDelete(h.id)}
+                  disabled={deletingId === h.id}
                   className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {deletingId === h.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>

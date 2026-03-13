@@ -17,6 +17,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
+import { useEffect } from "react";
 // ✅ 2. Import Dialog ID Card (Pastikan path import sesuai lokasi file Anda)
 import { StudentIdDialog } from "@/components/student/student-id-dialog";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,16 @@ export function StudentList() {
     handleSort,
     setCurrentPage,
   } = useStudentList();
+
+  useEffect(() => {
+    const onStudentsChanged = () => {
+      void fetchStudents();
+    };
+
+    window.addEventListener("students:changed", onStudentsChanged);
+    return () =>
+      window.removeEventListener("students:changed", onStudentsChanged);
+  }, [fetchStudents]);
 
   // --- RENDER ---
   if (loading && totalCount === 0) {

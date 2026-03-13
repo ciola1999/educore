@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getTodayAttendanceRecords } from "@/lib/services/attendance";
+import { getTodayAttendanceRecords } from "@/core/services/attendance-service";
 
 // Mengambil tipe data otomatis dari hasil balikan fungsi
 type AttendanceRecord = Awaited<
@@ -31,7 +31,7 @@ export function DailyLogView() {
     try {
       const data = await getTodayAttendanceRecords();
       setRecords(data);
-    } catch (error) {
+    } catch (_error) {
       // ✅ Ganti console.error dengan toast sesuai standar CLAUDE.md
       toast.error("Gagal memuat log harian", {
         description: "Terjadi kesalahan saat mengambil data dari database.",

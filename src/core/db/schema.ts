@@ -698,3 +698,4 @@ export type Holiday = typeof holidays.$inferSelect;
 export type NewHoliday = typeof holidays.$inferInsert;
 export type StudentDailyAttendanceEntry = typeof studentDailyAttendance.$inferSelect;
 export type NewStudentDailyAttendanceEntry = typeof studentDailyAttendance.$inferInsert;
+export type StudentIdCard = typeof studentIdCards.$inferSelect;

@@ -22,10 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  createStudent,
-  type StudentProfileInput,
-} from "@/lib/services/student";
+import { upsertStudent } from "@/core/services/student-service";
+import type { StudentInput } from "@/core/validation/schemas";
 
 export function AddStudentDialog() {
   const [open, setOpen] = useState(false);
@@ -37,10 +35,10 @@ export function AddStudentDialog() {
 
     const formData = new FormData(e.currentTarget);
     const rawTanggalLahir = (formData.get("tanggalLahir") as string) || "";
-    const data = {
+    const data: StudentInput = {
       nis: formData.get("nis") as string,
       fullName: formData.get("fullName") as string,
-      gender: formData.get("gender") as "L" | "P",
+      gender: (formData.get("gender") as "L" | "P") || "L",
       grade: formData.get("grade") as string,
       parentName: (formData.get("parentName") as string) || null,
       parentPhone: (formData.get("parentPhone") as string) || null,
@@ -49,15 +47,13 @@ export function AddStudentDialog() {
       tempatLahir: (formData.get("tempatLahir") as string) || null,
       tanggalLahir: rawTanggalLahir ? new Date(rawTanggalLahir) : null,
       alamat: (formData.get("alamat") as string) || null,
-    } as StudentProfileInput;
+    };
 
     try {
-      await createStudent(data);
+      await upsertStudent(data);
       toast.success("Siswa berhasil ditambahkan!");
       setOpen(false);
-
-      // Refresh data
-      window.location.reload();
+      window.dispatchEvent(new Event("students:changed"));
     } catch (error: unknown) {
       // ✅ Perbaikan Biome: Menggunakan 'unknown' alih-alih 'any' untuk Type-Safety
       const errorMessage =

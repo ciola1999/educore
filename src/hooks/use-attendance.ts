@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { recordBulkAttendance } from "@/lib/services/attendance";
+import { recordBulkAttendance } from "@/core/services/attendance-service";
 import type { BulkAttendance } from "@/lib/validations/schemas";
 
 // Temporary stub since these are missing in attendance.ts

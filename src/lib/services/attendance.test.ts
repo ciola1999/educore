@@ -1,13 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { recordBulkAttendance } from "@/core/services/attendance-service";
 import { getDb } from "../db";
-import { recordBulkAttendance } from "./attendance";
 
 vi.mock("../db", () => ({
   getDb: vi.fn(),
 }));
 
+type MockFn = ReturnType<typeof vi.fn>;
+
 describe("Attendance Service", () => {
-  const mockTx: any = {
+  const mockTx: {
+    select: MockFn;
+    from: MockFn;
+    where: MockFn;
+    limit: MockFn;
+    update: MockFn;
+    set: MockFn;
+    insert: MockFn;
+    values: MockFn;
+  } = {
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
@@ -18,17 +29,29 @@ describe("Attendance Service", () => {
     values: vi.fn().mockReturnThis(),
   };
 
-  const mockDb: any = {
-    transaction: vi.fn().mockImplementation(async (cb) => cb(mockTx)),
+  const mockDb: {
+    transaction: MockFn;
+    select: MockFn;
+    from: MockFn;
+    where: MockFn;
+    limit: MockFn;
+  } = {
+    transaction: vi
+      .fn()
+      .mockImplementation(async (cb: (tx: typeof mockTx) => Promise<unknown>) =>
+        cb(mockTx),
+      ),
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
   };
 
+  const mockedGetDb = vi.mocked(getDb);
+
   beforeEach(() => {
     vi.clearAllMocks();
-    (getDb as any).mockResolvedValue(mockDb);
+    mockedGetDb.mockResolvedValue(mockDb as never);
   });
 
   const validBulkData = {

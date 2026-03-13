@@ -8,9 +8,15 @@ interface StudentStatsProps {
   total: number;
   male: number;
   female: number;
+  activeGrades: number;
 }
 
-export function StudentStats({ total, male, female }: StudentStatsProps) {
+export function StudentStats({
+  total,
+  male,
+  female,
+  activeGrades,
+}: StudentStatsProps) {
   const stats = [
     {
       label: "Total Students",
@@ -38,7 +44,7 @@ export function StudentStats({ total, male, female }: StudentStatsProps) {
     },
     {
       label: "Active Grades",
-      value: "12",
+      value: activeGrades,
       icon: GraduationCap,
       color: "text-emerald-400",
       bg: "bg-emerald-400/10",

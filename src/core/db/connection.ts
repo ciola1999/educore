@@ -1,4 +1,4 @@
-import Database from "@tauri-apps/plugin-sql";
+import type Database from "@tauri-apps/plugin-sql";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { isTauri } from "../env";
 import { runMigrations } from "./migrations";
@@ -32,6 +32,7 @@ export const getDatabase = async () => {
   _initializing = (async () => {
     if (isTauri()) {
       // Desktop: Native SQLite via Tauri Plugin SQL
+      const { default: Database } = await import("@tauri-apps/plugin-sql");
       _sqliteRemote = await Database.load("sqlite:educore_v4.db");
 
       // Hardening & integrity defaults
@@ -69,6 +70,7 @@ export const getDatabase = async () => {
               params as unknown[],
             );
 
+            // ALWAYS return array of arrays (values) for Drizzle proxy
             return { rows: rows.map((row) => Object.values(row)) };
           } catch (e) {
             console.error("❌ [SQL_ERROR_TAURI]", e);
@@ -83,7 +85,7 @@ export const getDatabase = async () => {
       console.warn("⚠️ [DB] Web mode connection - using simplified proxy");
 
       _db = drizzle(
-        async (sql, params, method) => {
+        async (sql, _params, method) => {
           // This part would normally call an API endpoint
           // For now, we use a placeholder that throws or logs
           console.info(`[DB_WEB_STUB] ${method}: ${sql}`);

@@ -164,23 +164,27 @@ export async function syncUsersToStudentsProjection(): Promise<{
   }
 
   let studentUpserted = 0;
-
   for (const user of studentUsers) {
     const nis = user.nis?.trim();
     if (!nis) continue;
 
-    const classRef = user.kelasId?.trim();
-    const grade = classRef
-      ? (classById.get(classRef) ?? classByName.get(classRef) ?? classRef)
-      : "UNASSIGNED";
-
-    const gender = user.jenisKelamin === "P" ? "P" : "L";
-
+    // Resolve Grade: Priority 1: User's KelasId, Priority 2: Existing Student Grade, Priority 3: UNASSIGNED
     const existingStudent = await db
-      .select({ id: students.id })
+      .select()
       .from(students)
       .where(eq(students.nis, nis))
       .limit(1);
+
+    const classRef = user.kelasId?.trim();
+    let grade = "UNASSIGNED";
+    
+    if (classRef) {
+      grade = classById.get(classRef) ?? classByName.get(classRef) ?? classRef;
+    } else if (existingStudent[0]?.grade) {
+      grade = existingStudent[0].grade;
+    }
+
+    const gender = user.jenisKelamin === "P" ? "P" : "L";
 
     if (existingStudent.length === 0) {
       await db.insert(students).values({

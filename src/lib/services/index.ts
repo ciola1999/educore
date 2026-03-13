@@ -1,1 +1,1 @@
-export * from "./attendance";
+export * from "@/core/services/attendance-service";

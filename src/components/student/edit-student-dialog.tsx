@@ -21,10 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  type StudentProfileInput,
-  updateStudent,
-} from "@/lib/services/student";
+import { upsertStudent } from "@/core/services/student-service";
+import type { StudentInput } from "@/core/validation/schemas";
 
 interface EditStudentDialogProps {
   student: {
@@ -93,12 +91,11 @@ export function EditStudentDialog({
 
     setLoading(true);
     try {
-      const payload: Partial<StudentProfileInput> = {
+      const payload: StudentInput = {
+        id: student.id,
         nis: formData.nis,
-        nisn: formData.nisn || null,
-        email: formData.email || null,
         fullName: formData.fullName,
-        gender: formData.gender,
+        gender: formData.gender as "L" | "P",
         grade: formData.grade,
         tempatLahir: formData.tempatLahir || null,
         tanggalLahir: formData.tanggalLahir
@@ -107,9 +104,10 @@ export function EditStudentDialog({
         alamat: formData.alamat || null,
         parentName: formData.parentName || null,
         parentPhone: formData.parentPhone || null,
+        email: formData.email || null,
       };
 
-      await updateStudent(student.id, payload);
+      await upsertStudent(payload);
 
       onOpenChange(false);
       onSuccess();

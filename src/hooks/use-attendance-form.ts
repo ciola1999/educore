@@ -1,12 +1,13 @@
 "use client";
 
 import { and, eq, isNull, or } from "drizzle-orm";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { recordBulkAttendance } from "@/core/services/attendance-service";
 import { getDb } from "@/lib/db";
 import { classes, students } from "@/lib/db/schema";
-import { recordBulkAttendance } from "@/lib/services/attendance";
 import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
+import { useStore } from "@/lib/store/use-store";
 import type { AttendanceStatus } from "@/lib/validations/schemas";
 
 export interface StudentRecord {
@@ -29,51 +30,88 @@ export interface ClassOption {
   name: string;
 }
 
+function getLocalDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function useAttendanceForm() {
+  const authUser = useStore((state) => state.user);
+
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [studentList, setStudentList] = useState<StudentRecord[]>([]);
-  const [selectedDate, setSelectedDate] = useState(
-    () => new Date().toISOString().split("T")[0],
-  );
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString);
   const [selectedClass, setSelectedClass] = useState("");
   const [classList, setClassList] = useState<ClassOption[]>([]);
   const [projectionSynced, setProjectionSynced] = useState(false);
 
-  const fetchClasses = useCallback(async () => {
-    try {
-      if (!projectionSynced) {
-        await syncUsersToStudentsProjection();
-        setProjectionSynced(true);
-      }
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-      const db = await getDb();
-      const result = await db
-        .select({ id: classes.id, name: classes.name })
-        .from(classes)
-        .where(and(eq(classes.isActive, true), isNull(classes.deletedAt)));
-      setClassList(result);
-      if (result.length > 0 && !selectedClass) {
-        setSelectedClass(result[0].id);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClasses() {
+      setLoading(true);
+      try {
+        if (!projectionSynced) {
+          await syncUsersToStudentsProjection();
+          if (!cancelled) {
+            setProjectionSynced(true);
+          }
+        }
+
+        const db = await getDb();
+        const result = await db
+          .select({ id: classes.id, name: classes.name })
+          .from(classes)
+          .where(and(eq(classes.isActive, true), isNull(classes.deletedAt)));
+
+        if (cancelled) {
+          return;
+        }
+
+        setClassList(result);
+        if (result.length > 0 && !selectedClass) {
+          setSelectedClass(result[0].id);
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error("Failed to fetch classes");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    } catch (e) {
-      console.error("Failed to fetch classes:", e);
-      toast.error("Failed to fetch classes");
-    } finally {
-      setLoading(false);
     }
+
+    void loadClasses();
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectionSynced, selectedClass]);
 
-  const fetchStudentsByClass = useCallback(
-    async (classId: string) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStudentsByClass(classId: string) {
       setLoading(true);
       try {
         const db = await getDb();
-        const classData = classList.find((c) => c.id === classId);
+        const classData = classList.find((item) => item.id === classId);
+
         if (!classData) {
-          setStudentList([]);
-          setLoading(false);
+          if (!cancelled) {
+            setStudentList([]);
+          }
           return;
         }
 
@@ -90,84 +128,92 @@ export function useAttendanceForm() {
             ),
           );
 
-        const records: StudentRecord[] = result.map((s) => ({
-          id: s.id,
-          nis: s.nis,
-          nisn: s.nisn,
-          fullName: s.fullName,
-          grade: s.grade,
-          tempatLahir: s.tempatLahir,
-          tanggalLahir: s.tanggalLahir,
-          alamat: s.alamat,
-          parentName: s.parentName,
-          parentPhone: s.parentPhone,
-          status: "present",
-          notes: "",
-        }));
-        setStudentList(records);
-      } catch (e) {
-        console.error("Failed to fetch students:", e);
-        toast.error("Failed to fetch students");
+        if (cancelled) {
+          return;
+        }
+
+        setStudentList(
+          result.map((student) => ({
+            id: student.id,
+            nis: student.nis,
+            nisn: student.nisn,
+            fullName: student.fullName,
+            grade: student.grade,
+            tempatLahir: student.tempatLahir,
+            tanggalLahir: student.tanggalLahir,
+            alamat: student.alamat,
+            parentName: student.parentName,
+            parentPhone: student.parentPhone,
+            status: "present",
+            notes: "",
+          })),
+        );
+      } catch {
+        if (!cancelled) {
+          toast.error("Failed to fetch students");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    },
-    [classList],
-  );
-
-  useEffect(() => {
-    setIsMounted(true);
-    fetchClasses();
-  }, [fetchClasses]);
-
-  useEffect(() => {
-    if (selectedClass) {
-      fetchStudentsByClass(selectedClass);
     }
-  }, [selectedClass, fetchStudentsByClass]);
+
+    if (selectedClass) {
+      void loadStudentsByClass(selectedClass);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [classList, selectedClass]);
 
   const updateStatus = (studentId: string, status: AttendanceStatus) => {
     setStudentList((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, status } : s)),
+      prev.map((student) =>
+        student.id === studentId ? { ...student, status } : student,
+      ),
     );
   };
 
   const setAllPresent = () => {
-    setStudentList((prev) => prev.map((s) => ({ ...s, status: "present" })));
+    setStudentList((prev) =>
+      prev.map((student) => ({ ...student, status: "present" })),
+    );
   };
 
   const handleSubmit = async () => {
-    if (!selectedClass) return;
+    if (!selectedClass) {
+      toast.error("Silakan pilih kelas terlebih dahulu");
+      return;
+    }
+
+    if (!authUser?.id) {
+      toast.error("Sesi login tidak ditemukan. Silakan login ulang.");
+      return;
+    }
 
     setSubmitting(true);
-    const promise = async () => {
+    try {
       const result = await recordBulkAttendance({
         classId: selectedClass,
         date: selectedDate,
-        recordedBy: "550e8400-e29b-41d4-a716-446655440001", // TODO: Get from auth context
-        records: studentList.map((s) => ({
-          studentId: s.id,
-          status: s.status,
-          notes: s.notes,
+        recordedBy: authUser.id,
+        records: studentList.map((student) => ({
+          studentId: student.id,
+          status: student.status,
+          notes: student.notes || undefined,
         })),
       });
 
       if (!result.success) {
-        throw new Error(result.message);
+        toast.error(result.message);
+        return;
       }
-      return result;
-    };
 
-    toast.promise(promise(), {
-      loading: "Saving attendance...",
-      success: () => `Attendance saved for ${studentList.length} students!`,
-      error: (err) => `Failed: ${err.message}`,
-    });
-
-    try {
-      await promise();
-    } catch (e) {
-      console.error("Submit error:", e);
+      toast.success(`Attendance saved for ${studentList.length} students`);
+    } catch {
+      toast.error("Failed to save attendance");
     } finally {
       setSubmitting(false);
     }

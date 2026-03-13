@@ -4,10 +4,14 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Html5Qrcode } from "html5-qrcode";
-import { CheckCircle2, Loader2, Scan, User, XCircle } from "lucide-react";
+import { Loader2, Scan, User } from "lucide-react";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { processQRScan, type ScanResult } from "@/lib/services/attendance";
+import {
+  processQRScan,
+  type ScanResult,
+} from "@/core/services/attendance-service";
 
 export function QRScannerView() {
   const [result, setResult] = useState<ScanResult | null>(null);
@@ -88,7 +92,7 @@ export function QRScannerView() {
     startScanner();
 
     return () => {
-      if (scannerRef.current && scannerRef.current.isScanning) {
+      if (scannerRef.current?.isScanning) {
         scannerRef.current
           .stop()
           .then(() => {
@@ -227,10 +231,12 @@ export function QRScannerView() {
                       >
                         <div className="w-full h-full rounded-[2.2rem] bg-zinc-800 flex items-center justify-center overflow-hidden">
                           {result.data?.photo ? (
-                            <img
+                            <Image
                               src={result.data?.photo}
                               className="w-full h-full object-cover"
                               alt="User"
+                              width={144}
+                              height={144}
                             />
                           ) : (
                             <User

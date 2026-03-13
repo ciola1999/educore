@@ -2,7 +2,6 @@ import type Database from "@tauri-apps/plugin-sql";
 import { getDefaultAdminHash } from "@/lib/auth/hash";
 
 const DEFAULT_ADMIN_EMAIL = "admin@educore.school";
-const DEFAULT_ADMIN_NAME = "Administrator";
 
 const DEFAULT_ACTIVE_DAYS = [1, 2, 3, 4, 5] as const;
 
@@ -497,85 +496,53 @@ async function ensureUserStudentProjectionTriggers(
 }
 
 async function seedDefaultAdmin(db: Database): Promise<void> {
-  const existing = await db.select<
-    {
-      id: string;
-      password_hash: string | null;
-      deleted_at: number | null;
-      is_active: number | null;
-    }[]
-  >(
-    `SELECT id, password_hash, deleted_at, is_active
-     FROM users
-     WHERE email = ?
-     LIMIT 1`,
+  const now = Math.floor(Date.now() / 1000);
+  
+  const existing = await db.select<any[]>(
+    "SELECT * FROM users WHERE email = ? LIMIT 1",
     [DEFAULT_ADMIN_EMAIL],
   );
 
-  const now = Math.floor(Date.now() / 1000);
+  // REPAIR MECHANISM: If admin exists but we keep having issues, force recreate
+  // To trigger repair, you can clear the hash manually or I can force it here
+  const admin = existing[0];
+  const currentHash = admin ? (admin.password_hash || admin.passwordHash) : null;
+
+  if (admin && !currentHash) {
+    console.warn(`[Seed] 🛠️ REPAIRING Admin ${DEFAULT_ADMIN_EMAIL}: Missing password hash. Recreating...`);
+    await db.execute("DELETE FROM users WHERE email = ?", [DEFAULT_ADMIN_EMAIL]);
+    existing.length = 0; // Force recreation below
+  }
 
   if (existing.length === 0) {
+    console.info(`[Seed] 🚀 Creating fresh default admin: ${DEFAULT_ADMIN_EMAIL}`);
     const passwordHash = await getDefaultAdminHash();
+    const id = crypto.randomUUID();
+    
+    // Explicitly use snake_case since that's what's in the PRAGMA table_info
     await db.execute(
-      `INSERT INTO users (
-        id,
-        full_name,
-        email,
-        role,
-        password_hash,
-        is_active,
-        version,
-        hlc,
-        created_at,
-        updated_at,
-        deleted_at,
-        sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (id, full_name, email, role, password_hash, is_active, version, hlc, deleted_at, created_at, updated_at, sync_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        crypto.randomUUID(),
-        DEFAULT_ADMIN_NAME,
+        id,
+        "Super Admin",
         DEFAULT_ADMIN_EMAIL,
         "admin",
         passwordHash,
         1,
         1,
         null,
-        now,
-        now,
         null,
+        now,
+        now,
         "pending",
       ],
     );
-    console.info(`✅ [Seed] Default admin created: ${DEFAULT_ADMIN_EMAIL}`);
+    console.info(`✅ [Seed] Default admin created successfully.`);
     return;
   }
 
-  const admin = existing[0];
-
-  if (!admin.password_hash) {
-    const passwordHash = await getDefaultAdminHash();
-    await db.execute(
-      `UPDATE users
-       SET password_hash = ?, updated_at = ?
-       WHERE id = ?`,
-      [passwordHash, now, admin.id],
-    );
-    console.info(
-      `✅ [Seed] Default admin password initialized: ${DEFAULT_ADMIN_EMAIL}`,
-    );
-  }
-
-  if (admin.deleted_at !== null || admin.is_active === 0) {
-    await db.execute(
-      `UPDATE users
-       SET deleted_at = NULL, is_active = 1, updated_at = ?
-       WHERE id = ?`,
-      [now, admin.id],
-    );
-    console.info(
-      `✅ [Seed] Default admin account reactivated: ${DEFAULT_ADMIN_EMAIL}`,
-    );
-  }
+  console.info(`[Seed] Admin ${DEFAULT_ADMIN_EMAIL} is healthy.`);
 }
 
 /**
@@ -805,6 +772,7 @@ export async function runMigrations(db: Database): Promise<void> {
   // ============================================================
 
   // --- users: new columns from 2026 refactoring ---
+  await safeAddColumn(db, "users", "password_hash", "TEXT");
   await safeAddColumn(db, "users", "nip", "TEXT");
   await safeAddColumn(db, "users", "nis", "TEXT");
   await safeAddColumn(db, "users", "nisn", "TEXT");
