@@ -308,9 +308,7 @@ async function upsertUser(studentId: string, data: StudentInput) {
   const classObj = await db
     .select({ id: classes.id })
     .from(classes)
-    .where(
-      and(eq(classes.name, data.grade), isNull(classes.deletedAt))
-    )
+    .where(and(eq(classes.name, data.grade), isNull(classes.deletedAt)))
     .limit(1);
 
   const payload = {

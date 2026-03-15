@@ -1,8 +1,8 @@
 "use client";
 
-import { eq } from "drizzle-orm";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,8 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getDb } from "@/lib/db";
-import { students } from "@/lib/db/schema";
+import { deleteStudent } from "@/core/services/student-service";
 
 interface DeleteStudentDialogProps {
   student: { id: string; fullName: string } | null;
@@ -36,15 +35,19 @@ export function DeleteStudentDialog({
 
     setLoading(true);
     try {
-      const db = await getDb();
-      await db.delete(students).where(eq(students.id, student.id));
+      const success = await deleteStudent(student.id);
 
-      onOpenChange(false);
-      onSuccess();
-      console.log("✅ Student deleted!");
+      if (success) {
+        onOpenChange(false);
+        onSuccess();
+        toast.success(`Berhasil menghapus siswa: ${student.fullName}`);
+        window.dispatchEvent(new Event("students:changed"));
+      } else {
+        throw new Error("Gagal menghapus ke database.");
+      }
     } catch (error) {
       console.error("❌ Delete failed:", error);
-      alert("Gagal menghapus data.");
+      toast.error("Gagal menghapus data.");
     } finally {
       setLoading(false);
     }

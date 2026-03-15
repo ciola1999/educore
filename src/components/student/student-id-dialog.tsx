@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getOrCreateStudentCard } from "@/core/services/student-service";
 import type { Student, StudentIdCard } from "@/core/db/schema";
+import { getOrCreateStudentCard } from "@/core/services/student-service";
 
 interface StudentIdDialogProps {
   open: boolean;

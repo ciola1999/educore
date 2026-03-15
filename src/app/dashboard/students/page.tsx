@@ -183,7 +183,9 @@ export default function StudentsPage() {
           // Validasi Skema & Normalisasi Data (Robust 2026 Pattern)
           const normalizedRows = jsonData.map((row) => {
             // Normalisasi Gender (Laki-laki/Perempuan/L/P - Case Insensitive)
-            const rawGender = String(row.Gender || "").trim().toLowerCase();
+            const rawGender = String(row.Gender || "")
+              .trim()
+              .toLowerCase();
             let gender: "L" | "P" = "L"; // Default L
             if (
               rawGender === "p" ||
@@ -230,7 +232,10 @@ export default function StudentsPage() {
               await upsertStudent(studentInput);
               successCount++;
             } catch (err) {
-              console.error(`Gagal mengimpor siswa NIS ${studentInput.nis}:`, err);
+              console.error(
+                `Gagal mengimpor siswa NIS ${studentInput.nis}:`,
+                err,
+              );
             }
           }
 

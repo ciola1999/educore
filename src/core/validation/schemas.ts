@@ -79,6 +79,26 @@ export const holidayInputSchema = z.object({
   name: z.string().min(2).max(120),
 });
 
+// --- ATTENDANCE HISTORY ---
+export const attendanceHistoryFilterSchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  studentId: z.string().optional(),
+  status: z.string().optional(),
+  sortBy: z.enum(["earliest", "latest"]).optional().default("latest"),
+  limit: z.number().int().min(1).max(500).optional().default(100),
+});
+
+export type AttendanceHistoryFilter = z.infer<
+  typeof attendanceHistoryFilterSchema
+>;
+
 // --- STUDENT MANAGEMENT (Elite 2026) ---
 export const studentInputSchema = z.object({
   id: z.string().optional(),

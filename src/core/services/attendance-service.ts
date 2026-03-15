@@ -1,6 +1,18 @@
 import { differenceInMinutes, format, isAfter, parse } from "date-fns";
-import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  or,
+} from "drizzle-orm";
+import {
+  attendanceHistoryFilterSchema,
   attendanceSettingsSchema,
   type BulkAttendanceInput,
   bulkAttendanceSchema,
@@ -236,6 +248,7 @@ async function resolveStudentFromQr(
           fullName: studentList[0].fullName,
           nis: studentList[0].nis,
           grade: studentList[0].grade || "UNASSIGNED",
+          photo: undefined, // Or try to fetch if needed, but keeping it simple for now
         };
       }
     }
@@ -302,6 +315,16 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
   const dayOfWeek = now.getDay();
 
   try {
+    const student = await resolveStudentFromQr(normalizedQr);
+    if (!student) {
+      return {
+        success: false,
+        message:
+          "Data siswa tidak ditemukan atau belum tersinkron. Pastikan NIS/token kartu sudah terdaftar.",
+        type: "ERROR",
+      };
+    }
+
     const holiday = await db
       .select()
       .from(holidays)
@@ -313,16 +336,16 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
         success: false,
         message: `Hari ini libur: ${holiday[0].name || "Tanpa Keterangan"}`,
         type: "ERROR",
-      };
-    }
-
-    const student = await resolveStudentFromQr(normalizedQr);
-    if (!student) {
-      return {
-        success: false,
-        message:
-          "Data siswa tidak ditemukan atau belum tersinkron. Pastikan NIS/token kartu sudah terdaftar.",
-        type: "ERROR",
+        data: {
+          fullName: student.fullName,
+          nis: student.nis,
+          grade: student.grade,
+          time: currentTimeStr,
+          status: "on-time",
+          type: "in",
+          lateMinutes: 0,
+          photo: student.photo,
+        },
       };
     }
 
@@ -347,6 +370,16 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
         success: false,
         message: "Hari Minggu tidak ada jadwal sekolah.",
         type: "ERROR",
+        data: {
+          fullName: student.fullName,
+          nis: student.nis,
+          grade: student.grade,
+          time: currentTimeStr,
+          status: "on-time",
+          type: "in",
+          lateMinutes: 0,
+          photo: student.photo,
+        },
       };
     }
 
@@ -758,4 +791,268 @@ export async function getTodayAttendanceRecords() {
       ),
     )
     .orderBy(desc(studentDailyAttendance.checkInTime));
+}
+
+export type AttendanceHistoryFilter = {
+  startDate?: string;
+  endDate?: string;
+  sortBy?: "earliest" | "latest";
+  limit?: number;
+  studentId?: string;
+  status?: string;
+};
+
+export type AttendanceHistoryRecord = {
+  id: string;
+  studentId: string;
+  snapshotStudentName: string | null;
+  snapshotStudentNis: string | null;
+  date: string;
+  checkInTime: Date | null;
+  checkOutTime: Date | null;
+  status: "PRESENT" | "LATE" | "EXCUSED" | "ABSENT";
+  lateDuration: number | null;
+  syncStatus: "synced" | "pending" | "error";
+  version: number;
+  hlc: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+};
+
+/**
+ * Get attendance history with flexible filtering
+ * Supports filtering by date range and sorting by check-in time
+ */
+export async function getAttendanceHistory(
+  filter: AttendanceHistoryFilter,
+): Promise<AttendanceHistoryRecord[]> {
+  const parsed = attendanceHistoryFilterSchema.safeParse(filter);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues[0]?.message || "Invalid filter parameters",
+    );
+  }
+
+  const db = await getDb();
+  const {
+    startDate,
+    endDate,
+    sortBy = "latest",
+    studentId,
+    status,
+  } = parsed.data;
+
+  // Build conditions for QR records
+  const qrConditions = [isNull(studentDailyAttendance.deletedAt)];
+  if (startDate) qrConditions.push(gte(studentDailyAttendance.date, startDate));
+  if (endDate) qrConditions.push(lte(studentDailyAttendance.date, endDate));
+  if (studentId)
+    qrConditions.push(eq(studentDailyAttendance.studentId, studentId));
+  if (status && status !== "all") {
+    qrConditions.push(
+      eq(
+        studentDailyAttendance.status,
+        status.toUpperCase() as "PRESENT" | "LATE" | "EXCUSED" | "ABSENT",
+      ),
+    );
+  }
+
+  if (!startDate && !endDate) {
+    const sevenDaysAgo = format(
+      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd",
+    );
+    qrConditions.push(gte(studentDailyAttendance.date, sevenDaysAgo));
+  }
+
+  // Fetch QR records
+  const qrResults = await db
+    .select()
+    .from(studentDailyAttendance)
+    .where(and(...qrConditions));
+
+  // Build conditions for Manual records
+  const manualConditions = [isNull(attendance.deletedAt)];
+  if (startDate) manualConditions.push(gte(attendance.date, startDate));
+  if (endDate) manualConditions.push(lte(attendance.date, endDate));
+  if (studentId) manualConditions.push(eq(attendance.studentId, studentId));
+  if (status && status !== "all") {
+    manualConditions.push(eq(attendance.status, status.toLowerCase()));
+  }
+
+  if (!startDate && !endDate) {
+    const sevenDaysAgo = format(
+      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd",
+    );
+    manualConditions.push(gte(attendance.date, sevenDaysAgo));
+  }
+
+  // Fetch Manual records with student details
+  const manualResults = await db
+    .select({
+      id: attendance.id,
+      studentId: attendance.studentId,
+      date: attendance.date,
+      status: attendance.status,
+      notes: attendance.notes,
+      fullName: students.fullName,
+      nis: students.nis,
+      createdAt: attendance.createdAt,
+    })
+    .from(attendance)
+    .innerJoin(students, eq(attendance.studentId, students.id))
+    .where(and(...manualConditions));
+
+  // Map to unified structure
+  const unified: AttendanceHistoryRecord[] = qrResults.map((r) => ({
+    ...r,
+    status: r.status as "PRESENT" | "LATE" | "EXCUSED" | "ABSENT",
+  }));
+
+  const qrKeys = new Set(qrResults.map((r) => `${r.studentId}_${r.date}`));
+
+  for (const m of manualResults) {
+    if (!qrKeys.has(`${m.studentId}_${m.date}`)) {
+      unified.push({
+        id: m.id,
+        studentId: m.studentId,
+        date: m.date,
+        snapshotStudentName: m.fullName,
+        snapshotStudentNis: m.nis,
+        checkInTime: null,
+        checkOutTime: null,
+        status: m.status.toUpperCase() as
+          | "PRESENT"
+          | "LATE"
+          | "EXCUSED"
+          | "ABSENT",
+        lateDuration: 0,
+        syncStatus: "synced",
+        version: 1,
+        hlc: null,
+        createdAt: m.createdAt,
+        updatedAt: m.createdAt,
+        deletedAt: null,
+      });
+    }
+  }
+
+  if (sortBy === "latest") {
+    return unified.sort(
+      (a, b) =>
+        b.date.localeCompare(a.date) ||
+        b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+  }
+  return unified.sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.createdAt.getTime() - b.createdAt.getTime(),
+  );
+}
+
+/**
+ * Get attendance count for pagination
+ */
+export async function getAttendanceHistoryCount(
+  filter: Omit<AttendanceHistoryFilter, "limit">,
+): Promise<number> {
+  const parsed = attendanceHistoryFilterSchema.safeParse({
+    ...filter,
+    limit: 100, // dummy value for validation
+  });
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues[0]?.message || "Invalid filter parameters",
+    );
+  }
+
+  const db = await getDb();
+  const { startDate, endDate, status } = parsed.data;
+
+  // Build conditions for QR records
+  const qrConditions = [isNull(studentDailyAttendance.deletedAt)];
+  if (startDate) qrConditions.push(gte(studentDailyAttendance.date, startDate));
+  if (endDate) qrConditions.push(lte(studentDailyAttendance.date, endDate));
+  if (status && status !== "all") {
+    qrConditions.push(
+      eq(
+        studentDailyAttendance.status,
+        status.toUpperCase() as "PRESENT" | "LATE" | "EXCUSED" | "ABSENT",
+      ),
+    );
+  }
+
+  // If no date filter, get last 7 days by default
+  if (!startDate && !endDate) {
+    const sevenDaysAgo = format(
+      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd",
+    );
+    qrConditions.push(gte(studentDailyAttendance.date, sevenDaysAgo));
+  }
+
+  const qrCountResult = await db
+    .select({ count: count() })
+    .from(studentDailyAttendance)
+    .where(and(...qrConditions));
+
+  // Build conditions for Manual records count
+  const manualConditions = [isNull(attendance.deletedAt)];
+  if (startDate) manualConditions.push(gte(attendance.date, startDate));
+  if (endDate) manualConditions.push(lte(attendance.date, endDate));
+  if (status && status !== "all") {
+    manualConditions.push(eq(attendance.status, status.toLowerCase()));
+  }
+
+  if (!startDate && !endDate) {
+    const sevenDaysAgo = format(
+      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd",
+    );
+    manualConditions.push(gte(attendance.date, sevenDaysAgo));
+  }
+
+  const manualCountResult = await db
+    .select({ count: count() })
+    .from(attendance)
+    .where(and(...manualConditions));
+
+  return (
+    Number(qrCountResult[0]?.count || 0) +
+    Number(manualCountResult[0]?.count || 0)
+  );
+}
+
+/**
+ * Get unique dates that have attendance records
+ * Useful for date picker suggestions
+ */
+export async function getAttendanceHistoryDates(): Promise<string[]> {
+  const db = await getDb();
+
+  const qrResults = await db
+    .selectDistinct({ date: studentDailyAttendance.date })
+    .from(studentDailyAttendance)
+    .where(isNull(studentDailyAttendance.deletedAt))
+    .orderBy(desc(studentDailyAttendance.date));
+
+  const manualResults = await db
+    .selectDistinct({ date: attendance.date })
+    .from(attendance)
+    .where(isNull(attendance.deletedAt))
+    .orderBy(desc(attendance.date));
+
+  const allDates = new Set([
+    ...qrResults.map((r) => r.date),
+    ...manualResults.map((r) => r.date),
+  ]);
+
+  return Array.from(allDates)
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, 30);
 }

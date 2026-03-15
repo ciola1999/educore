@@ -130,11 +130,18 @@ export async function pushToSupabase(): Promise<SyncResult> {
         });
 
         // Upsert ke Supabase
-        const { error } = await supabase.from(tableName).upsert(itemsToPush, { onConflict });
+        const { error } = await supabase
+          .from(tableName)
+          .upsert(itemsToPush, { onConflict });
 
         if (error) {
-          console.error(`Error syncing table ${tableName}:`, JSON.stringify(error, null, 2));
-          throw new Error(`[Supabase Error] ${tableName}: ${error.message || JSON.stringify(error)}`);
+          console.error(
+            `Error syncing table ${tableName}:`,
+            JSON.stringify(error, null, 2),
+          );
+          throw new Error(
+            `[Supabase Error] ${tableName}: ${error.message || JSON.stringify(error)}`,
+          );
         }
 
         // Mark as synced local
@@ -233,7 +240,10 @@ export async function pushToSupabase(): Promise<SyncResult> {
       uploaded: uploadedCount,
     };
   } catch (error) {
-    console.error("Push error details:", error instanceof Error ? error.message : JSON.stringify(error));
+    console.error(
+      "Push error details:",
+      error instanceof Error ? error.message : JSON.stringify(error),
+    );
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Failed to push data",
@@ -255,7 +265,9 @@ export async function pullFromSupabase(): Promise<SyncResult> {
       drizzleTable: any,
       mapFn?: (remote: any) => any,
     ) => {
-      const { data: remoteData, error } = await supabase.from(tableName).select("*");
+      const { data: remoteData, error } = await supabase
+        .from(tableName)
+        .select("*");
       if (error) throw error;
 
       if (remoteData && remoteData.length > 0) {
@@ -267,7 +279,7 @@ export async function pullFromSupabase(): Promise<SyncResult> {
             .limit(1);
 
           const mappedData = mapFn ? mapFn(remote) : snakeToCamel(remote);
-          
+
           // Fix dates in mapped data
           for (const key of Object.keys(mappedData)) {
             const lowerKey = key.toLowerCase();
@@ -282,13 +294,17 @@ export async function pullFromSupabase(): Promise<SyncResult> {
               if (mappedData[key] && typeof mappedData[key] === "string") {
                 // Hanya konversi jika formatnya ISO atau timestamp (mengandung T, Z, atau spasi jam)
                 // Jika hanya YYYY-MM-DD (length 10), biarkan sebagai string (untuk kolom text)
-                if (mappedData[key].length > 10 || mappedData[key].includes("T") || mappedData[key].includes(" ")) {
+                if (
+                  mappedData[key].length > 10 ||
+                  mappedData[key].includes("T") ||
+                  mappedData[key].includes(" ")
+                ) {
                   mappedData[key] = safeDate(mappedData[key]);
                 }
               }
             }
           }
-          
+
           mappedData.syncStatus = "synced";
 
           if (existing.length === 0) {
@@ -297,12 +313,20 @@ export async function pullFromSupabase(): Promise<SyncResult> {
           } else {
             const localItem = existing[0];
             const remoteTime = new Date(remote.updated_at).getTime();
-            const localTime = localItem.updatedAt 
-              ? (localItem.updatedAt instanceof Date ? localItem.updatedAt.getTime() : Number(localItem.updatedAt) * 1000)
+            const localTime = localItem.updatedAt
+              ? localItem.updatedAt instanceof Date
+                ? localItem.updatedAt.getTime()
+                : Number(localItem.updatedAt) * 1000
               : 0;
 
-            if (remoteTime > localTime + 1000 || localItem.syncStatus === "pending") {
-              await db.update(drizzleTable).set(mappedData).where(eq(drizzleTable.id, remote.id));
+            if (
+              remoteTime > localTime + 1000 ||
+              localItem.syncStatus === "pending"
+            ) {
+              await db
+                .update(drizzleTable)
+                .set(mappedData)
+                .where(eq(drizzleTable.id, remote.id));
               updatedCount++;
             }
           }
@@ -359,9 +383,10 @@ export async function pullFromSupabase(): Promise<SyncResult> {
 
     return {
       status: "success",
-      message: downloadedCount + updatedCount === 0 
-        ? "Data sudah up-to-date." 
-        : `Sync: ${downloadedCount} baru, ${updatedCount} diupdate.`,
+      message:
+        downloadedCount + updatedCount === 0
+          ? "Data sudah up-to-date."
+          : `Sync: ${downloadedCount} baru, ${updatedCount} diupdate.`,
       downloaded: downloadedCount + updatedCount,
     };
   } catch (error) {
@@ -390,5 +415,3 @@ export async function fullSync(): Promise<SyncResult> {
     downloaded: pullResult.downloaded,
   };
 }
-
-

@@ -28,20 +28,22 @@ export async function ensureDefaultAttendanceSettings(): Promise<number> {
   }
 
   const now = new Date();
-  for (const dayOfWeek of DEFAULT_ACTIVE_DAYS) {
-    await db.insert(attendanceSettings).values({
-      id: crypto.randomUUID(),
-      dayOfWeek,
-      startTime: "07:00",
-      endTime: "15:00",
-      lateThreshold: "07:15",
-      entityType: "student",
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-      syncStatus: "pending",
-      deletedAt: null,
-    });
+  const values = DEFAULT_ACTIVE_DAYS.map((dayOfWeek) => ({
+    id: crypto.randomUUID(),
+    dayOfWeek,
+    startTime: "07:00",
+    endTime: "15:00",
+    lateThreshold: "07:15",
+    entityType: "student" as const,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+    syncStatus: "pending" as const,
+    deletedAt: null,
+  }));
+
+  for (const val of values) {
+    await db.insert(attendanceSettings).values(val);
   }
 
   return DEFAULT_ACTIVE_DAYS.length;
@@ -56,55 +58,22 @@ export async function syncUsersToStudentsProjection(): Promise<{
   const now = new Date();
   const academicYear = getAcademicYearLabel();
 
-  const classById = new Map<string, string>();
-  const classByName = new Map<string, string>();
+  // 1. Load data in bulk
   const existingClasses = await db
     .select({ id: classes.id, name: classes.name })
     .from(classes)
     .where(isNull(classes.deletedAt));
 
-  for (const classItem of existingClasses) {
-    classById.set(classItem.id, classItem.name);
-    classByName.set(classItem.name, classItem.id);
-  }
-
-  const allStudents = await db
-    .select({ grade: students.grade })
-    .from(students)
-    .where(isNull(students.deletedAt));
-
-  // Normalize legacy grade values that accidentally store classes.id
-  for (const row of allStudents) {
-    const gradeValue = row.grade.trim();
-    const mappedName = classById.get(gradeValue);
-
-    if (!mappedName || mappedName === gradeValue) {
-      continue;
-    }
-
-    await db
-      .update(students)
-      .set({
-        grade: mappedName,
-        updatedAt: now,
-        syncStatus: "pending",
-      })
-      .where(eq(students.grade, gradeValue));
-  }
+  const classById = new Map(existingClasses.map((c) => [c.id, c.name]));
+  const classByName = new Map(existingClasses.map((c) => [c.name, c.id]));
 
   const studentUsers = await db
     .select({
-      id: users.id,
-      fullName: users.fullName,
-      nis: users.nis,
-      nisn: users.nisn,
-      tempatLahir: users.tempatLahir,
-      tanggalLahir: users.tanggalLahir,
-      jenisKelamin: users.jenisKelamin,
-      alamat: users.alamat,
-      kelasId: users.kelasId,
+      user: users,
+      className: classes.name,
     })
     .from(users)
+    .leftJoin(classes, eq(users.kelasId, classes.id))
     .where(
       and(
         eq(users.role, "student"),
@@ -113,120 +82,146 @@ export async function syncUsersToStudentsProjection(): Promise<{
       ),
     );
 
-  let classCreated = 0;
-  const classCandidates = new Set<string>();
+  const existingStudents = await db
+    .select()
+    .from(students)
+    .where(isNull(students.deletedAt));
 
-  for (const student of allStudents) {
-    const grade = student.grade.trim();
-    if (!grade) continue;
+  const studentMap = new Map(existingStudents.map((s) => [s.nis, s]));
+  const studentMapById = new Map(existingStudents.map((s) => [s.id, s]));
 
-    if (classById.has(grade)) {
-      classCandidates.add(classById.get(grade) as string);
-      continue;
+  // Deduplicate users by NIS to prevent UNIQUE constraint violations
+  const uniqueUsersByNis = new Map<string, (typeof studentUsers)[0]>();
+  for (const entry of studentUsers) {
+    const nis = entry.user.nis?.trim();
+    if (!nis) continue;
+    
+    if (!uniqueUsersByNis.has(nis)) {
+      uniqueUsersByNis.set(nis, entry);
+    } else {
+      console.warn(`[ProjectionSync] Collision detected: Multiple users sharing NIS ${nis}. User ${entry.user.id} skipped.`);
     }
-
-    classCandidates.add(grade);
   }
 
-  for (const user of studentUsers) {
-    const classRef = user.kelasId?.trim();
-    if (classRef) classCandidates.add(classRef);
+  let classCreated = 0;
+  let studentUpserted = 0;
+
+  // 2. Class creation optimization
+  const classCandidates = new Set<string>();
+  for (const student of existingStudents) {
+    const grade = student.grade.trim();
+    if (grade && grade !== "UNASSIGNED" && !classById.has(grade) && !classByName.has(grade)) {
+      classCandidates.add(grade);
+    }
+  }
+  for (const entry of studentUsers) {
+    const cr = entry.user.kelasId?.trim();
+    // If it's a UUID, we shouldn't add it as a candidate name
+    // unless we really don't have a className from the join
+    if (cr && !classById.has(cr) && !classByName.has(cr)) {
+      const bestName = entry.className || cr;
+      if (bestName && !classByName.has(bestName)) {
+        classCandidates.add(bestName);
+      }
+    }
   }
 
   for (const candidate of classCandidates) {
-    if (!candidate) continue;
-
-    if (classByName.has(candidate) || classById.has(candidate)) {
-      continue;
-    }
-
     const classId = crypto.randomUUID();
     await db.insert(classes).values({
       id: classId,
       name: candidate,
-      academicYear: academicYear,
-      homeroomTeacherId: null,
-      level: null,
-      room: null,
-      capacity: null,
+      academicYear,
       isActive: true,
-      version: 1,
-      hlc: null,
       createdAt: now,
       updatedAt: now,
-      deletedAt: null,
       syncStatus: "pending",
     });
-
     classById.set(classId, candidate);
     classByName.set(candidate, classId);
-    classCreated += 1;
+    classCreated++;
   }
 
-  let studentUpserted = 0;
-  for (const user of studentUsers) {
-    const nis = user.nis?.trim();
+  // 3. Student upsert optimization
+  for (const entry of uniqueUsersByNis.values()) {
+    const { user, className } = entry;
+    const nis = user.nis?.trim() || "";
     if (!nis) continue;
-
-    // Resolve Grade: Priority 1: User's KelasId, Priority 2: Existing Student Grade, Priority 3: UNASSIGNED
-    const existingStudent = await db
-      .select()
-      .from(students)
-      .where(eq(students.nis, nis))
-      .limit(1);
-
     const classRef = user.kelasId?.trim();
     let grade = "UNASSIGNED";
-    
-    if (classRef) {
+
+    if (className) {
+      grade = className;
+    } else if (classRef) {
       grade = classById.get(classRef) ?? classByName.get(classRef) ?? classRef;
-    } else if (existingStudent[0]?.grade) {
-      grade = existingStudent[0].grade;
+    } else if (studentMap.get(nis)?.grade) {
+      grade = studentMap.get(nis)?.grade || "UNASSIGNED";
     }
 
     const gender = user.jenisKelamin === "P" ? "P" : "L";
 
-    if (existingStudent.length === 0) {
-      await db.insert(students).values({
-        id: user.id,
-        nis,
-        fullName: user.fullName,
-        gender,
-        grade,
-        parentName: null,
-        parentPhone: null,
-        nisn: user.nisn,
-        tempatLahir: user.tempatLahir,
-        tanggalLahir: user.tanggalLahir,
-        alamat: user.alamat,
-        version: 1,
-        hlc: null,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        syncStatus: "pending",
-      });
-      studentUpserted += 1;
-      continue;
+    // 1. Try finding by NIS (Primary uniqueness for projection)
+    let existing = studentMap.get(nis);
+
+    // 2. Fallback check by ID to ensure consistency
+    if (!existing) {
+      existing = studentMapById.get(user.id);
     }
 
-    await db
-      .update(students)
-      .set({
-        fullName: user.fullName,
-        gender,
-        grade,
-        nisn: user.nisn,
-        tempatLahir: user.tempatLahir,
-        tanggalLahir: user.tanggalLahir,
-        alamat: user.alamat,
-        deletedAt: null,
-        updatedAt: now,
-        syncStatus: "pending",
-      })
-      .where(eq(students.nis, nis));
+    const needsUpdate =
+      !existing ||
+      existing.fullName !== user.fullName ||
+      existing.gender !== gender ||
+      existing.grade !== grade ||
+      existing.nisn !== user.nisn ||
+      existing.alamat !== user.alamat ||
+      existing.nis !== nis;
 
-    studentUpserted += 1;
+    if (needsUpdate) {
+      if (!existing) {
+        await db.insert(students).values({
+          id: user.id,
+          nis,
+          fullName: user.fullName,
+          gender,
+          grade,
+          nisn: user.nisn,
+          tempatLahir: user.tempatLahir,
+          tanggalLahir: user.tanggalLahir,
+          alamat: user.alamat,
+          createdAt: now,
+          updatedAt: now,
+          syncStatus: "pending",
+        });
+        // Update local maps
+        const newRecord = {
+          id: user.id,
+          nis,
+          fullName: user.fullName,
+          gender,
+          grade,
+        } as (typeof existingStudents)[0];
+        studentMap.set(nis, newRecord);
+        studentMapById.set(user.id, newRecord);
+      } else {
+        await db
+          .update(students)
+          .set({
+            nis,
+            fullName: user.fullName,
+            gender,
+            grade,
+            nisn: user.nisn,
+            tempatLahir: user.tempatLahir,
+            tanggalLahir: user.tanggalLahir,
+            alamat: user.alamat,
+            updatedAt: now,
+            syncStatus: "pending",
+          })
+          .where(eq(students.id, existing.id));
+      }
+      studentUpserted++;
+    }
   }
 
   const settingsSeeded = await ensureDefaultAttendanceSettings();

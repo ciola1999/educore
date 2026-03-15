@@ -497,7 +497,7 @@ async function ensureUserStudentProjectionTriggers(
 
 async function seedDefaultAdmin(db: Database): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  
+
   const existing = await db.select<any[]>(
     "SELECT * FROM users WHERE email = ? LIMIT 1",
     [DEFAULT_ADMIN_EMAIL],
@@ -506,19 +506,25 @@ async function seedDefaultAdmin(db: Database): Promise<void> {
   // REPAIR MECHANISM: If admin exists but we keep having issues, force recreate
   // To trigger repair, you can clear the hash manually or I can force it here
   const admin = existing[0];
-  const currentHash = admin ? (admin.password_hash || admin.passwordHash) : null;
+  const currentHash = admin ? admin.password_hash || admin.passwordHash : null;
 
   if (admin && !currentHash) {
-    console.warn(`[Seed] 🛠️ REPAIRING Admin ${DEFAULT_ADMIN_EMAIL}: Missing password hash. Recreating...`);
-    await db.execute("DELETE FROM users WHERE email = ?", [DEFAULT_ADMIN_EMAIL]);
+    console.warn(
+      `[Seed] 🛠️ REPAIRING Admin ${DEFAULT_ADMIN_EMAIL}: Missing password hash. Recreating...`,
+    );
+    await db.execute("DELETE FROM users WHERE email = ?", [
+      DEFAULT_ADMIN_EMAIL,
+    ]);
     existing.length = 0; // Force recreation below
   }
 
   if (existing.length === 0) {
-    console.info(`[Seed] 🚀 Creating fresh default admin: ${DEFAULT_ADMIN_EMAIL}`);
+    console.info(
+      `[Seed] 🚀 Creating fresh default admin: ${DEFAULT_ADMIN_EMAIL}`,
+    );
     const passwordHash = await getDefaultAdminHash();
     const id = crypto.randomUUID();
-    
+
     // Explicitly use snake_case since that's what's in the PRAGMA table_info
     await db.execute(
       `INSERT INTO users (id, full_name, email, role, password_hash, is_active, version, hlc, deleted_at, created_at, updated_at, sync_status)

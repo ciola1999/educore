@@ -3,10 +3,13 @@
 import {
   CalendarDays,
   Check,
-  Download,
+  ChevronLeft,
+  ChevronRight,
   FileSpreadsheet,
   LayoutList,
   Loader2,
+  RefreshCw,
+  Search,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,6 +27,14 @@ export function AttendanceForm() {
     loading,
     submitting,
     studentList,
+    paginatedStudentList,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage,
+    searchQuery,
+    setSearchQuery,
     selectedDate,
     setSelectedDate,
     selectedClass,
@@ -32,6 +43,7 @@ export function AttendanceForm() {
     updateStatus,
     setAllPresent,
     handleSubmit,
+    refreshStudents,
   } = useAttendanceForm();
 
   if (!isMounted) return null;
@@ -113,45 +125,6 @@ export function AttendanceForm() {
     };
   };
 
-  const handleExportCsv = () => {
-    if (!selectedClass || studentList.length === 0) {
-      toast.error("Belum ada data siswa untuk diekspor");
-      return;
-    }
-
-    const { className, rows } = getExportRows();
-    if (rows.length === 0) {
-      toast.error("Tidak ada data sesuai filter export");
-      return;
-    }
-
-    const escapeCsvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
-    const headers = Object.keys(rows[0]);
-    const csvRows = rows.map((row) =>
-      headers
-        .map((header) => escapeCsvCell(String(row[header as keyof typeof row])))
-        .join(","),
-    );
-
-    const csvContent = [
-      headers.map((header) => escapeCsvCell(header)).join(","),
-      ...csvRows,
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `attendance-${className}-${selectedDate}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    toast.success("Laporan absensi berhasil diekspor");
-  };
-
   const handleExportXlsx = async () => {
     if (!selectedClass || studentList.length === 0) {
       toast.error("Belum ada data siswa untuk diekspor");
@@ -185,87 +158,109 @@ export function AttendanceForm() {
   return (
     <div className="space-y-6">
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-zinc-800/50">
-            <CalendarDays className="h-5 w-5 text-zinc-400" />
+      <div className="flex flex-col gap-4 p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-md shadow-xl">
+        {/* Row 1: Primary Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-zinc-800/50 shrink-0 border border-zinc-700/50">
+              <CalendarDays className="h-5 w-5 text-blue-400" />
+            </div>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all w-full font-medium"
+            />
           </div>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-400 text-sm font-medium">Class:</span>
-          <select
-            value={selectedClass}
-            onChange={(e) => setSelectedClass(e.target.value)}
-            className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all min-w-[140px]"
-          >
-            {classList.length === 0 ? (
-              <option value="">No classes available</option>
-            ) : (
-              classList.map((c) => (
+
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all w-full font-medium cursor-pointer"
+            >
+              <option value="" disabled>
+                Select Class
+              </option>
+              {classList.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
-              ))
-            )}
-          </select>
+              ))}
+            </select>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search student..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-11 pr-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-zinc-600"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={exportFilter}
+              onChange={(e) =>
+                setExportFilter(e.target.value as AttendanceStatus | "all")
+              }
+              className="h-11 bg-zinc-950 border border-zinc-700 rounded-xl px-4 text-sm text-zinc-300 focus:ring-2 focus:ring-blue-500 w-full cursor-pointer"
+              aria-label="Export status filter"
+            >
+              <option value="all">Export: All Status</option>
+              <option value="present">Only Present</option>
+              <option value="sick">Only Sick</option>
+              <option value="permission">Only Permission</option>
+              <option value="alpha">Only Alpha</option>
+            </select>
+          </div>
         </div>
-        <div className="sm:ml-auto flex gap-2">
-          <select
-            value={exportFilter}
-            onChange={(e) =>
-              setExportFilter(e.target.value as AttendanceStatus | "all")
-            }
-            className="h-9 bg-zinc-950 border border-zinc-700 rounded-lg px-3 text-xs text-zinc-300 focus:ring-2 focus:ring-blue-500"
-            aria-label="Export status filter"
-          >
-            <option value="all">Export: Semua Status</option>
-            <option value="present">Hanya Present</option>
-            <option value="sick">Hanya Sakit</option>
-            <option value="permission">Hanya Izin</option>
-            <option value="alpha">Hanya Alpha</option>
-          </select>
-          <Button
-            onClick={() =>
-              setViewMode((prevMode) =>
-                prevMode === "detailed" ? "compact" : "detailed",
-              )
-            }
-            variant="outline"
-            size="sm"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
-          >
-            <LayoutList className="h-4 w-4 mr-2" />
-            {viewMode === "detailed" ? "Compact View" : "Detailed View"}
-          </Button>
-          <Button
-            onClick={handleExportCsv}
-            variant="outline"
-            size="sm"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
-          >
-            <Download className="h-4 w-4 mr-2" /> Export CSV
-          </Button>
-          <Button
-            onClick={handleExportXlsx}
-            variant="outline"
-            size="sm"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-2" /> Export XLSX
-          </Button>
+
+        {/* Row 2: Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-800/50">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={refreshStudents}
+              variant="outline"
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10 group"
+              title="Refresh students"
+            >
+              <RefreshCw className="h-4 w-4 mr-2 group-active:rotate-180 transition-transform duration-500" />
+              Refresh
+            </Button>
+
+            <Button
+              onClick={handleExportXlsx}
+              variant="outline"
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-500" />{" "}
+              Export XLSX
+            </Button>
+
+            <Button
+              onClick={() =>
+                setViewMode((prevMode) =>
+                  prevMode === "detailed" ? "compact" : "detailed",
+                )
+              }
+              variant="outline"
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10"
+            >
+              <LayoutList className="h-4 w-4 mr-2 text-indigo-400" />
+              {viewMode === "detailed" ? "Compact View" : "Detailed View"}
+            </Button>
+          </div>
+
           <Button
             onClick={setAllPresent}
             variant="outline"
-            size="sm"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-lg px-4"
+            className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 rounded-xl px-5 h-10 font-medium"
           >
-            <Check className="h-4 w-4 mr-2" /> All Present
+            <Check className="h-4 w-4 mr-2" /> Mark All Present
           </Button>
         </div>
       </div>
@@ -310,16 +305,19 @@ export function AttendanceForm() {
             </div>
           ) : (
             <div className="grid gap-3">
-              {studentList.map((student, idx) => (
-                <div
-                  key={student.id}
-                  className="group flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-800/50 hover:border-zinc-700 transition-all duration-200"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <span className="w-6 text-zinc-600 text-xs font-mono font-bold">
-                      {(idx + 1).toString().padStart(2, "0")}
-                    </span>
-                    <div className="flex flex-col">
+              {paginatedStudentList.map((student, idx) => {
+                const globalIdx = (currentPage - 1) * itemsPerPage + idx;
+                return (
+                  <div
+                    key={student.id}
+                    className="group flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-800/50 hover:border-zinc-700 transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-4 shrink-0 px-1">
+                      <span className="w-6 text-zinc-600 text-[10px] font-mono font-bold text-center">
+                        {(globalIdx + 1).toString().padStart(2, "0")}
+                      </span>
+                    </div>
+                    <div className="flex flex-col flex-1">
                       <span className="font-mono text-xs text-blue-400 font-semibold mb-0.5">
                         {student.nis}
                         {student.nisn ? ` • NISN ${student.nisn}` : ""}
@@ -349,41 +347,146 @@ export function AttendanceForm() {
                         </>
                       ) : null}
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 border-zinc-800/50 pt-3 sm:pt-0">
-                    <span className="sm:hidden text-xs text-zinc-500 font-medium">
-                      Status:
-                    </span>
-                    <div className="flex gap-1.5 p-1 rounded-lg bg-zinc-950/50 border border-zinc-800">
-                      {(
-                        [
-                          "present",
-                          "sick",
-                          "permission",
-                          "alpha",
-                        ] as AttendanceStatus[]
-                      ).map((status) => (
-                        <button
-                          key={status}
-                          type="button"
-                          onClick={() => updateStatus(student.id, status)}
-                          title={
-                            status.charAt(0).toUpperCase() + status.slice(1)
-                          }
-                          className={`w-9 h-9 sm:w-8 sm:h-8 rounded-md text-xs font-bold transition-all duration-200 ${
-                            student.status === status
-                              ? `${statusColors[status]} text-white shadow-lg scale-105 sm:scale-110`
-                              : "bg-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
-                          }`}
+                    <div className="flex flex-col items-end gap-2">
+                      {student.isLocked && (
+                        <div className="flex items-center gap-3 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
+                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">
+                            QR AUTO-SYNCED
+                          </span>
+                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                            {student.checkInTime && (
+                              <span title="Check-in">
+                                In:{" "}
+                                {new Date(
+                                  student.checkInTime,
+                                ).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            )}
+                            {student.checkOutTime && (
+                              <span title="Check-out">
+                                Out:{" "}
+                                {new Date(
+                                  student.checkOutTime,
+                                ).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 border-zinc-800/50 pt-3 sm:pt-0">
+                        <span className="sm:hidden text-xs text-zinc-500 font-medium">
+                          Status:
+                        </span>
+                        <div
+                          className={`flex gap-1.5 p-1 rounded-lg bg-zinc-950/50 border border-zinc-800 ${student.isLocked ? "opacity-60 grayscale" : ""}`}
                         >
-                          {statusLabels[status]}
-                        </button>
-                      ))}
+                          {(
+                            [
+                              "present",
+                              "sick",
+                              "permission",
+                              "alpha",
+                            ] as AttendanceStatus[]
+                          ).map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              disabled={student.isLocked}
+                              onClick={() => updateStatus(student.id, status)}
+                              title={
+                                status.charAt(0).toUpperCase() + status.slice(1)
+                              }
+                              className={`w-9 h-9 sm:w-8 sm:h-8 rounded-md text-xs font-bold transition-all duration-200 ${
+                                student.status === status
+                                  ? `${statusColors[status]} text-white shadow-lg scale-105 sm:scale-110`
+                                  : "bg-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                              } ${student.isLocked ? "cursor-not-allowed" : ""}`}
+                            >
+                              {statusLabels[status]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t border-zinc-800/50">
+              <div className="text-sm text-zinc-500">
+                Showing{" "}
+                <span className="text-zinc-300 font-medium">
+                  {(currentPage - 1) * itemsPerPage + 1}
+                </span>{" "}
+                to{" "}
+                <span className="text-zinc-300 font-medium">
+                  {Math.min(currentPage * itemsPerPage, totalItems)}
+                </span>{" "}
+                of{" "}
+                <span className="text-zinc-300 font-medium">{totalItems}</span>{" "}
+                students
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(
+                    (p) =>
+                      p === 1 ||
+                      p === totalPages ||
+                      Math.abs(p - currentPage) <= 1,
+                  )
+                  .map((p, i, arr) => (
+                    <div key={p} className="flex items-center">
+                      {i > 0 && arr[i - 1] !== p - 1 && (
+                        <span className="px-2 text-zinc-600">...</span>
+                      )}
+                      <Button
+                        variant={currentPage === p ? "default" : "outline"}
+                        size="sm"
+                        className={`h-9 w-9 rounded-md transition-all ${
+                          currentPage === p
+                            ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
+                            : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                        }`}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    </div>
+                  ))}
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                  onClick={() =>
+                    setCurrentPage(Math.min(totalPages, currentPage + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
 
