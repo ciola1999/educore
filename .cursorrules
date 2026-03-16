@@ -22,7 +22,7 @@ Tidak ada diskusi mengganti stack kecuali saya minta eksplisit.
 
 ### 2️⃣ Data & State
 - **Local DB (Desktop)**: **SQLite (encrypted)** via Tauri Plugin SQL
-- **Cloud DB (Web/Sync)**: **Supabase (Postgres + RLS)**
+- **Cloud DB (Web/Sync)**: **Turso Cloud (libSQL)**
 - **ORM**: **Drizzle ORM** — schema adalah **single source of truth**
 - **State**: **Zustand** (global), **Nuqs** (URL state)
 - **🆕 Sync Engine**: **Custom Replicator** (Push/Pull delta) atau **ElectricSQL** pattern.
@@ -74,11 +74,11 @@ Tidak ada diskusi mengganti stack kecuali saya minta eksplisit.
 ## 🧷 LOCAL DATABASE POLICY (SQLite Default)
 - **Desktop default**: **SQLite (encrypted/SQLCipher)**.
 Drizzle sebagai ORM tunggal.
-- **PGlite (WASM)** diperbolehkan untuk environment web jika butuh paritas 1:1 dengan Supabase.
+- **Web (Cloud)**: **Turso (libSQL)** for direct browser access.
 - Migrasi **idempotent**. Schema Drizzle dikelola via `drizzle-kit`.
 ---
 
-## 🔁 SYNC CONTRACT (Supabase + RLS)
+## 🔁 SYNC CONTRACT (Turso Cloud)
 - **Identitas record**: `id` (UUID v7), `version` (BigInt), `updated_at`, `deleted_at` (Soft Delete).
 - **Conflict policy**: **Last-Write-Wins (LWW)** based on Hybrid Logical Clock (HLC) jika memungkinkan.
 - **Transport**: Batch JSON RPC, **Delta Sync** (hanya kirim yang berubah).
@@ -92,7 +92,7 @@ Drizzle sebagai ORM tunggal.
 - **Isolation Pattern**: Iframe untuk konten untrusted.
 - **Secrets**: Gunakan **OS Keychain** via Tauri Plugin Store/Stronghold.
 - Telemetry: Privacy-preserving (scrub PII).
-- Supabase: Service Role key **haram** ada di Client bundle.
+- Turso Cloud: **Auth Token** wajib diamankan (server-side only on Web).
 ---
 
 ## ⚠️ REACT COMPILER & PERF 🆕

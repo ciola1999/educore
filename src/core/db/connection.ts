@@ -1,12 +1,12 @@
 import type Database from "@tauri-apps/plugin-sql";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { isTauri } from "../env";
-import { runMigrations } from "./migrations";
+import { type DatabaseLike, runMigrations } from "./migrations";
 import * as schema from "./schema";
 
 /**
  * 2026 Elite Database Connection Pattern for EduCore
- * Hybrid Desktop (SQLite) + Web (Supabase/Proxy) abstraction
+ * Hybrid Desktop (SQLite) + Web (Turso/libSQL) abstraction
  */
 
 export interface DatabaseConnection {
@@ -80,19 +80,99 @@ export const getDatabase = async () => {
         { schema },
       );
     } else {
-      // Web: Supabase/Proxy connection logic (placeholder for 2026 pattern)
-      // In production, this would connect to Turso or a Supabase Edge Function
-      console.warn("⚠️ [DB] Web mode connection - using simplified proxy");
+      // Web: libSQL WASM for local-first in browser
+      try {
+        const { createClient } = await import("@libsql/client/web");
+        let url = process.env.NEXT_PUBLIC_DATABASE_URL || "libsql://local.db";
+        const authToken = process.env.NEXT_PUBLIC_DATABASE_AUTH_TOKEN;
 
-      _db = drizzle(
-        async (sql, _params, method) => {
-          // This part would normally call an API endpoint
-          // For now, we use a placeholder that throws or logs
-          console.info(`[DB_WEB_STUB] ${method}: ${sql}`);
-          return { rows: [] };
-        },
-        { schema },
-      );
+        // Elite 2026 Web Pattern: Always use https for Turso in browser to avoid protocol issues
+        if (url.startsWith("libsql://")) {
+          url = url.replace("libsql://", "https://");
+        }
+
+        console.info(
+          `🌐 [DB] Connecting to libSQL at: ${url} (Token: ${authToken ? "Present" : "Missing"})`,
+        );
+
+        const client = createClient({
+          url: url,
+          authToken: authToken,
+        });
+
+        if (url === "libsql://local.db") {
+          console.warn(
+            "⚠️ [DB] Using default local.db URL on web. This WILL FAIL to fetch unless a local sqld server is running and accessible.",
+          );
+        }
+
+        _db = drizzle(
+          async (sql, params, method) => {
+            try {
+              if (method === "run") {
+                const result = await client.execute({
+                  sql,
+                  args: params as any[],
+                });
+                return {
+                  rows: [],
+                  rowsAffected: result.rowsAffected,
+                  insertId: result.lastInsertRowid?.toString() ?? 0,
+                };
+              }
+
+              const result = await client.execute({
+                sql,
+                args: params as any[],
+              });
+              return {
+                rows: result.rows.map((row) =>
+                  Object.values(row as Record<string, unknown>),
+                ),
+              };
+            } catch (e) {
+              console.error("❌ [SQL_ERROR_WEB]", e);
+              throw e;
+            }
+          },
+          { schema },
+        );
+
+        // Run migrations for web too
+        const dbLike: DatabaseLike = {
+          execute: async (sql, params) => {
+            const res = await client.execute({
+              sql,
+              args: (params || []) as any[],
+            });
+            return {
+              rowsAffected: res.rowsAffected,
+              lastInsertId: res.lastInsertRowid?.toString() || 0,
+              rows: res.rows as any[],
+            };
+          },
+          select: async (sql, params) => {
+            const res = await client.execute({
+              sql,
+              args: (params || []) as any[],
+            });
+            return res.rows as any[];
+          },
+        };
+
+        try {
+          await runMigrations(dbLike);
+        } catch (migrationError) {
+          console.error(
+            "❌ [DB_MIGRATION_WEB_ERROR] Could not run migrations on web.",
+            migrationError,
+          );
+        }
+      } catch (e) {
+        console.error("❌ [DB_INIT_WEB_ERROR]", e);
+        // Fallback or error
+        throw e;
+      }
     }
 
     if (!_db) {

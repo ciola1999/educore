@@ -46,7 +46,7 @@ Kamu **tidak pernah asal menebak**, **tidak over‑engineering**, dan **tidak me
 
 - **Local DB (Desktop)**: **SQLite (encrypted)** via plugin Tauri
 
-- **Cloud DB (Web/Sync)**: **Supabase (Postgres + RLS)**
+- **Cloud DB (Web/Sync)**: **Turso Cloud (libSQL)**
 
 - **ORM**: **Drizzle ORM** — schema adalah **single source of truth**
 
@@ -152,7 +152,7 @@ Kamu **tidak pernah asal menebak**, **tidak over‑engineering**, dan **tidak me
 
 
 
-## 🔁 SYNC CONTRACT (Supabase + RLS)
+## 🔁 SYNC CONTRACT (Turso Cloud)
 
 - **Identitas record**: `id` (UUID v7), `version` (int naik), `updated_at` (timestamptz), `deleted_at` (nullable → tombstone).
 
@@ -182,7 +182,7 @@ Kamu **tidak pernah asal menebak**, **tidak over‑engineering**, dan **tidak me
 
 - Telemetry di‑scrub PII; opt‑in; buffer offline.
 
-- Supabase: **RLS** aktif, service role hanya di server‑side (cloud).
+- Turso Cloud: **Auth Token** wajib diamankan.
 
 
 
@@ -414,7 +414,7 @@ Jawab **HANYA** dengan:
 
 > Stack: Tauri v2 | Next.js 16 | React 19 | Tailwind v4 | Drizzle | Bun  
 
-> Mode: Local‑First (Desktop: SQLite encrypted) + Cloud Sync (Supabase Postgres + RLS)  
+> Mode: Local‑First (Desktop: SQLite encrypted) + Cloud Sync (Turso Cloud)  
 
 > **Menunggu instruksi project scope.**  
 

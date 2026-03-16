@@ -20,10 +20,11 @@ import {
 } from "@/components/ui/card";
 import {
   fullSync,
-  pullFromSupabase,
-  pushToSupabase,
+  pullFromCloud,
+  pushToCloud,
   type SyncResult,
-} from "@/lib/supabase/sync";
+} from "@/lib/sync/turso-sync";
+import { isWeb } from "@/core/env";
 
 export default function SettingsPage() {
   const [syncing, setSyncing] = useState(false);
@@ -46,7 +47,7 @@ export default function SettingsPage() {
     setSyncing(true);
     setLastResult(null);
     try {
-      const result = await pushToSupabase();
+      const result = await pushToCloud();
       setLastResult(result);
     } catch {
       setLastResult({ status: "error", message: "Push failed" });
@@ -59,7 +60,7 @@ export default function SettingsPage() {
     setSyncing(true);
     setLastResult(null);
     try {
-      const result = await pullFromSupabase();
+      const result = await pullFromCloud();
       setLastResult(result);
     } catch {
       setLastResult({ status: "error", message: "Pull failed" });
@@ -85,7 +86,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Cloud className="h-5 w-5 text-blue-400" />
-              Cloud Sync (Supabase)
+              Cloud Sync (Turso)
             </CardTitle>
             <CardDescription className="text-zinc-400">
               Synchronize local data with cloud database. Uses Last-Write-Wins
@@ -108,7 +109,7 @@ export default function SettingsPage() {
               </Button>
               <Button
                 onClick={handlePush}
-                disabled={syncing}
+                disabled={syncing || isWeb()}
                 variant="outline"
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
               >
@@ -117,7 +118,7 @@ export default function SettingsPage() {
               </Button>
               <Button
                 onClick={handlePull}
-                disabled={syncing}
+                disabled={syncing || isWeb()}
                 variant="outline"
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
               >
@@ -125,6 +126,11 @@ export default function SettingsPage() {
                 Pull from Cloud
               </Button>
             </div>
+            {isWeb() && (
+              <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs text-blue-400">
+                Note: Web version connects directly to Turso Cloud. Synchronization is automated.
+              </div>
+            )}
 
             {lastResult && (
               <div
@@ -163,7 +169,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-400">Cloud</span>
-              <span className="font-mono text-blue-400">Supabase</span>
+              <span className="font-mono text-blue-400">Turso Cloud</span>
             </div>
           </CardContent>
         </Card>

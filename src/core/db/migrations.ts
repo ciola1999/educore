@@ -1,5 +1,20 @@
-import type Database from "@tauri-apps/plugin-sql";
 import { getDefaultAdminHash } from "@/lib/auth/hash";
+
+/**
+ * Interface that matches both @tauri-apps/plugin-sql and @libsql/client
+ */
+export interface DatabaseLike {
+  select<T>(sql: string, params?: unknown[]): Promise<T[]>;
+  execute(
+    sql: string,
+    params?: unknown[],
+  ): Promise<{
+    rowsAffected?: number;
+    lastInsertId?: number | string;
+    changes?: number;
+    rows?: unknown[];
+  }>;
+}
 
 const DEFAULT_ADMIN_EMAIL = "admin@educore.school";
 
@@ -10,8 +25,8 @@ function getAcademicYearLabel(): string {
   return `${year}/${year + 1}`;
 }
 
-async function seedClassesFromLegacyData(db: Database): Promise<void> {
-  const classFromUsers = await db.select<{ kelas_id: string | null }[]>(
+async function seedClassesFromLegacyData(db: DatabaseLike): Promise<void> {
+  const classFromUsers = await db.select<{ kelas_id: string | null }>(
     `SELECT DISTINCT kelas_id
      FROM users
      WHERE deleted_at IS NULL
@@ -20,7 +35,7 @@ async function seedClassesFromLegacyData(db: Database): Promise<void> {
        AND TRIM(kelas_id) != ''`,
   );
 
-  const classFromStudents = await db.select<{ grade: string | null }[]>(
+  const classFromStudents = await db.select<{ grade: string | null }>(
     `SELECT DISTINCT grade
      FROM students
      WHERE deleted_at IS NULL
@@ -52,7 +67,7 @@ async function seedClassesFromLegacyData(db: Database): Promise<void> {
   for (const className of classCandidates) {
     if (!className) continue;
 
-    const existing = await db.select<{ id: string }[]>(
+    const existing = await db.select<{ id: string }>(
       `SELECT id
        FROM classes
        WHERE name = ? AND deleted_at IS NULL
@@ -93,7 +108,7 @@ async function seedClassesFromLegacyData(db: Database): Promise<void> {
   }
 }
 
-async function syncStudentsFromUsers(db: Database): Promise<void> {
+async function syncStudentsFromUsers(db: DatabaseLike): Promise<void> {
   const usersData = await db.select<
     {
       id: string;
@@ -122,7 +137,18 @@ async function syncStudentsFromUsers(db: Database): Promise<void> {
 
   const now = Math.floor(Date.now() / 1000);
 
-  for (const user of usersData) {
+  for (const row of usersData) {
+    const user = row as unknown as {
+      id: string;
+      full_name: string;
+      nis: string | null;
+      nisn: string | null;
+      jenis_kelamin: string | null;
+      tempat_lahir: string | null;
+      tanggal_lahir: number | null;
+      alamat: string | null;
+      kelas_id: string | null;
+    };
     const nis = user.nis?.trim();
     if (!nis) continue;
 
@@ -130,7 +156,7 @@ async function syncStudentsFromUsers(db: Database): Promise<void> {
     const rawClassRef = user.kelas_id?.trim();
 
     if (rawClassRef) {
-      const classById = await db.select<{ name: string }[]>(
+      const classById = await db.select<{ name: string }>(
         `SELECT name
          FROM classes
          WHERE id = ? AND deleted_at IS NULL
@@ -143,7 +169,7 @@ async function syncStudentsFromUsers(db: Database): Promise<void> {
 
     const gender = user.jenis_kelamin === "P" ? "P" : "L";
 
-    const existing = await db.select<{ id: string }[]>(
+    const existing = await db.select<{ id: string }>(
       `SELECT id
        FROM students
        WHERE nis = ?
@@ -223,8 +249,8 @@ async function syncStudentsFromUsers(db: Database): Promise<void> {
   }
 }
 
-async function seedDefaultAttendanceSettings(db: Database): Promise<void> {
-  const existing = await db.select<{ total: number }[]>(
+async function seedDefaultAttendanceSettings(db: DatabaseLike): Promise<void> {
+  const existing = await db.select<{ total: number }>(
     `SELECT COUNT(*) AS total
      FROM attendance_settings
      WHERE deleted_at IS NULL
@@ -274,7 +300,7 @@ async function seedDefaultAttendanceSettings(db: Database): Promise<void> {
 }
 
 async function ensureUserStudentProjectionTriggers(
-  db: Database,
+  db: DatabaseLike,
 ): Promise<void> {
   await db.execute(`
     CREATE TRIGGER IF NOT EXISTS users_student_projection_after_insert
@@ -495,7 +521,7 @@ async function ensureUserStudentProjectionTriggers(
   `);
 }
 
-async function seedDefaultAdmin(db: Database): Promise<void> {
+async function seedDefaultAdmin(db: DatabaseLike): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
 
   const existing = await db.select<any[]>(
@@ -503,9 +529,8 @@ async function seedDefaultAdmin(db: Database): Promise<void> {
     [DEFAULT_ADMIN_EMAIL],
   );
 
-  // REPAIR MECHANISM: If admin exists but we keep having issues, force recreate
-  // To trigger repair, you can clear the hash manually or I can force it here
-  const admin = existing[0];
+  // REPAIR MECHANISM
+  const admin = existing[0] as Record<string, any> | undefined;
   const currentHash = admin ? admin.password_hash || admin.passwordHash : null;
 
   if (admin && !currentHash) {
@@ -564,7 +589,7 @@ async function seedDefaultAdmin(db: Database): Promise<void> {
  * Add a column safely — ignores error if column already exists
  */
 async function safeAddColumn(
-  db: Database,
+  db: DatabaseLike,
   table: string,
   column: string,
   type: string,
@@ -585,7 +610,7 @@ async function safeAddColumn(
 /**
  * Run all migrations — safe to call multiple times (idempotent)
  */
-export async function runMigrations(db: Database): Promise<void> {
+export async function runMigrations(db: DatabaseLike): Promise<void> {
   console.info("🔄 [Migration] Starting database sync...");
 
   // ============================================================
@@ -1534,7 +1559,7 @@ export async function runMigrations(db: Database): Promise<void> {
     )
   `);
 
-  const usersTable = await db.select<{ name: string }[]>(
+  const usersTable = await db.select<{ name: string }>(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users' LIMIT 1`,
   );
 

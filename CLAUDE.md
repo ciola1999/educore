@@ -40,7 +40,7 @@ cd src-tauri && cargo tauri build   # Build desktop application
 
 The app runs in two environments:
 - **Tauri Desktop**: SQLite via `@tauri-apps/plugin-sql`, local-first
-- **Web Browser**: supabase
+- **Web Browser**: Turso (libSQL)
 
 Use `isTauri()` and `isWeb()` from `src/core/env.ts` to detect runtime. Never access Tauri APIs on web.
 

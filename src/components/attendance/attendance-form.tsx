@@ -14,9 +14,6 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useAttendanceForm } from "@/hooks/use-attendance-form";
-import type { AttendanceStatus } from "@/lib/validations/schemas";
-import { isTauri } from "@/core/env";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -32,8 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { isTauri } from "@/core/env";
+import { useAttendanceForm } from "@/hooks/use-attendance-form";
+import type { AttendanceStatus } from "@/lib/validations/schemas";
 
 export function AttendanceForm() {
   const [viewMode, setViewMode] = useState<"compact" | "detailed">("detailed");
@@ -257,7 +257,6 @@ export function AttendanceForm() {
               className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-11 pr-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-zinc-600"
             />
           </div>
-
         </div>
 
         {/* Row 2: Actions */}

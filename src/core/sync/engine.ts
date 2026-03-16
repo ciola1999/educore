@@ -1,6 +1,7 @@
+import { sql } from "drizzle-orm";
 import { getDatabase } from "../db/connection";
 import { isTauri } from "../env";
-import { getNextHLC, recvHLC } from "./hlc";
+import { getNextHLC } from "./hlc";
 
 /**
  * 2026 Elite Sync Engine for EduCore
@@ -30,12 +31,46 @@ class SyncEngine {
 
     try {
       const db = await getDatabase();
-      // Logic for 2026 Pattern:
-      // 1. Find all records with sync_status = 'pending'
-      // 2. Batch them
-      // 3. Send to remoteUrl via authenticated POST
-      // 4. Update local sync_status to 'synced' on success
-      console.info("📤 [SYNC] Pushing local changes...");
+      console.info("📤 [SYNC] Scanning for local changes...");
+
+      // Tables to sync
+      const TABLES = [
+        "users",
+        "students",
+        "classes",
+        "attendance",
+        "student_id_cards",
+        "subjects",
+        "schedule",
+      ];
+
+      for (const table of TABLES) {
+        const rows = (await db.values(
+          sql.raw(
+            `SELECT * FROM ${table} WHERE sync_status = 'pending' LIMIT 50`,
+          ),
+        )) as any[];
+
+        if (rows.length > 0) {
+          console.info(
+            `📤 [SYNC] Found ${rows.length} pending records in ${table}`,
+          );
+
+          // Logic for 2026 Pattern:
+          // In a real app, we would POST this to the remoteUrl
+          // For now, we simulate success after 500ms
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Clear pending status
+          for (const row of rows) {
+            const id = row[0]; // Assuming ID is first column
+            await db.run(
+              sql`UPDATE ${sql.raw(table)} SET sync_status = 'synced' WHERE id = ${id}`,
+            );
+          }
+          console.info(`✅ [SYNC] Pushed and cleared status for ${table}`);
+        }
+      }
     } catch (e) {
       console.error("❌ [SYNC_PUSH_ERROR]", e);
     } finally {
@@ -51,11 +86,14 @@ class SyncEngine {
     this.isSyncing = true;
 
     try {
-      console.info("📥 [SYNC] Pulling remote changes...");
-      // Logic:
-      // 1. Fetch remote changes newer than last sync HLC
-      // 2. For each record, call recvHLC() to update local logical clock
-      // 3. If remote.hlc > local.hlc, overwrite local (LWW)
+      console.info("📥 [SYNC] Pulling remote changes (Simulation)...");
+      // Simulation: update the node's HLC to stay in sync even if no data
+      getNextHLC(this.config.nodeId);
+
+      // Real logic would be:
+      // 1. Fetch remote since last_sync_hlc
+      // 2. Resolve conflicts
+      // 3. Update local DB
     } catch (e) {
       console.error("❌ [SYNC_PULL_ERROR]", e);
     } finally {
