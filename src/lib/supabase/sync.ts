@@ -75,6 +75,7 @@ const safeDate = (value: string | number | Date | null | undefined): Date => {
 };
 
 // --- HELPERS: CASE CONVERSION ---
+// biome-ignore lint/suspicious/noExplicitAny: Generic utility
 const camelToSnake = (obj: any): any => {
   if (!obj || typeof obj !== "object") return obj;
   const result: any = {};
@@ -91,6 +92,7 @@ const camelToSnake = (obj: any): any => {
   return result;
 };
 
+// biome-ignore lint/suspicious/noExplicitAny: Generic utility
 const snakeToCamel = (obj: any): any => {
   if (!obj || typeof obj !== "object") return obj;
   const result: any = {};
@@ -102,12 +104,84 @@ const snakeToCamel = (obj: any): any => {
 };
 
 /**
+ * Reconciles local and cloud IDs to maintain Referential Integrity (Elite 2026 Sync Protocol)
+ * If a local record matches a cloud record by logical key (NIS/Email) but has a different ID,
+ * we MUST update the local ID to match the cloud to prevent FK violations.
+ */
+async function reconcileId(tableName: string, drizzleTable: any, remoteId: string, logicalKey: string, logicalValue: string) {
+  const db = await getDb();
+  
+  // Find local record with the same logical key
+  const localMatch = await db
+    .select()
+    .from(drizzleTable)
+    .where(eq(drizzleTable[logicalKey], logicalValue))
+    .limit(1);
+
+  if (localMatch[0] && localMatch[0].id !== remoteId) {
+    const oldId = localMatch[0].id;
+    const newId = remoteId;
+    console.log(`[Sync] Reconciling ID for ${tableName} (${logicalKey}: ${logicalValue}): ${oldId} -> ${newId}`);
+
+    // Mandatory Cascade Update for IDs (Local SQLite level)
+    await db.update(drizzleTable).set({ id: newId }).where(eq(drizzleTable.id, oldId));
+    
+    if (tableName === "students" || tableName === "users") {
+      // Students and Users share the same ID space in EduCore
+      const otherTable = tableName === "students" ? students : users;
+      await db.update(otherTable).set({ id: newId }).where(eq(otherTable.id, oldId));
+      
+      // Update references in all critical tables
+      await db.update(studentDailyAttendance).set({ studentId: newId }).where(eq(studentDailyAttendance.studentId, oldId));
+      await db.update(attendance).set({ studentId: newId }).where(eq(attendance.studentId, oldId));
+      await db.update(studentIdCards).set({ studentId: newId }).where(eq(studentIdCards.studentId, oldId));
+      await db.update(absensi).set({ siswaId: newId }).where(eq(absensi.siswaId, oldId));
+      await db.update(absensiScanLogs).set({ studentId: newId }).where(eq(absensiScanLogs.studentId, oldId));
+    }
+    
+    return true;
+  }
+  return false;
+}
+
+/**
  * Push pending local data to Supabase (Upload)
  */
 export async function pushToSupabase(): Promise<SyncResult> {
   try {
     const db = await getDb();
     let uploadedCount = 0;
+
+    // --- PRE-PUSH RECONCILIATION ---
+    // Proactively check for logical key conflicts in the cloud (NIS/Email)
+    // to fix ID mismatches BEFORE they cause Supabase 23505/23503 errors.
+    const reconcileBeforePush = async (tableName: string, drizzleTable: any, logicalKey: string) => {
+      const pending = await db.select().from(drizzleTable).where(eq(drizzleTable.syncStatus, "pending"));
+      if (pending.length === 0) return;
+      
+      const logicalValues = pending.map(item => item[logicalKey]).filter(Boolean);
+      if (logicalValues.length === 0) return;
+
+      const { data: remotes } = (await supabase
+        .from(tableName)
+        .select(`id, ${logicalKey}`)
+        .in(logicalKey, logicalValues)) as { data: any[] | null };
+
+      if (remotes && remotes.length > 0) {
+        for (const remote of remotes) {
+          await reconcileId(
+            tableName,
+            drizzleTable,
+            remote.id,
+            logicalKey,
+            remote[logicalKey],
+          );
+        }
+      }
+    };
+
+    await reconcileBeforePush("students", students, "nis");
+    await reconcileBeforePush("users", users, "email");
 
     const syncTable = async (
       tableName: string,
@@ -155,11 +229,11 @@ export async function pushToSupabase(): Promise<SyncResult> {
       }
     };
 
-    // 1. Students
-    await syncTable("students", students, undefined, "nis");
+    // 1. Students - Use 'id' (default) to prevent foreign key violations on cloud
+    await syncTable("students", students);
 
-    // 2. Users
-    await syncTable("users", users, undefined, "email");
+    // 2. Users - Use 'id'
+    await syncTable("users", users);
 
     // 3. Classes
     await syncTable("classes", classes);
@@ -307,11 +381,25 @@ export async function pullFromSupabase(): Promise<SyncResult> {
 
           mappedData.syncStatus = "synced";
 
-          if (existing.length === 0) {
+          let existingItem = existing[0];
+
+          // --- ID RECONCILIATION (Elite 2026 Pattern) ---
+          if (!existingItem) {
+            const logicalKey = tableName === "students" ? "nis" : (tableName === "users" ? "email" : null);
+            if (logicalKey && remote[logicalKey]) {
+              const reconciled = await reconcileId(tableName, drizzleTable, remote.id, logicalKey, remote[logicalKey]);
+              if (reconciled) {
+                const refreshed = await db.select().from(drizzleTable).where(eq(drizzleTable.id, remote.id)).limit(1);
+                existingItem = refreshed[0];
+              }
+            }
+          }
+
+          if (!existingItem) {
             await db.insert(drizzleTable).values(mappedData);
             downloadedCount++;
           } else {
-            const localItem = existing[0];
+            const localItem = existingItem;
             const remoteTime = new Date(remote.updated_at).getTime();
             const localTime = localItem.updatedAt
               ? localItem.updatedAt instanceof Date

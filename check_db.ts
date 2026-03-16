@@ -16,7 +16,9 @@ async function checkDb() {
     .from(classes)
     .where(isNull(classes.deletedAt));
   console.log("Total classes:", classList.length);
-  classList.forEach((c) => console.log(`- Class: ${c.name} (${c.id})`));
+  classList.forEach((c) => {
+    console.log(`- Class: ${c.name} (${c.id})`);
+  });
 
   const sampleStudents = await db
     .select()
@@ -24,9 +26,9 @@ async function checkDb() {
     .where(isNull(students.deletedAt))
     .limit(10);
   console.log("Sample students (first 10):");
-  sampleStudents.forEach((s) =>
-    console.log(`- ${s.fullName} (NIS: ${s.nis}, Grade: ${s.grade})`),
-  );
+  sampleStudents.forEach((s) => {
+    console.log(`- ${s.fullName} (NIS: ${s.nis}, Grade: ${s.grade})`);
+  });
 
   const studentUsers = await db
     .select()
@@ -34,11 +36,11 @@ async function checkDb() {
     .where(isNull(users.deletedAt))
     .limit(10);
   console.log("Sample users (first 10):");
-  studentUsers.forEach((u) =>
+  studentUsers.forEach((u) => {
     console.log(
       `- ${u.fullName} (NIS: ${u.nis}, Email: ${u.email}, Role: ${u.role}, KelasId: ${u.kelasId})`,
-    ),
-  );
+    );
+  });
 }
 
 checkDb().catch(console.error);

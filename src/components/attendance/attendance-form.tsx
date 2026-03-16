@@ -16,12 +16,32 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAttendanceForm } from "@/hooks/use-attendance-form";
 import type { AttendanceStatus } from "@/lib/validations/schemas";
+import { isTauri } from "@/core/env";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function AttendanceForm() {
   const [viewMode, setViewMode] = useState<"compact" | "detailed">("detailed");
   const [exportFilter, setExportFilter] = useState<AttendanceStatus | "all">(
     "all",
   );
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const {
     isMounted,
     loading,
@@ -137,6 +157,7 @@ export function AttendanceForm() {
       return;
     }
 
+    setIsExporting(true);
     try {
       const XLSX = await import("xlsx");
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -144,14 +165,50 @@ export function AttendanceForm() {
       XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
 
       const filterLabel = exportFilter === "all" ? "all" : exportFilter;
-      XLSX.writeFile(
-        workbook,
-        `attendance-${className}-${selectedDate}-${filterLabel}.xlsx`,
-      );
+      const fileName = `attendance-${className}-${selectedDate}-${filterLabel}.xlsx`;
+
+      // Check for Tauri
+      if (isTauri()) {
+        try {
+          const { save } = await import("@tauri-apps/plugin-dialog");
+          const { writeFile } = await import("@tauri-apps/plugin-fs");
+
+          // Convert to buffer
+          const excelBuffer = XLSX.write(workbook, {
+            bookType: "xlsx",
+            type: "array",
+          });
+
+          const filePath = await save({
+            filters: [{ name: "Excel", extensions: ["xlsx"] }],
+            defaultPath: fileName,
+          });
+
+          if (filePath) {
+            await writeFile(
+              filePath,
+              new Uint8Array(excelBuffer as ArrayBuffer),
+            );
+            toast.success("Laporan Excel berhasil disimpan!");
+            setShowExportDialog(false);
+            return;
+          }
+          return;
+        } catch (tauriError) {
+          console.error("❌ Tauri export error:", tauriError);
+          // Fallback to browser download if tauri specific logic fails
+        }
+      }
+
+      // Browser Fallback or Web Mode
+      XLSX.writeFile(workbook, fileName);
       toast.success("Laporan Excel berhasil diekspor");
+      setShowExportDialog(false);
     } catch (error) {
       console.error("❌ Export XLSX gagal:", error);
       toast.error("Gagal export Excel");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -201,22 +258,6 @@ export function AttendanceForm() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <select
-              value={exportFilter}
-              onChange={(e) =>
-                setExportFilter(e.target.value as AttendanceStatus | "all")
-              }
-              className="h-11 bg-zinc-950 border border-zinc-700 rounded-xl px-4 text-sm text-zinc-300 focus:ring-2 focus:ring-blue-500 w-full cursor-pointer"
-              aria-label="Export status filter"
-            >
-              <option value="all">Export: All Status</option>
-              <option value="present">Only Present</option>
-              <option value="sick">Only Sick</option>
-              <option value="permission">Only Permission</option>
-              <option value="alpha">Only Alpha</option>
-            </select>
-          </div>
         </div>
 
         {/* Row 2: Actions */}
@@ -233,7 +274,7 @@ export function AttendanceForm() {
             </Button>
 
             <Button
-              onClick={handleExportXlsx}
+              onClick={() => setShowExportDialog(true)}
               variant="outline"
               className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10"
             >
@@ -518,6 +559,107 @@ export function AttendanceForm() {
           )}
         </div>
       )}
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+              Export Laporan Absensi
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Sesuaikan pengaturan laporan sebelum mengeksport ke Excel.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-6 border-y border-zinc-800/50">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                  Tanggal
+                </Label>
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  disabled
+                  className="bg-zinc-950 border-zinc-800 text-zinc-400 h-10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                  Kelas
+                </Label>
+                <Input
+                  value={
+                    classList.find((c) => c.id === selectedClass)?.name || "-"
+                  }
+                  disabled
+                  className="bg-zinc-950 border-zinc-800 text-zinc-400 h-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                Filter Status Kehadiran
+              </Label>
+              <Select
+                value={exportFilter}
+                onValueChange={(val) =>
+                  setExportFilter(val as AttendanceStatus | "all")
+                }
+              >
+                <SelectTrigger className="bg-zinc-950 border-zinc-800 h-11 text-zinc-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                  <SelectItem value="all">Semua Status (Lengkap)</SelectItem>
+                  <SelectItem value="present" className="text-emerald-400">
+                    Hanya Hadir (Present)
+                  </SelectItem>
+                  <SelectItem value="sick" className="text-yellow-400">
+                    Hanya Sakit (Sick)
+                  </SelectItem>
+                  <SelectItem value="permission" className="text-blue-400">
+                    Hanya Izin (Permission)
+                  </SelectItem>
+                  <SelectItem value="alpha" className="text-red-400">
+                    Hanya Tanpa Keterangan (Alpha)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-zinc-500 italic px-1">
+                *Hanya siswa dengan status yang dipilih akan masuk ke laporan.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowExportDialog(false)}
+              className="bg-transparent border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 px-6"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleExportXlsx}
+              disabled={isExporting}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 shadow-lg shadow-emerald-600/20"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                "Export Sekarang"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

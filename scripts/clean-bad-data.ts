@@ -6,31 +6,29 @@ async function cleanBadData() {
   const db = await getDb();
 
   // 1. Clean Users (Invalid IDs)
-  const usersResult = await db.run(
+  const usersResult = (await db.run(
     sql`DELETE FROM users WHERE length(id) < 10 OR id IS NULL`,
-  );
-  console.log(`✅ Cleaned Users: ${(usersResult as any).rowsAffected} rows`);
+  )) as { rowsAffected: number };
+  console.log(`✅ Cleaned Users: ${usersResult.rowsAffected} rows`);
 
   // 2. Clean Students
-  const studentsResult = await db.run(
+  const studentsResult = (await db.run(
     sql`DELETE FROM students WHERE length(id) < 10 OR id IS NULL`,
-  );
-  console.log(
-    `✅ Cleaned Students: ${(studentsResult as any).rowsAffected} rows`,
-  );
+  )) as { rowsAffected: number };
+  console.log(`✅ Cleaned Students: ${studentsResult.rowsAffected} rows`);
 
   // 3. Clean Attendance
-  const attResult = await db.run(
+  const attResult = (await db.run(
     sql`DELETE FROM attendance WHERE length(id) < 10 OR id IS NULL`,
-  );
-  console.log(`✅ Cleaned Attendance: ${(attResult as any).rowsAffected} rows`);
+  )) as { rowsAffected: number };
+  console.log(`✅ Cleaned Attendance: ${attResult.rowsAffected} rows`);
 
   // 4. Clean Daily Attendance
-  const dailyAttResult = await db.run(
+  const dailyAttResult = (await db.run(
     sql`DELETE FROM student_daily_attendance WHERE length(id) < 10 OR id IS NULL`,
-  );
+  )) as { rowsAffected: number };
   console.log(
-    `✅ Cleaned Daily Attendance: ${(dailyAttResult as any).rowsAffected} rows`,
+    `✅ Cleaned Daily Attendance: ${dailyAttResult.rowsAffected} rows`,
   );
 
   console.log("✨ Database cleanup complete.");

@@ -93,6 +93,7 @@ export const attendanceHistoryFilterSchema = z.object({
   status: z.string().optional(),
   sortBy: z.enum(["earliest", "latest"]).optional().default("latest"),
   limit: z.number().int().min(1).max(500).optional().default(100),
+  searchQuery: z.string().optional(),
 });
 
 export type AttendanceHistoryFilter = z.infer<

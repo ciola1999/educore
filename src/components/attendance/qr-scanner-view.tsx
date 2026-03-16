@@ -38,14 +38,14 @@ export function QRScannerView() {
     } catch (_) {
       toast.error("Terjadi kesalahan sistem");
     } finally {
-      // Artificial delay to prevent instant re-scans
+      // Reduced delay from 2500ms to 800ms for high-flow attendance (2026 Elite Pattern)
       setTimeout(() => {
         setProcessing(false);
         isProcessingRef.current = false;
-      }, 2500);
+      }, 800);
 
-      // Clear display after 5 seconds
-      setTimeout(() => setResult(null), 5000);
+      // Keep result displayed for 4 seconds, then auto-clear
+      setTimeout(() => setResult(null), 4000);
     }
   }, []);
 
@@ -56,20 +56,22 @@ export function QRScannerView() {
         const html5QrCode = new Html5Qrcode("reader");
         scannerRef.current = html5QrCode;
 
+        // Optimized for performance in 2026 pattern
         const config = {
-          fps: 15,
-          qrbox: { width: 250, height: 250 },
+          fps: 20, // Snappier scanning
+          qrbox: { width: 280, height: 280 }, // Slightly larger box for better focus
           aspectRatio: 1.0,
         };
 
-        await html5QrCode.start(
-          { facingMode: "user" }, // Usually front cam for laptop
-          config,
-          handleScan,
-          () => {}, // silent on errors
-        );
-
-        setIsScannerReady(true);
+        if (html5QrCode) {
+          await html5QrCode.start(
+            { facingMode: "user" },
+            config,
+            handleScan,
+            () => {}, // silent on errors
+          );
+          setIsScannerReady(true);
+        }
       } catch (err) {
         console.error("Scanner init failed:", err);
         // Fallback for cases where front camera is not exactly "user"
@@ -77,7 +79,7 @@ export function QRScannerView() {
           if (scannerRef.current) {
             await scannerRef.current.start(
               { facingMode: "environment" },
-              { fps: 15, qrbox: { width: 250, height: 250 } },
+              { fps: 20, qrbox: { width: 280, height: 280 } },
               handleScan,
               () => {},
             );
@@ -92,11 +94,12 @@ export function QRScannerView() {
     startScanner();
 
     return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current
+      const currentScanner = scannerRef.current;
+      if (currentScanner?.isScanning) {
+        currentScanner
           .stop()
           .then(() => {
-            scannerRef.current?.clear();
+            currentScanner.clear();
           })
           .catch((err) => console.error("Failed to stop scanner", err));
       }

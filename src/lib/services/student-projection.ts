@@ -95,11 +95,13 @@ export async function syncUsersToStudentsProjection(): Promise<{
   for (const entry of studentUsers) {
     const nis = entry.user.nis?.trim();
     if (!nis) continue;
-    
+
     if (!uniqueUsersByNis.has(nis)) {
       uniqueUsersByNis.set(nis, entry);
     } else {
-      console.warn(`[ProjectionSync] Collision detected: Multiple users sharing NIS ${nis}. User ${entry.user.id} skipped.`);
+      console.warn(
+        `[ProjectionSync] Collision detected: Multiple users sharing NIS ${nis}. User ${entry.user.id} skipped.`,
+      );
     }
   }
 
@@ -110,7 +112,12 @@ export async function syncUsersToStudentsProjection(): Promise<{
   const classCandidates = new Set<string>();
   for (const student of existingStudents) {
     const grade = student.grade.trim();
-    if (grade && grade !== "UNASSIGNED" && !classById.has(grade) && !classByName.has(grade)) {
+    if (
+      grade &&
+      grade !== "UNASSIGNED" &&
+      !classById.has(grade) &&
+      !classByName.has(grade)
+    ) {
       classCandidates.add(grade);
     }
   }

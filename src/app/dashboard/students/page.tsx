@@ -12,9 +12,9 @@ import { StudentStats } from "@/components/student/student-stats";
 import { Button } from "@/components/ui/button";
 import { isTauri } from "@/core/env";
 import {
+  bulkUpsertStudents,
   getAllStudentsForExport,
   getStudentStats,
-  upsertStudent,
 } from "@/core/services/student-service";
 import { bulkStudentSchema } from "@/core/validation/schemas";
 
@@ -225,19 +225,8 @@ export default function StudentsPage() {
             return;
           }
 
-          // Proses Batch Upsert (Sequential for ACID-like behavior on local SQLite)
-          let successCount = 0;
-          for (const studentInput of parseResult.data) {
-            try {
-              await upsertStudent(studentInput);
-              successCount++;
-            } catch (err) {
-              console.error(
-                `Gagal mengimpor siswa NIS ${studentInput.nis}:`,
-                err,
-              );
-            }
-          }
+          // Optimization: Use Batch Upsert (Highly efficient 2026 pattern)
+          const successCount = await bulkUpsertStudents(parseResult.data);
 
           toast.success(`Berhasil mengimpor ${successCount} siswa!`);
           await fetchStats();

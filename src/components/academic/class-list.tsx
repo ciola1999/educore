@@ -31,7 +31,7 @@ export function ClassList() {
     setLoading(true);
     try {
       const result = await getClasses();
-      setData(result as any[]);
+      setData(result as typeof data);
     } catch (e) {
       console.error(e);
     } finally {

@@ -7,9 +7,11 @@ import {
   gte,
   inArray,
   isNull,
+  like,
   lte,
   ne,
   or,
+  type SQL,
 } from "drizzle-orm";
 import {
   attendanceHistoryFilterSchema,
@@ -119,81 +121,6 @@ function extractQrCandidates(qrData: string): {
   };
 }
 
-async function ensureStudentMirrorFromUser(
-  user: typeof users.$inferSelect,
-): Promise<ResolvedStudent | null> {
-  const db = await getDb();
-  const userNis = user.nis?.trim();
-
-  if (!userNis) {
-    return null;
-  }
-
-  const byNis = await db
-    .select()
-    .from(students)
-    .where(and(eq(students.nis, userNis), isNull(students.deletedAt)))
-    .limit(1);
-
-  if (byNis[0]) {
-    return {
-      id: byNis[0].id,
-      fullName: byNis[0].fullName,
-      nis: byNis[0].nis,
-      grade: byNis[0].grade || "UNASSIGNED",
-      photo: user.foto ?? undefined,
-    };
-  }
-
-  const normalizedGender = user.jenisKelamin === "P" ? "P" : "L";
-  let normalizedGrade = "UNASSIGNED";
-  const classRef = user.kelasId?.trim();
-
-  if (classRef) {
-    const classRow = await db
-      .select({ name: classes.name })
-      .from(classes)
-      .where(and(eq(classes.id, classRef), isNull(classes.deletedAt)))
-      .limit(1);
-
-    normalizedGrade = classRow[0]?.name || classRef;
-  }
-
-  try {
-    await db.insert(students).values({
-      id: user.id,
-      nis: userNis,
-      fullName: user.fullName,
-      gender: normalizedGender,
-      grade: normalizedGrade,
-      parentName: null,
-      parentPhone: null,
-      syncStatus: "pending",
-      updatedAt: new Date(),
-    });
-  } catch {
-    // Race condition on insert is acceptable here.
-  }
-
-  const synced = await db
-    .select()
-    .from(students)
-    .where(and(eq(students.nis, userNis), isNull(students.deletedAt)))
-    .limit(1);
-
-  if (!synced[0]) {
-    return null;
-  }
-
-  return {
-    id: synced[0].id,
-    fullName: synced[0].fullName,
-    nis: synced[0].nis,
-    grade: synced[0].grade || "UNASSIGNED",
-    photo: user.foto ?? undefined,
-  };
-}
-
 async function resolveStudentFromQr(
   qrData: string,
 ): Promise<ResolvedStudent | null> {
@@ -201,10 +128,19 @@ async function resolveStudentFromQr(
   const { nisCandidates, tokenCandidates, idCandidates } =
     extractQrCandidates(qrData);
 
+  // 1. Efficient Card Lookup
   if (tokenCandidates.length > 0) {
-    const cards = await db
-      .select()
+    const cardQuery = await db
+      .select({
+        studentId: studentIdCards.studentId,
+        studentNis: students.nis,
+        studentName: students.fullName,
+        grade: students.grade,
+        photo: users.foto,
+      })
       .from(studentIdCards)
+      .leftJoin(students, eq(studentIdCards.studentId, students.id))
+      .leftJoin(users, eq(studentIdCards.studentId, users.id))
       .where(
         and(
           or(
@@ -214,83 +150,58 @@ async function resolveStudentFromQr(
           eq(studentIdCards.isActive, true),
           isNull(studentIdCards.revokedAt),
           isNull(studentIdCards.deletedAt),
+          isNull(students.deletedAt),
         ),
       )
       .limit(1);
 
-    const card = cards[0];
-    if (card) {
-      const userList = await db
-        .select()
-        .from(users)
-        .where(
-          and(
-            eq(users.id, card.studentId),
-            isNull(users.deletedAt),
-            eq(users.isActive, true),
-          ),
-        )
-        .limit(1);
-
-      if (userList[0]) {
-        return ensureStudentMirrorFromUser(userList[0]);
-      }
-
-      const studentList = await db
-        .select()
-        .from(students)
-        .where(and(eq(students.id, card.studentId), isNull(students.deletedAt)))
-        .limit(1);
-
-      if (studentList[0]) {
-        return {
-          id: studentList[0].id,
-          fullName: studentList[0].fullName,
-          nis: studentList[0].nis,
-          grade: studentList[0].grade || "UNASSIGNED",
-          photo: undefined, // Or try to fetch if needed, but keeping it simple for now
-        };
-      }
-    }
-  }
-
-  const validNis = nisCandidates.filter((candidate) => candidate.length >= 3);
-  if (validNis.length > 0) {
-    const byNis = await db
-      .select()
-      .from(students)
-      .where(and(inArray(students.nis, validNis), isNull(students.deletedAt)))
-      .limit(1);
-
-    if (byNis[0]) {
+    if (cardQuery[0]) {
       return {
-        id: byNis[0].id,
-        fullName: byNis[0].fullName,
-        nis: byNis[0].nis,
-        grade: byNis[0].grade || "UNASSIGNED",
+        id: cardQuery[0].studentId,
+        fullName: cardQuery[0].studentName || "UNKNOWN",
+        nis: cardQuery[0].studentNis || "UNKNOWN",
+        grade: cardQuery[0].grade || "UNASSIGNED",
+        photo: cardQuery[0].photo ?? undefined,
       };
     }
   }
 
-  const userCandidates = toUniqueValues([...validNis, ...idCandidates]);
-  if (userCandidates.length > 0) {
-    const byUser = await db
-      .select()
-      .from(users)
+  // 2. Direct Student/User Lookup (Fallback)
+  const allCandidates = toUniqueValues([
+    ...nisCandidates,
+    ...idCandidates,
+  ]).filter((c) => c.length >= 3);
+
+  if (allCandidates.length > 0) {
+    const directQuery = await db
+      .select({
+        id: students.id,
+        fullName: students.fullName,
+        nis: students.nis,
+        grade: students.grade,
+        photo: users.foto,
+      })
+      .from(students)
+      .leftJoin(users, eq(students.id, users.id))
       .where(
         and(
           or(
-            inArray(users.nis, userCandidates),
-            inArray(users.id, userCandidates),
+            inArray(students.nis, allCandidates),
+            inArray(students.id, allCandidates),
           ),
-          isNull(users.deletedAt),
-          eq(users.isActive, true),
+          isNull(students.deletedAt),
         ),
       )
       .limit(1);
 
-    if (byUser[0]) {
-      return ensureStudentMirrorFromUser(byUser[0]);
+    if (directQuery[0]) {
+      return {
+        id: directQuery[0].id,
+        fullName: directQuery[0].fullName,
+        nis: directQuery[0].nis,
+        grade: directQuery[0].grade || "UNASSIGNED",
+        photo: directQuery[0].photo ?? undefined,
+      };
     }
   }
 
@@ -315,26 +226,40 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
   const dayOfWeek = now.getDay();
 
   try {
-    const student = await resolveStudentFromQr(normalizedQr);
+    // 1. Resolve student and perform preliminary checks in parallel
+    const [student, holiday, settings] = await Promise.all([
+      resolveStudentFromQr(normalizedQr),
+      db
+        .select()
+        .from(holidays)
+        .where(and(eq(holidays.date, todayStr), isNull(holidays.deletedAt)))
+        .limit(1),
+      db
+        .select()
+        .from(attendanceSettings)
+        .where(
+          and(
+            eq(attendanceSettings.dayOfWeek, dayOfWeek),
+            eq(attendanceSettings.entityType, "student"),
+            eq(attendanceSettings.isActive, true),
+            isNull(attendanceSettings.deletedAt),
+          ),
+        )
+        .limit(1),
+    ]);
+
     if (!student) {
       return {
         success: false,
-        message:
-          "Data siswa tidak ditemukan atau belum tersinkron. Pastikan NIS/token kartu sudah terdaftar.",
+        message: "Siswa tidak ditemukan. Pastikan kartu terdaftar.",
         type: "ERROR",
       };
     }
 
-    const holiday = await db
-      .select()
-      .from(holidays)
-      .where(and(eq(holidays.date, todayStr), isNull(holidays.deletedAt)))
-      .limit(1);
-
     if (holiday[0]) {
       return {
         success: false,
-        message: `Hari ini libur: ${holiday[0].name || "Tanpa Keterangan"}`,
+        message: `Hari ini libur: ${holiday[0].name}`,
         type: "ERROR",
         data: {
           fullName: student.fullName,
@@ -350,40 +275,19 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
     }
 
     let lateThreshold = parseTimeSetting("07:15");
-    const settings = await db
-      .select()
-      .from(attendanceSettings)
-      .where(
-        and(
-          eq(attendanceSettings.dayOfWeek, dayOfWeek),
-          eq(attendanceSettings.entityType, "student"),
-          eq(attendanceSettings.isActive, true),
-          isNull(attendanceSettings.deletedAt),
-        ),
-      )
-      .limit(1);
-
     if (settings[0]) {
       lateThreshold = parseTimeSetting(settings[0].lateThreshold);
-    } else if (dayOfWeek === 0) {
+    } else if (dayOfWeek === 0 || dayOfWeek === 6) {
+      // Weekend check if no settings found
       return {
         success: false,
-        message: "Hari Minggu tidak ada jadwal sekolah.",
+        message: "Tidak ada jadwal sekolah hari ini.",
         type: "ERROR",
-        data: {
-          fullName: student.fullName,
-          nis: student.nis,
-          grade: student.grade,
-          time: currentTimeStr,
-          status: "on-time",
-          type: "in",
-          lateMinutes: 0,
-          photo: student.photo,
-        },
       };
     }
 
-    const records = await db
+    // 2. Check current status for today
+    const existingRecord = await db
       .select()
       .from(studentDailyAttendance)
       .where(
@@ -395,13 +299,13 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
       )
       .limit(1);
 
-    const existing = records[0];
+    const existing = existingRecord[0];
 
     if (existing) {
       if (existing.checkOutTime) {
         return {
           success: false,
-          message: `${student.fullName} sudah melakukan Check-out hari ini.`,
+          message: "Anda sudah melakukan Check-out hari ini.",
           type: "ERROR",
           data: {
             fullName: student.fullName,
@@ -411,10 +315,12 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
             status: existing.status === "LATE" ? "late" : "on-time",
             type: "out",
             lateMinutes: existing.lateDuration || 0,
+            photo: student.photo,
           },
         };
       }
 
+      // Record Check-out
       await db
         .update(studentDailyAttendance)
         .set({
@@ -426,7 +332,7 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
 
       return {
         success: true,
-        message: `Goodbye ${student.fullName.split(" ")[0]}! Hati-hati di jalan.`,
+        message: `Hati-hati di jalan, ${student.fullName.split(" ")[0]}!`,
         type: "CHECK_OUT",
         data: {
           fullName: student.fullName,
@@ -436,10 +342,12 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
           status: existing.status === "LATE" ? "late" : "on-time",
           type: "out",
           lateMinutes: existing.lateDuration || 0,
+          photo: student.photo,
         },
       };
     }
 
+    // 3. Record Check-in
     const status = isAfter(now, lateThreshold) ? "late" : "on-time";
     const lateMinutes =
       status === "late" ? differenceInMinutes(now, lateThreshold) : 0;
@@ -463,7 +371,7 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
       message:
         status === "late"
           ? `Terlambat ${lateMinutes} menit.`
-          : `Check-in Berhasil. Selamat pagi, ${student.fullName.split(" ")[0]}!`,
+          : `Selamat pagi, ${student.fullName.split(" ")[0]}!`,
       type: "CHECK_IN",
       data: {
         fullName: student.fullName,
@@ -473,25 +381,21 @@ export async function processQRScan(qrData: string): Promise<ScanResult> {
         status,
         type: "in",
         lateMinutes,
+        photo: student.photo,
       },
     };
   } catch (error: unknown) {
-    const errorObj = error as Record<string, unknown>;
-    const errorMessage =
-      typeof errorObj.message === "string" ? errorObj.message : "";
-
-    if (errorMessage.includes("UNIQUE") || errorObj.code === 2067) {
+    const err = error as Error & { code?: number };
+    if (err?.message?.includes("UNIQUE") || err?.code === 2067) {
       return {
         success: false,
-        message:
-          "Proses terlalu cepat atau data sudah tercatat. Silakan coba lagi.",
+        message: "Data sudah tercatat. Silakan coba lagi.",
         type: "ERROR",
       };
     }
-
     return {
       success: false,
-      message: "Terjadi kesalahan sistem internal.",
+      message: `Kesalahan sistem: ${err?.message || "Internal error"}`,
       type: "ERROR",
     };
   }
@@ -798,8 +702,10 @@ export type AttendanceHistoryFilter = {
   endDate?: string;
   sortBy?: "earliest" | "latest";
   limit?: number;
+  offset?: number;
   studentId?: string;
   status?: string;
+  searchQuery?: string;
 };
 
 export type AttendanceHistoryRecord = {
@@ -850,6 +756,17 @@ export async function getAttendanceHistory(
   if (endDate) qrConditions.push(lte(studentDailyAttendance.date, endDate));
   if (studentId)
     qrConditions.push(eq(studentDailyAttendance.studentId, studentId));
+
+  if (parsed.data.searchQuery) {
+    const q = `%${parsed.data.searchQuery}%`;
+    qrConditions.push(
+      or(
+        like(studentDailyAttendance.snapshotStudentName, q),
+        like(studentDailyAttendance.snapshotStudentNis, q),
+      ) as SQL,
+    );
+  }
+
   if (status && status !== "all") {
     qrConditions.push(
       eq(
@@ -878,6 +795,14 @@ export async function getAttendanceHistory(
   if (startDate) manualConditions.push(gte(attendance.date, startDate));
   if (endDate) manualConditions.push(lte(attendance.date, endDate));
   if (studentId) manualConditions.push(eq(attendance.studentId, studentId));
+
+  if (parsed.data.searchQuery) {
+    const q = `%${parsed.data.searchQuery}%`;
+    manualConditions.push(
+      or(like(students.fullName, q), like(students.nis, q)) as SQL,
+    );
+  }
+
   if (status && status !== "all") {
     manualConditions.push(eq(attendance.status, status.toLowerCase()));
   }

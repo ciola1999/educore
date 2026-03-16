@@ -59,7 +59,7 @@ function TeachersContent() {
             onValueChange={(val) =>
               setRole(
                 val === "all"
-                  ? (null as any)
+                  ? null
                   : (val as "admin" | "teacher" | "staff"),
               )
             }

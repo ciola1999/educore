@@ -21,6 +21,7 @@ const mockedGetDb = vi.mocked(getDb);
 describe("Supabase Sync Service", () => {
   // A more robust mock that is both a builder and a thenable
   const createMockDb = () => {
+    // biome-ignore lint/suspicious/noExplicitAny: Required for complex database mocking
     const mock: any = {
       // biome-ignore lint/suspicious/noThenProperty: Required for Drizzle awaitable mocking
       then: vi.fn((onFulfilled) => Promise.resolve([]).then(onFulfilled)),

@@ -91,47 +91,45 @@ export function DailyLogView() {
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Debounced search (optimization for 2026 pattern)
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Determine date filter based on selectedDate or start/end dates
       let filterStartDate: string | undefined;
       let filterEndDate: string | undefined;
 
       if (selectedDate) {
-        // If a specific date is selected, use that for both start and end
         filterStartDate = selectedDate;
         filterEndDate = selectedDate;
       } else {
-        // Otherwise use the start/end date range
         filterStartDate = startDate || undefined;
         filterEndDate = endDate || undefined;
       }
 
-      // Get total count for pagination
-      const countFilter = {
+      const baseFilter = {
         startDate: filterStartDate,
         endDate: filterEndDate,
         status,
         sortBy,
+        searchQuery: debouncedSearch,
       };
-      const count = await getAttendanceHistoryCount(countFilter);
+
+      const count = await getAttendanceHistoryCount(baseFilter);
       setTotalItems(count);
       setTotalPages(Math.max(1, Math.ceil(count / itemsPerPage)));
 
-      // Get paginated data
-      const filter = {
-        startDate: filterStartDate,
-        endDate: filterEndDate,
-        status,
-        sortBy,
+      const data = await getAttendanceHistory({
+        ...baseFilter,
         limit: itemsPerPage,
-      };
-
-      const data = await getAttendanceHistory(filter);
+      });
       setRecords(data);
 
-      // Group by date
       const grouped: GroupedRecords = {};
       data.forEach((record) => {
         if (!grouped[record.date]) {
@@ -141,13 +139,19 @@ export function DailyLogView() {
       });
       setGroupedRecords(grouped);
     } catch (_error) {
-      toast.error("Gagal memuat riwayat absensi", {
-        description: "Terjadi kesalahan saat mengambil data dari database.",
-      });
+      toast.error("Gagal memuat riwayat absensi");
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, status, sortBy, itemsPerPage, selectedDate]);
+  }, [
+    startDate,
+    endDate,
+    status,
+    sortBy,
+    itemsPerPage,
+    selectedDate,
+    debouncedSearch,
+  ]);
 
   // Load data on mount and filter changes
   useEffect(() => {
@@ -293,29 +297,8 @@ export function DailyLogView() {
     setSearchQuery("");
   };
 
-  // Filter records by search query
-  const filteredGroupedRecords = Object.entries(groupedRecords).reduce(
-    (acc, [date, dateRecords]) => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const filtered = dateRecords.filter(
-          (record) =>
-            record.snapshotStudentName?.toLowerCase().includes(query) ||
-            record.snapshotStudentNis?.toLowerCase().includes(query),
-        );
-        if (filtered.length > 0) {
-          acc[date] = filtered;
-        }
-      } else {
-        acc[date] = dateRecords;
-      }
-      return acc;
-    },
-    {} as GroupedRecords,
-  );
-
   // Sort dates in the grouped records (newest first by default)
-  const sortedDates = Object.keys(filteredGroupedRecords).sort((a, b) => {
+  const sortedDates = Object.keys(groupedRecords).sort((a, b) => {
     if (sortBy === "earliest") {
       return a.localeCompare(b);
     }
@@ -551,11 +534,33 @@ export function DailyLogView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-800">
-                  <SelectItem value="all" className="focus:bg-zinc-800">Semua Status</SelectItem>
-                  <SelectItem value="present" className="focus:bg-zinc-800 text-emerald-400">Hadir</SelectItem>
-                  <SelectItem value="late" className="focus:bg-zinc-800 text-red-400">Terlambat</SelectItem>
-                  <SelectItem value="excused" className="focus:bg-zinc-800 text-amber-400">Izin/Sakit</SelectItem>
-                  <SelectItem value="absent" className="focus:bg-zinc-800 text-zinc-400">Alpa</SelectItem>
+                  <SelectItem value="all" className="focus:bg-zinc-800">
+                    Semua Status
+                  </SelectItem>
+                  <SelectItem
+                    value="present"
+                    className="focus:bg-zinc-800 text-emerald-400"
+                  >
+                    Hadir
+                  </SelectItem>
+                  <SelectItem
+                    value="late"
+                    className="focus:bg-zinc-800 text-red-400"
+                  >
+                    Terlambat
+                  </SelectItem>
+                  <SelectItem
+                    value="excused"
+                    className="focus:bg-zinc-800 text-amber-400"
+                  >
+                    Izin/Sakit
+                  </SelectItem>
+                  <SelectItem
+                    value="absent"
+                    className="focus:bg-zinc-800 text-zinc-400"
+                  >
+                    Alpa
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -643,7 +648,7 @@ export function DailyLogView() {
           </div>
         ) : (
           sortedDates.map((date) => {
-            const dateRecords = filteredGroupedRecords[date];
+            const dateRecords = groupedRecords[date];
             const isToday = date === todayStr;
             const formattedDate = format(parseISO(date), "EEEE, dd MMMM yyyy", {
               locale: id,
@@ -907,18 +912,26 @@ export function DailyLogView() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="export-status" className="text-xs text-zinc-500 font-medium">
+              <label
+                htmlFor="export-status"
+                className="text-xs text-zinc-500 font-medium"
+              >
                 Filter Status
               </label>
               <Select value={exportStatus} onValueChange={setExportStatus}>
-                <SelectTrigger id="export-status" className="bg-zinc-900 border-zinc-800 h-9 text-sm">
+                <SelectTrigger
+                  id="export-status"
+                  className="bg-zinc-900 border-zinc-800 h-9 text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
                   <SelectItem value="all">Semua Status</SelectItem>
                   <SelectItem value="present">Only Present (Hadir)</SelectItem>
                   <SelectItem value="late">Only Late (Terlambat)</SelectItem>
-                  <SelectItem value="excused">Only Excused (Izin/Sakit)</SelectItem>
+                  <SelectItem value="excused">
+                    Only Excused (Izin/Sakit)
+                  </SelectItem>
                   <SelectItem value="absent">Only Absent (Alpa)</SelectItem>
                 </SelectContent>
               </Select>
