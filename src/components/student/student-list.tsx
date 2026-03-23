@@ -5,7 +5,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  FileSpreadsheet,
   IdCard,
+  Layers3,
+  Loader2,
   Pencil,
   RefreshCw,
   Search,
@@ -15,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,8 +35,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
-import type { StudentListItem } from "@/hooks/use-student-list";
+import type {
+  AttendanceTodaySnapshot,
+  StudentListItem,
+} from "@/hooks/use-student-list";
 import { useStudentList } from "@/hooks/use-student-list";
+import { apiGet } from "@/lib/api/request";
+import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { InlineState } from "../common/inline-state";
 import { AddStudentDialog } from "./add-student-dialog";
 import { BulkCreateStudentAccountsDialog } from "./bulk-create-student-accounts-dialog";
@@ -107,6 +116,83 @@ const cardSkeletonKeys = [
   "card-skeleton-6",
 ];
 
+type StudentListResponse = {
+  data: StudentListItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+};
+
+function matchesAccountFilter(
+  student: StudentListItem,
+  accountFilter: "all" | "with_account" | "without_account",
+) {
+  if (accountFilter === "with_account") {
+    return student.hasAccount;
+  }
+  if (accountFilter === "without_account") {
+    return !student.hasAccount;
+  }
+  return true;
+}
+
+function buildStudentExportRows(students: StudentListItem[]) {
+  return students.map((student, index) => ({
+    No: index + 1,
+    NIS: student.nis,
+    NISN: student.nisn ?? "",
+    "Nama Lengkap": student.fullName,
+    "Jenis Kelamin": student.gender === "L" ? "Laki-laki" : "Perempuan",
+    Kelas: student.grade,
+    "Nama Wali": student.parentName ?? "",
+    "No. HP Wali": student.parentPhone ?? "",
+    "Tempat, Tanggal Lahir": formatBirthInfo(
+      student.tempatLahir,
+      student.tanggalLahir,
+    ),
+    Alamat: student.alamat ?? "",
+    "Email Akun": student.accountEmail ?? "",
+    "Status Akun": student.hasAccount ? "Aktif" : "Belum Ada Akun",
+    "Absensi Hari Ini": student.attendanceToday
+      ? `${attendanceLabel[student.attendanceToday.status]} (${student.attendanceToday.source === "qr" ? "QR" : "Manual"})`
+      : "Belum Absen",
+  }));
+}
+
+async function attachAttendanceSnapshots(students: StudentListItem[]) {
+  if (students.length === 0) {
+    return students;
+  }
+
+  const date = getTodayDateString();
+  const attendanceMap = new Map<string, StudentListItem["attendanceToday"]>();
+  const chunkSize = 100;
+
+  for (let index = 0; index < students.length; index += chunkSize) {
+    const chunk = students.slice(index, index + chunkSize);
+    const ids = chunk.map((student) => student.id).join(",");
+    if (!ids) {
+      continue;
+    }
+
+    try {
+      const attendanceRows = await apiGet<AttendanceTodaySnapshot[]>(
+        `/api/students/attendance-today?date=${date}&ids=${encodeURIComponent(ids)}`,
+      );
+      for (const row of attendanceRows) {
+        attendanceMap.set(row.studentId, row);
+      }
+    } catch {
+      // Keep export usable even if attendance snapshot is temporarily unavailable.
+    }
+  }
+
+  return students.map((student) => ({
+    ...student,
+    attendanceToday: attendanceMap.get(student.id) ?? null,
+  }));
+}
+
 export function StudentList() {
   const today = getTodayDateString();
   const [selectedStudent, setSelectedStudent] =
@@ -123,6 +209,9 @@ export function StudentList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [idCardOpen, setIdCardOpen] = useState(false);
+  const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [accountFilter, setAccountFilter] = useState<
     "all" | "with_account" | "without_account"
   >("all");
@@ -171,6 +260,75 @@ export function StudentList() {
     { withAccount: 0, withoutAccount: 0 },
   );
 
+  async function handleExportStudents(scope: "current_page" | "all_filtered") {
+    const todayLabel = new Date().toISOString().slice(0, 10);
+
+    if (scope === "current_page" && visibleStudents.length === 0) {
+      toast.error("Tidak ada data siswa pada list aktif untuk diexport.");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      let exportStudents = visibleStudents;
+
+      if (scope === "all_filtered") {
+        const baseParams = new URLSearchParams({
+          limit: "50",
+          sortBy,
+          sortDir,
+        });
+        if (searchQuery.trim()) {
+          baseParams.set("search", searchQuery.trim());
+        }
+
+        const firstPage = await apiGet<StudentListResponse>(
+          `/api/students?${baseParams.toString()}&page=1`,
+        );
+        const collected = [...firstPage.data];
+
+        for (let page = 2; page <= firstPage.totalPages; page += 1) {
+          const pageResult = await apiGet<StudentListResponse>(
+            `/api/students?${baseParams.toString()}&page=${page}`,
+          );
+          collected.push(...pageResult.data);
+        }
+
+        exportStudents = collected.filter((student) =>
+          matchesAccountFilter(student, accountFilter),
+        );
+        exportStudents = await attachAttendanceSnapshots(exportStudents);
+      }
+
+      if (exportStudents.length === 0) {
+        toast.error("Tidak ada data siswa pada scope export yang dipilih.");
+        return;
+      }
+
+      const exportRows = buildStudentExportRows(exportStudents);
+      await exportRowsToXlsx({
+        fileName:
+          scope === "all_filtered"
+            ? `students-${todayLabel}-filtered.xlsx`
+            : `students-${todayLabel}-page-${currentPage}.xlsx`,
+        sheetName: "Students",
+        rows: exportRows,
+      });
+      setExportDialogOpen(false);
+      toast.success(
+        scope === "all_filtered"
+          ? `${exportRows.length} siswa dari semua hasil filter berhasil diexport ke Excel.`
+          : `${exportRows.length} siswa dari halaman aktif berhasil diexport ke Excel.`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Gagal export data siswa",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {!isStudentView && stats ? (
@@ -216,96 +374,85 @@ export function StudentList() {
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
         <div className="flex flex-col gap-6">
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold tracking-tight text-zinc-100">
-              {isStudentView ? "Identitas Siswa" : "Roster Siswa"}
-            </h2>
-            <p className="max-w-2xl text-sm text-zinc-400">
-              {isStudentView
-                ? "Data mengikuti projection backend dan hanya menampilkan record milik akun yang sedang login."
-                : "Kelola data siswa dengan CRUD penuh, status absensi harian, dan akses cepat ke attendance."}
-            </p>
-          </div>
-
           {!isStudentView ? (
-            <div className="flex flex-col gap-5">
-              <div className="relative w-full lg:max-w-md">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                    setCurrentPage(1);
-                  }}
-                  placeholder="Cari nama, NIS, kelas..."
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-500/20 transition-all shadow-inner"
-                />
-              </div>
+            <div className="space-y-3">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+                <div className="space-y-4">
+                  <div className="relative w-full xl:max-w-xl">
+                    <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                        setCurrentPage(1);
+                      }}
+                      placeholder="Cari nama, NIS, kelas..."
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-all shadow-inner focus:ring-2 focus:ring-sky-500/20"
+                    />
+                  </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-                  <Select
-                    value={accountFilter}
-                    onValueChange={(value) =>
-                      setAccountFilter(
-                        value as "all" | "with_account" | "without_account",
-                      )
-                    }
-                  >
-                    <SelectTrigger className="w-full sm:w-[170px] border-zinc-800 bg-zinc-950 text-zinc-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                      <SelectItem value="all">Semua Akun</SelectItem>
-                      <SelectItem value="with_account">
-                        Sudah Punya Akun
-                      </SelectItem>
-                      <SelectItem value="without_account">
-                        Belum Punya Akun
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Select
+                      value={accountFilter}
+                      onValueChange={(value) =>
+                        setAccountFilter(
+                          value as "all" | "with_account" | "without_account",
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="all">Semua Akun</SelectItem>
+                        <SelectItem value="with_account">
+                          Sudah Punya Akun
+                        </SelectItem>
+                        <SelectItem value="without_account">
+                          Belum Punya Akun
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                  <Select
-                    value={sortBy}
-                    onValueChange={(value) => {
-                      setSortBy(value);
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-full sm:w-[140px] border-zinc-800 bg-zinc-950 text-zinc-200">
-                      <ArrowDownAZ className="h-4 w-4 mr-2 text-zinc-500" />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                      <SelectItem value="createdAt">Terbaru</SelectItem>
-                      <SelectItem value="fullName">Nama</SelectItem>
-                      <SelectItem value="nis">NIS</SelectItem>
-                      <SelectItem value="grade">Kelas</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <Select
+                      value={sortBy}
+                      onValueChange={(value) => {
+                        setSortBy(value);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
+                        <ArrowDownAZ className="mr-2 h-4 w-4 text-zinc-500" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="createdAt">Terbaru</SelectItem>
+                        <SelectItem value="fullName">Nama</SelectItem>
+                        <SelectItem value="nis">NIS</SelectItem>
+                        <SelectItem value="grade">Kelas</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                  <Select
-                    value={sortDir}
-                    onValueChange={(value) => {
-                      setSortDir(value as "asc" | "desc");
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-full sm:w-[100px] border-zinc-800 bg-zinc-950 text-zinc-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                      <SelectItem value="desc">Desc</SelectItem>
-                      <SelectItem value="asc">Asc</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <Select
+                      value={sortDir}
+                      onValueChange={(value) => {
+                        setSortDir(value as "asc" | "desc");
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="desc">Desc</SelectItem>
+                        <SelectItem value="asc">Asc</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="h-4 w-px bg-zinc-800 hidden sm:block mx-1" />
-
-                <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto xl:justify-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -353,8 +500,37 @@ export function StudentList() {
                       />
                     </div>
                   ) : null}
+                  {!isStudentView ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setExportDialogOpen(true);
+                      }}
+                      className="flex-1 border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20 sm:flex-none"
+                    >
+                      <FileSpreadsheet className="mr-2 h-4 w-4" />
+                      Export Excel
+                    </Button>
+                  ) : null}
                   {canManageStudents ? (
-                    <div className="flex-1 sm:flex-none">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setBulkActionsOpen((open) => !open)}
+                      className="flex-1 border-zinc-800 bg-zinc-950 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white sm:flex-none"
+                    >
+                      <Layers3 className="mr-2 h-4 w-4" />
+                      {bulkActionsOpen ? "Tutup Aksi Massal" : "Aksi Massal"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              {canManageStudents && bulkActionsOpen ? (
+                <div className="border-t border-zinc-800 pt-4">
+                  <div className="mx-auto grid max-w-[660px] gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="w-full min-w-0 [&_button]:w-full">
                       <BulkCreateStudentAccountsDialog
                         students={students}
                         visibleStudents={visibleStudents}
@@ -368,9 +544,7 @@ export function StudentList() {
                         }}
                       />
                     </div>
-                  ) : null}
-                  {canManageStudents ? (
-                    <div className="flex-1 sm:flex-none">
+                    <div className="w-full min-w-0 [&_button]:w-full">
                       <BulkRepairStudentClassesDialog
                         students={students}
                         onSuccess={() => {
@@ -384,9 +558,7 @@ export function StudentList() {
                         }}
                       />
                     </div>
-                  ) : null}
-                  {canManageStudents ? (
-                    <div className="flex-1 sm:flex-none">
+                    <div className="w-full min-w-0 [&_button]:w-full">
                       <BulkResetStudentPasswordDialog
                         students={students}
                         visibleStudents={visibleStudents}
@@ -400,9 +572,9 @@ export function StudentList() {
                         }}
                       />
                     </div>
-                  ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           ) : (
             <div className="flex justify-start">
@@ -677,8 +849,8 @@ export function StudentList() {
           }
         }}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(42rem,calc(100dvh-4rem))] w-[calc(100vw-1rem)] flex-col overflow-hidden border-zinc-800 bg-zinc-950 p-0 text-zinc-100 sm:max-w-xl">
+          <DialogHeader className="shrink-0 px-6 pt-6">
             <DialogTitle>
               {selectedStudent?.fullName || "Detail Siswa"}
             </DialogTitle>
@@ -688,7 +860,7 @@ export function StudentList() {
           </DialogHeader>
 
           {selectedStudent ? (
-            <div className="space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
               <div className="grid gap-4 md:grid-cols-2">
                 {[
                   ["NIS", selectedStudent.nis],
@@ -742,7 +914,7 @@ export function StudentList() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end border-t border-zinc-800 pt-4">
                 <Button
                   type="button"
                   variant="outline"
@@ -766,6 +938,82 @@ export function StudentList() {
         onOpenChange={setIdCardOpen}
         student={selectedStudentForCard}
       />
+
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Export Excel Students</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Pilih scope export yang ingin dipakai untuk data siswa.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-300">
+              <p className="font-medium text-zinc-100">Halaman aktif</p>
+              <p className="mt-1 text-zinc-400">
+                Export hanya data yang sedang tampil di halaman ini.
+              </p>
+              <p className="mt-2 text-xs text-zinc-500">
+                Estimasi: {visibleStudents.length} siswa
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-300">
+              <p className="font-medium text-zinc-100">Semua hasil filter</p>
+              <p className="mt-1 text-zinc-400">
+                Export semua data yang cocok dengan search, sort, dan filter
+                akun aktif saat ini lintas halaman.
+              </p>
+              <p className="mt-2 text-xs text-zinc-500">
+                Estimasi awal: hingga {totalCount} siswa sebelum filter akun
+                lokal diterapkan
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExportDialogOpen(false)}
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exporting}
+              onClick={() => {
+                void handleExportStudents("current_page");
+              }}
+              className="border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20"
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+              )}
+              Export Halaman Aktif
+            </Button>
+            <Button
+              type="button"
+              disabled={exporting}
+              onClick={() => {
+                void handleExportStudents("all_filtered");
+              }}
+            >
+              {exporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+              )}
+              Export Semua Filter
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <EditStudentDialog
         student={selectedStudentForEdit}

@@ -289,14 +289,14 @@ export function AttendanceForm({
         {/* Row 1: Primary Filters */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-zinc-800/50 shrink-0 border border-zinc-700/50">
-              <CalendarDays className="h-5 w-5 text-blue-400" />
+            <div className="shrink-0 rounded-xl border border-sky-500/20 bg-linear-to-br from-sky-500/12 to-sky-500/5 p-2.5 shadow-sm shadow-sky-950/20">
+              <CalendarDays className="h-5 w-5 text-sky-300" />
             </div>
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all w-full font-medium"
+              className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/90 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:border-sky-500/30 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-500/25"
             />
           </div>
 
@@ -304,7 +304,7 @@ export function AttendanceForm({
             <select
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
-              className="bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all w-full font-medium cursor-pointer"
+              className="w-full cursor-pointer rounded-xl border border-zinc-700/80 bg-zinc-950/90 px-4 py-2.5 text-sm font-medium text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:border-sky-500/30 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-500/25"
             >
               <option value="" disabled>
                 Select Class
@@ -318,13 +318,13 @@ export function AttendanceForm({
           </div>
 
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-zinc-500" />
+            <Search className="absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-zinc-500 transition-colors duration-200" />
             <input
               type="text"
               placeholder="Search student..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-11 pr-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-zinc-600"
+              className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/90 py-2.5 pr-4 pl-11 text-sm text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 placeholder:text-zinc-600 hover:border-sky-500/30 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-500/25"
             />
           </div>
         </div>
@@ -334,21 +334,21 @@ export function AttendanceForm({
           <div className="flex flex-wrap items-center gap-3">
             <Button
               onClick={refreshStudents}
-              variant="outline"
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10 group"
+              variant="default"
+              className="group h-11 rounded-xl border border-sky-500/35 bg-linear-to-br from-sky-500/22 to-sky-600/14 px-4 !text-white shadow-sm shadow-sky-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/60 hover:from-sky-500/28 hover:to-sky-600/18 hover:!text-white hover:shadow-md hover:shadow-sky-950/40"
               title="Refresh students"
             >
-              <RefreshCw className="h-4 w-4 mr-2 group-active:rotate-180 transition-transform duration-500" />
-              Refresh
+              <RefreshCw className="mr-2 h-4 w-4 !text-sky-100 transition-transform duration-500 group-hover:rotate-90 group-active:rotate-180" />
+              <span className="!text-white">Refresh</span>
             </Button>
 
             <Button
               onClick={() => setShowExportDialog(true)}
-              variant="outline"
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10"
+              variant="default"
+              className="group h-11 rounded-xl border border-emerald-500/35 bg-linear-to-br from-emerald-500/22 to-emerald-600/14 px-4 !text-white shadow-sm shadow-emerald-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-400/60 hover:from-emerald-500/28 hover:to-emerald-600/18 hover:!text-white hover:shadow-md hover:shadow-emerald-950/40"
             >
-              <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-500" />{" "}
-              Export XLSX
+              <FileSpreadsheet className="mr-2 h-4 w-4 !text-emerald-100 transition-transform duration-200 group-hover:scale-110" />{" "}
+              <span className="!text-white">Export XLSX</span>
             </Button>
 
             <Button
@@ -357,20 +357,23 @@ export function AttendanceForm({
                   prevMode === "detailed" ? "compact" : "detailed",
                 )
               }
-              variant="outline"
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-xl px-4 h-10"
+              variant="default"
+              className="group h-11 rounded-xl border border-violet-500/35 bg-linear-to-br from-violet-500/22 to-violet-600/14 px-4 !text-white shadow-sm shadow-violet-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-400/60 hover:from-violet-500/28 hover:to-violet-600/18 hover:!text-white hover:shadow-md hover:shadow-violet-950/40"
             >
-              <LayoutList className="h-4 w-4 mr-2 text-indigo-400" />
-              {viewMode === "detailed" ? "Compact View" : "Detailed View"}
+              <LayoutList className="mr-2 h-4 w-4 !text-violet-100 transition-transform duration-200 group-hover:scale-110" />
+              <span className="!text-white">
+                {viewMode === "detailed" ? "Compact View" : "Detailed View"}
+              </span>
             </Button>
           </div>
 
           <Button
             onClick={setAllPresent}
-            variant="outline"
-            className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 rounded-xl px-5 h-10 font-medium"
+            variant="default"
+            className="group h-11 rounded-xl border border-blue-400/45 bg-linear-to-br from-blue-500/26 to-cyan-500/16 px-5 font-semibold !text-white shadow-sm shadow-blue-950/35 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300/70 hover:from-blue-500/32 hover:to-cyan-500/20 hover:!text-white hover:shadow-md hover:shadow-blue-950/45"
           >
-            <Check className="h-4 w-4 mr-2" /> Mark All Present
+            <Check className="mr-2 h-4 w-4 !text-blue-50 transition-transform duration-200 group-hover:scale-110" />{" "}
+            <span className="!text-white">Mark All Present</span>
           </Button>
         </div>
       </div>
@@ -420,31 +423,35 @@ export function AttendanceForm({
             ].map((item) => (
               <div
                 key={item.label}
-                className={`rounded-2xl border p-4 ${item.tone}`}
+                className={`rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${item.tone}`}
               >
-                <p className="text-xs uppercase tracking-wider opacity-70">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">
                   {item.label}
                 </p>
-                <p className="mt-2 text-2xl font-semibold">{item.value}</p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight">
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap gap-4 text-xs font-medium text-zinc-400 uppercase tracking-wider px-1">
-            <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-600"></span>{" "}
+          <div className="flex flex-wrap gap-3 px-1">
+            <span className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.35)]"></span>
               Present
             </span>
-            <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-yellow-600"></span> Sick
+            <span className="flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-yellow-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.35)]"></span>
+              Sick
             </span>
-            <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-blue-600"></span>{" "}
+            <span className="flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.35)]"></span>
               Permission
             </span>
-            <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-red-600"></span> Alpha
+            <span className="flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/8 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-red-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.35)]"></span>
+              Alpha
             </span>
           </div>
 
@@ -460,37 +467,37 @@ export function AttendanceForm({
                 return (
                   <div
                     key={student.id}
-                    className="group flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-800/50 hover:border-zinc-700 transition-all duration-200"
+                    className="group flex flex-col gap-4 rounded-2xl border border-zinc-800/60 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-4 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:from-zinc-800/65 hover:to-zinc-900/80 hover:shadow-md hover:shadow-black/20 sm:flex-row sm:items-center"
                   >
-                    <div className="flex items-center gap-4 shrink-0 px-1">
-                      <span className="w-6 text-zinc-600 text-[10px] font-mono font-bold text-center">
+                    <div className="flex shrink-0 items-center gap-4 px-1">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-800 bg-zinc-950/70 text-center font-mono text-[10px] font-bold text-zinc-500">
                         {(globalIdx + 1).toString().padStart(2, "0")}
                       </span>
                     </div>
                     <div className="flex flex-col flex-1">
-                      <span className="font-mono text-xs text-blue-400 font-semibold mb-0.5">
+                      <span className="mb-1 font-mono text-xs font-semibold tracking-wide text-sky-300">
                         {student.nis}
                         {student.nisn ? ` • NISN ${student.nisn}` : ""}
                       </span>
-                      <span className="text-zinc-100 font-medium tracking-tight">
+                      <span className="font-medium tracking-tight text-zinc-50">
                         {student.fullName}
                       </span>
                       {viewMode === "detailed" ? (
                         <>
-                          <span className="text-[11px] text-zinc-500">
+                          <span className="text-[11px] text-zinc-400">
                             {formatBirthInfo(
                               student.tempatLahir,
                               student.tanggalLahir,
                             )}
                           </span>
-                          <span className="text-[11px] text-zinc-500">
+                          <span className="text-[11px] text-zinc-400">
                             {student.parentName || "-"}
                             {student.parentPhone
                               ? ` • ${student.parentPhone}`
                               : ""}
                           </span>
                           {student.alamat ? (
-                            <span className="text-[11px] text-zinc-600 line-clamp-1 max-w-[300px]">
+                            <span className="line-clamp-1 max-w-[300px] text-[11px] text-zinc-500">
                               {student.alamat}
                             </span>
                           ) : null}
@@ -500,8 +507,8 @@ export function AttendanceForm({
 
                     <div className="flex flex-col items-end gap-2">
                       {student.isLocked && (
-                        <div className="flex items-center gap-3 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">
+                        <div className="flex items-center gap-3 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 shadow-sm shadow-blue-950/20">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-blue-300">
                             QR AUTO-SYNCED
                           </span>
                           <div className="flex items-center gap-2 text-[10px] text-zinc-500">
@@ -535,7 +542,7 @@ export function AttendanceForm({
                           Status:
                         </span>
                         <div
-                          className={`flex gap-1.5 p-1 rounded-lg bg-zinc-950/50 border border-zinc-800 ${student.isLocked ? "opacity-60 grayscale" : ""}`}
+                          className={`flex gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950/65 p-1.5 shadow-inner ${student.isLocked ? "opacity-60 grayscale" : ""}`}
                         >
                           {(
                             [
@@ -553,10 +560,10 @@ export function AttendanceForm({
                               title={
                                 status.charAt(0).toUpperCase() + status.slice(1)
                               }
-                              className={`w-9 h-9 sm:w-8 sm:h-8 rounded-md text-xs font-bold transition-all duration-200 ${
+                              className={`h-9 w-9 rounded-lg text-xs font-bold transition-all duration-200 sm:h-8 sm:w-8 ${
                                 student.status === status
-                                  ? `${statusColors[status]} text-white shadow-lg scale-105 sm:scale-110`
-                                  : "bg-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                                  ? `${statusColors[status]} scale-105 text-white shadow-lg ring-1 ring-white/10 sm:scale-110`
+                                  : "bg-transparent text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-300"
                               } ${student.isLocked ? "cursor-not-allowed" : ""}`}
                             >
                               {statusLabels[status]}
@@ -573,25 +580,25 @@ export function AttendanceForm({
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t border-zinc-800/50">
-              <div className="text-sm text-zinc-500">
+            <div className="flex flex-col items-center justify-between gap-4 border-t border-zinc-800/50 px-2 py-4 sm:flex-row">
+              <div className="rounded-full border border-zinc-800 bg-zinc-950/60 px-4 py-2 text-sm text-zinc-400 shadow-sm shadow-black/10">
                 Showing{" "}
-                <span className="text-zinc-300 font-medium">
+                <span className="font-medium text-zinc-200">
                   {(currentPage - 1) * itemsPerPage + 1}
                 </span>{" "}
                 to{" "}
-                <span className="text-zinc-300 font-medium">
+                <span className="font-medium text-zinc-200">
                   {Math.min(currentPage * itemsPerPage, totalItems)}
                 </span>{" "}
                 of{" "}
-                <span className="text-zinc-300 font-medium">{totalItems}</span>{" "}
+                <span className="font-medium text-zinc-200">{totalItems}</span>{" "}
                 students
               </div>
               <div className="flex items-center gap-1.5">
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-9 w-9 border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                  className="h-9 w-9 rounded-xl border-zinc-800 bg-zinc-900/90 text-zinc-300 shadow-sm shadow-black/10 transition-all hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white disabled:opacity-30"
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
                 >
@@ -615,8 +622,8 @@ export function AttendanceForm({
                         size="sm"
                         className={`h-9 w-9 rounded-md transition-all ${
                           currentPage === p
-                            ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
-                            : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                            ? "border border-sky-400/45 bg-linear-to-br from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-950/35"
+                            : "rounded-xl border-zinc-800 bg-zinc-900/90 text-zinc-300 shadow-sm shadow-black/10 hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white"
                         }`}
                         onClick={() => setCurrentPage(p)}
                       >
@@ -628,7 +635,7 @@ export function AttendanceForm({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-9 w-9 border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                  className="h-9 w-9 rounded-xl border-zinc-800 bg-zinc-900/90 text-zinc-300 shadow-sm shadow-black/10 transition-all hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white disabled:opacity-30"
                   onClick={() =>
                     setCurrentPage(Math.min(totalPages, currentPage + 1))
                   }
@@ -641,9 +648,11 @@ export function AttendanceForm({
           )}
 
           {studentList.length === 0 && !loading && (
-            <div className="text-center py-20 text-zinc-500 bg-zinc-900/20 rounded-2xl border border-zinc-800/50">
-              <p className="italic">No students found in this class.</p>
-              <p className="text-sm mt-1">
+            <div className="rounded-3xl border border-dashed border-zinc-800/70 bg-linear-to-br from-zinc-900/35 to-zinc-950/35 py-20 text-center text-zinc-500">
+              <p className="text-base font-medium italic text-zinc-300">
+                No students found in this class.
+              </p>
+              <p className="mt-2 text-sm text-zinc-500">
                 Make sure student's Grade matches the class name.
               </p>
             </div>
@@ -664,7 +673,7 @@ export function AttendanceForm({
                 <Button
                   onClick={handleSubmit}
                   disabled={submitting || selectedClass === "all"}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-6 px-8 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 gap-3 min-w-[200px]"
+                  className="min-w-[220px] gap-3 rounded-2xl border border-sky-400/35 bg-linear-to-r from-sky-500 to-cyan-500 px-8 py-6 font-semibold text-white shadow-lg shadow-sky-950/35 transition-all hover:-translate-y-0.5 hover:from-sky-400 hover:to-cyan-400 hover:shadow-xl hover:shadow-sky-950/45 active:scale-[0.99] disabled:opacity-50"
                 >
                   {submitting ? (
                     <Loader2 className="h-5 w-5 animate-spin" />

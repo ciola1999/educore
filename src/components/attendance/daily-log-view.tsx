@@ -1335,17 +1335,17 @@ export function DailyLogView({
       >
         <TabsList
           variant="line"
-          className="border-b border-zinc-800 w-full justify-start rounded-none p-0"
+          className="w-full justify-start rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/80 p-1.5 shadow-inner shadow-black/20"
         >
           <TabsTrigger
             value="today"
-            className="rounded-none px-4 py-3 data-[state=active]:text-white"
+            className="rounded-2xl border border-transparent px-4 py-3 text-zinc-300 after:hidden hover:text-zinc-100 data-[state=active]:border-emerald-500/30 data-[state=active]:bg-linear-to-br data-[state=active]:from-emerald-500/16 data-[state=active]:to-emerald-500/8 data-[state=active]:text-zinc-50"
           >
             Hari Ini
           </TabsTrigger>
           <TabsTrigger
             value="history"
-            className="rounded-none px-4 py-3 data-[state=active]:text-white"
+            className="rounded-2xl border border-transparent px-4 py-3 text-zinc-300 after:hidden hover:text-zinc-100 data-[state=active]:border-sky-500/30 data-[state=active]:bg-linear-to-br data-[state=active]:from-sky-500/16 data-[state=active]:to-sky-500/8 data-[state=active]:text-zinc-50"
           >
             Riwayat
           </TabsTrigger>
@@ -1359,13 +1359,13 @@ export function DailyLogView({
                 : "Log QR check-in/check-out hari ini."}
             </p>
             <Button
-              variant="outline"
+              variant="default"
               onClick={() => {
                 void loadTodayLogs();
               }}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="h-11 rounded-xl border border-sky-400/45 !bg-linear-to-br !from-sky-500 !to-cyan-500 px-4 !text-white shadow-sm shadow-sky-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/70 hover:!from-sky-400 hover:!to-cyan-400 hover:!text-white hover:shadow-md hover:shadow-sky-950/40"
             >
-              Refresh
+              <span className="!text-white">Refresh</span>
             </Button>
           </div>
 
@@ -1551,35 +1551,35 @@ export function DailyLogView({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               onClick={() => applyQuickRange("today")}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
             >
-              Hari Ini
+              <span className="!text-zinc-100">Hari Ini</span>
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               onClick={() => applyQuickRange("7d")}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
             >
-              7 Hari
+              <span className="!text-zinc-100">7 Hari</span>
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               onClick={() => applyQuickRange("30d")}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
             >
-              30 Hari
+              <span className="!text-zinc-100">30 Hari</span>
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               onClick={() => applyQuickRange("month")}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
             >
-              Bulan Ini
+              <span className="!text-zinc-100">Bulan Ini</span>
             </Button>
             <Button
               type="button"
@@ -2048,7 +2048,7 @@ export function DailyLogView({
                     setRiskAlphaThreshold(event.target.value)
                   }
                   placeholder="Alpha threshold"
-                  className="border-zinc-800 bg-zinc-950 text-zinc-200"
+                  className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-red-500/25 focus-visible:ring-red-500/25"
                 />
                 <Input
                   type="number"
@@ -2056,7 +2056,7 @@ export function DailyLogView({
                   value={riskLateThreshold}
                   onChange={(event) => setRiskLateThreshold(event.target.value)}
                   placeholder="Terlambat threshold"
-                  className="border-zinc-800 bg-zinc-950 text-zinc-200"
+                  className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-amber-500/25 focus-visible:ring-amber-500/25"
                 />
                 <Input
                   type="number"
@@ -2065,7 +2065,7 @@ export function DailyLogView({
                   value={riskRateThreshold}
                   onChange={(event) => setRiskRateThreshold(event.target.value)}
                   placeholder="Rate threshold"
-                  className="border-zinc-800 bg-zinc-950 text-zinc-200"
+                  className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-sky-500/25 focus-visible:ring-sky-500/25"
                 />
               </div>
               <div className="mt-3 flex justify-end">
@@ -2132,7 +2132,7 @@ export function DailyLogView({
                   {atRiskStudents.map((item) => (
                     <div
                       key={`risk-${item.studentId}`}
-                      className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3"
+                      className="rounded-2xl border border-red-500/20 bg-linear-to-br from-red-500/10 to-red-500/4 px-4 py-3 shadow-sm shadow-red-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-950/20"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -2225,7 +2225,7 @@ export function DailyLogView({
                 </div>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/60 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
                   <p className="text-xs uppercase tracking-wide text-zinc-500">
                     Attendance Rate
                   </p>
@@ -2242,7 +2242,7 @@ export function DailyLogView({
                     %
                   </p>
                 </div>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/60 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
                   <p className="text-xs uppercase tracking-wide text-zinc-500">
                     Kelas Aktif
                   </p>
@@ -2250,7 +2250,7 @@ export function DailyLogView({
                     {historyClassSummary.length}
                   </p>
                 </div>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/60 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
                   <p className="text-xs uppercase tracking-wide text-zinc-500">
                     Siswa Berisiko
                   </p>
@@ -2270,7 +2270,7 @@ export function DailyLogView({
                 </div>
               </div>
               {internalNotifications.length > 0 ? (
-                <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mt-4 rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
                   <p className="text-xs uppercase tracking-wide text-zinc-500">
                     Notifikasi Internal
                   </p>
@@ -2278,7 +2278,7 @@ export function DailyLogView({
                     {internalNotifications.map((message) => (
                       <div
                         key={message}
-                        className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-300"
+                        className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-300 shadow-sm shadow-black/10"
                       >
                         {message}
                       </div>
@@ -2397,7 +2397,7 @@ export function DailyLogView({
                       type="button"
                       onClick={() => drillDownToStudent(item)}
                       key={`late-${item.studentId}`}
-                      className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left"
+                      className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 px-3 py-3 text-left shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
                     >
                       <div>
                         <p className="text-sm font-medium text-zinc-100">
@@ -2454,7 +2454,7 @@ export function DailyLogView({
                       type="button"
                       key={`absent-${item.studentId}`}
                       onClick={() => drillDownToStudent(item)}
-                      className="flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left"
+                      className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 px-3 py-3 text-left shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
                     >
                       <div>
                         <p className="text-sm font-medium text-zinc-100">
@@ -2480,7 +2480,7 @@ export function DailyLogView({
           ) : null}
 
           <div className="flex flex-col gap-2 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>
+            <span className="rounded-full border border-zinc-800 bg-zinc-950/60 px-4 py-2 text-sm text-zinc-400 shadow-sm shadow-black/10">
               Menampilkan {historyLogs.length} dari {historyTotal} record
               {historyStartDate || historyEndDate
                 ? " sesuai rentang tanggal"
@@ -2489,85 +2489,85 @@ export function DailyLogView({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                variant="outline"
+                variant="default"
                 disabled={
                   exportingHistory || loadingHistory || historyTotal === 0
                 }
                 onClick={() => {
                   void handleExportHistory();
                 }}
-                className="border-emerald-700 text-emerald-300 hover:bg-emerald-950/50"
+                className="h-11 rounded-xl border border-emerald-400/45 !bg-linear-to-br !from-emerald-500 !to-emerald-600 !text-white shadow-sm shadow-emerald-950/25 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300/70 hover:!from-emerald-400 hover:!to-emerald-500 hover:!text-white"
               >
                 {exportingHistory ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Download className="mr-2 h-4 w-4" />
                 )}
-                Export History
+                <span className="!text-white">Export History</span>
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="default"
                 disabled={exportingPdf || loadingHistory || historyTotal === 0}
                 onClick={() => {
                   void handleExportHistoryPdf();
                 }}
-                className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+                className="h-11 rounded-xl border border-sky-400/45 !bg-linear-to-br !from-sky-500 !to-cyan-500 !text-white shadow-sm shadow-sky-950/25 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/70 hover:!from-sky-400 hover:!to-cyan-400 hover:!text-white"
               >
                 {exportingPdf ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <FileText className="mr-2 h-4 w-4" />
                 )}
-                Export PDF
+                <span className="!text-white">Export PDF</span>
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="default"
                 disabled={
                   printingReport || loadingHistory || historyTotal === 0
                 }
                 onClick={() => {
                   void handlePrintHistoryReport();
                 }}
-                className="border-violet-700 text-violet-300 hover:bg-violet-950/50"
+                className="h-11 rounded-xl border border-violet-400/45 !bg-linear-to-br !from-violet-500 !to-fuchsia-500 !text-white shadow-sm shadow-violet-950/25 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-300/70 hover:!from-violet-400 hover:!to-fuchsia-400 hover:!text-white"
               >
                 {printingReport ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Printer className="mr-2 h-4 w-4" />
                 )}
-                Print Report
+                <span className="!text-white">Print Report</span>
               </Button>
               {(historyStartDate || historyEndDate) && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="default"
                   onClick={() => {
                     setHistoryStartDate("");
                     setHistoryEndDate("");
                   }}
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
                 >
-                  Reset Tanggal
+                  <span className="!text-zinc-100">Reset Tanggal</span>
                 </Button>
               )}
               <Button
                 type="button"
-                variant="outline"
+                variant="default"
                 disabled={historyPage <= 1 || loadingHistory}
                 onClick={() =>
                   setHistoryOffset((current) =>
                     Math.max(0, current - historyLimit),
                   )
                 }
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
               >
-                Prev
+                <span className="!text-zinc-100">Prev</span>
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="default"
                 disabled={
                   historyPage >= totalHistoryPages ||
                   loadingHistory ||
@@ -2581,9 +2581,9 @@ export function DailyLogView({
                     ),
                   )
                 }
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
               >
-                Next
+                <span className="!text-zinc-100">Next</span>
               </Button>
             </div>
           </div>
@@ -2598,7 +2598,7 @@ export function DailyLogView({
                 {historyLogs.map((log) => (
                   <div
                     key={log.id}
-                    className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4"
+                    className="rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-4 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -2635,7 +2635,7 @@ export function DailyLogView({
                 {groupedHistoryLogs.map((group) => (
                   <div
                     key={group.title}
-                    className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4"
+                    className="rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/35 to-zinc-950/45 p-4 shadow-sm shadow-black/10"
                   >
                     <div className="sticky top-2 z-10 mb-3 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/95 px-3 py-2 backdrop-blur-sm">
                       <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
@@ -2651,7 +2651,7 @@ export function DailyLogView({
                       {group.items.map((log) => (
                         <div
                           key={log.id}
-                          className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4"
+                          className="rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-4 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
                         >
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>

@@ -42,14 +42,27 @@ function normalizeLibsqlUrl(url: string): string {
     : url;
 }
 
+const LIBSQL_SCHEMES = ["libsql:", "https:", "http:", "ws:", "wss:", "file:"];
+
+function isSupportedLibsqlUrl(url: string): boolean {
+  try {
+    const parsed = new URL(normalizeLibsqlUrl(url));
+    return LIBSQL_SCHEMES.includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
 function resolveServerDatabaseConfig() {
-  const url =
-    process.env.AUTH_DATABASE_URL ||
-    process.env.TURSO_DATABASE_URL ||
-    process.env.DATABASE_URL;
+  const candidates = [
+    process.env.AUTH_DATABASE_URL,
+    process.env.TURSO_DATABASE_URL,
+    process.env.DATABASE_URL,
+  ].filter((value): value is string => Boolean(value));
+  const url = candidates.find((value) => isSupportedLibsqlUrl(value));
   if (!url) {
     throw new Error(
-      "Database URL is not configured for server runtime. Set DATABASE_URL, AUTH_DATABASE_URL, or TURSO_DATABASE_URL.",
+      "Database URL is not configured for libSQL server runtime. Set AUTH_DATABASE_URL or TURSO_DATABASE_URL to a libsql/https URL. Ignore or remove Vercel Postgres DATABASE_URL for this app.",
     );
   }
 
