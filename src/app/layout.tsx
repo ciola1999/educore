@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { Toaster } from "sonner";
+import { AuthSessionProvider } from "@/components/providers/auth-session-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,23 +37,36 @@ export default function RootLayout({
         />
         <meta
           httpEquiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.libsql.org https://*.turso.io;"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.libsql.org https://*.turso.io tauri://localhost ipc: http://ipc.localhost ws://localhost:* http://localhost:*;"
         />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <NuqsAdapter>{children}</NuqsAdapter>
+        <AuthSessionProvider>
+          <NuqsAdapter>{children}</NuqsAdapter>
+        </AuthSessionProvider>
+        <Toaster position="top-right" richColors closeButton />
         <Script id="register-sw" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {
+              const isTauriRuntime =
+                typeof window !== 'undefined' &&
+                typeof window.__TAURI_INTERNALS__ !== 'undefined';
+              const shouldRegisterServiceWorker =
+                !isTauriRuntime && window.location.protocol !== 'http:';
+
               window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(
-                  function(registration) {
-                    console.log('Service Worker registration successful');
-                  },
-                  function(err) {
-                    console.log('Service Worker registration failed: ', err);
-                  }
-                );
+                if (!shouldRegisterServiceWorker) {
+                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    registrations.forEach(function(registration) {
+                      void registration.unregister();
+                    });
+                  });
+                  return;
+                }
+
+                navigator.serviceWorker.register('/sw.js').catch(function() {
+                  // Ignore registration failures in runtime-specific contexts.
+                });
               });
             }
           `}

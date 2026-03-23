@@ -1,178 +1,202 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import type { Student } from "@/core/db/schema";
-// ✅ FIX 1: Sort Imports A-Z (Biome Compliance)
-// ✅ FIX 2: Rename 'deleteStudent' -> 'deleteStudentService' (Collision Fix)
-import {
-  deleteStudent as deleteStudentService,
-  getStudents,
-} from "@/core/services/student-service";
-import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
+import { apiGet, apiPost } from "@/lib/api/request";
 
-// Helper: Custom Debounce Hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
+export type AttendanceTodayStatus =
+  | "present"
+  | "late"
+  | "sick"
+  | "permission"
+  | "alpha";
+
+export type AttendanceTodaySnapshot = {
+  studentId: string;
+  status: AttendanceTodayStatus;
+  source: "qr" | "manual";
+  checkInTime: string | Date | null;
+  checkOutTime: string | Date | null;
+};
+
+export type StudentListItem = {
+  id: string;
+  nis: string;
+  nisn: string | null;
+  fullName: string;
+  gender: "L" | "P";
+  grade: string;
+  parentName: string | null;
+  parentPhone: string | null;
+  tempatLahir: string | null;
+  tanggalLahir: string | Date | null;
+  alamat: string | null;
+  hasAccount: boolean;
+  accountEmail?: string | null;
+  createdAt: string | Date;
+  attendanceToday?: AttendanceTodaySnapshot | null;
+};
+
+type StudentStats = {
+  total: number;
+  male: number;
+  female: number;
+  activeGrades: number;
+};
+
+type StudentListResponse = {
+  data: StudentListItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+};
+
+function getTodayDateString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 export function useStudentList() {
-  // --- STATE ---
-  const [data, setData] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Pagination & Filter State
+  const [loading, setLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [students, setStudents] = useState<StudentListItem[]>([]);
   const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 10;
+  const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState<StudentStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  // Sorting State
-  const [sortConfig, setSortConfig] = useState<{
-    key: keyof Student;
-    direction: "asc" | "desc";
-  }>({ key: "updatedAt", direction: "desc" });
-
-  const debouncedSearch = useDebounce(searchQuery, 500);
-
-  // Dialog States
-  const [editOpen, setEditOpen] = useState(false);
-  const [editStudent, setEditStudent] = useState<Student | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  // State ini namanya 'deleteStudent' (Objek), bukan fungsi
-  const [deleteStudent, setDeleteStudent] = useState<Student | null>(null);
-  const [projectionSynced, setProjectionSynced] = useState(false);
-
-  // --- FETCH DATA ---
-  const fetchStudents = useCallback(async () => {
-    setLoading(true);
-    try {
-      if (!projectionSynced) {
-        await syncUsersToStudentsProjection();
-        setProjectionSynced(true);
-      }
-
-      const result = await getStudents({
-        page: currentPage,
-        limit: itemsPerPage,
-        search: debouncedSearch,
-        sortBy: sortConfig.key as any,
-        sortDir: sortConfig.direction,
-      });
-
-      setData(result.data);
-      setTotalCount(result.total);
-      setTotalPages(result.totalPages);
-    } catch (e) {
-      console.error("Failed to fetch students:", e);
-      toast.error("Gagal memuat data siswa");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, debouncedSearch, projectionSynced, sortConfig]);
-
-  // Trigger fetch saat dependencies berubah
-  useEffect(() => {
-    fetchStudents();
-  }, [fetchStudents]);
-
-  // --- HANDLERS ---
-
-  // ✅ FIX 3: Pindahkan reset page ke sini (Hapus useEffect berlebih)
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value);
-    setCurrentPage(1); // Reset ke halaman 1 saat mengetik
-  }, []);
-
-  const handleEdit = useCallback((student: Student) => {
-    setEditStudent(student);
-    setEditOpen(true);
-  }, []);
-
-  const handleDelete = useCallback((student: Student) => {
-    setDeleteStudent(student);
-    setDeleteOpen(true);
-  }, []);
-
-  const onEditSuccess = useCallback(() => {
-    setEditOpen(false);
-    toast.success("Data siswa berhasil diperbarui");
-    fetchStudents();
-  }, [fetchStudents]);
-
-  const onDeleteSuccess = useCallback(async () => {
-    // deleteStudent di sini adalah STATE (Objek Student)
-    if (deleteStudent) {
+  const fetchStudents = useCallback(
+    async (
+      page = currentPage,
+      search = searchQuery,
+      nextSortBy = sortBy,
+      nextSortDir = sortDir,
+    ) => {
+      setLoading(true);
+      setError(null);
       try {
-        // ✅ FIX 4: Panggil 'deleteStudentService' (Fungsi API)
-        await deleteStudentService(deleteStudent.id);
-
-        setDeleteOpen(false);
-        setDeleteStudent(null); // Cleanup state
-        toast.success("Siswa berhasil dihapus");
-
-        // Cek jika halaman kosong setelah delete, mundur 1 halaman
-        if (data.length === 1 && currentPage > 1) {
-          setCurrentPage((p) => p - 1);
-        } else {
-          fetchStudents();
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: "12",
+          sortBy: nextSortBy,
+          sortDir: nextSortDir,
+        });
+        if (search.trim()) {
+          params.set("search", search.trim());
         }
-      } catch (e) {
-        console.error(e);
-        toast.error("Gagal menghapus siswa");
-      }
-    }
-  }, [deleteStudent, fetchStudents, currentPage, data.length]);
 
-  const handleSort = useCallback((key: keyof Student) => {
-    setSortConfig((current) => ({
-      key,
-      direction:
-        current.key === key && current.direction === "asc" ? "desc" : "asc",
-    }));
+        const result = await apiGet<StudentListResponse>(
+          `/api/students?${params.toString()}`,
+        );
+
+        const date = getTodayDateString();
+        const ids = result.data.map((student) => student.id).join(",");
+        let attendanceMap = new Map<string, AttendanceTodaySnapshot>();
+
+        if (ids) {
+          try {
+            const attendanceRows = await apiGet<AttendanceTodaySnapshot[]>(
+              `/api/students/attendance-today?date=${date}&ids=${encodeURIComponent(ids)}`,
+            );
+            attendanceMap = new Map(
+              attendanceRows.map((row) => [row.studentId, row]),
+            );
+          } catch {
+            attendanceMap = new Map();
+          }
+        }
+
+        setStudents(
+          result.data.map((student) => ({
+            ...student,
+            attendanceToday: attendanceMap.get(student.id) ?? null,
+          })),
+        );
+        setTotalPages(result.totalPages);
+        setTotalCount(result.total);
+        setCurrentPage(result.page);
+      } catch (err) {
+        setStudents([]);
+        setTotalPages(1);
+        setTotalCount(0);
+        setError(
+          err instanceof Error ? err.message : "Gagal memuat data siswa",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentPage, searchQuery, sortBy, sortDir],
+  );
+
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    setError(null);
+    try {
+      const result = await apiGet<StudentStats>("/api/students/stats");
+      setStats(result);
+    } catch (err) {
+      setStats(null);
+      setError(
+        err instanceof Error ? err.message : "Gagal memuat ringkasan siswa",
+      );
+    } finally {
+      setStatsLoading(false);
+    }
   }, []);
 
-  const [idCardOpen, setIdCardOpen] = useState(false);
-  const [selectedStudentForCard, setSelectedStudentForCard] =
-    useState<Student | null>(null);
+  useEffect(() => {
+    void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+  }, [currentPage, fetchStudents, searchQuery, sortBy, sortDir]);
 
-  // Tambahkan Handler
-  const handleShowIdCard = useCallback((student: Student) => {
-    setSelectedStudentForCard(student);
-    setIdCardOpen(true);
+  useEffect(() => {
+    void fetchStats();
+  }, [fetchStats]);
+
+  useEffect(() => {
+    const key = "students_projection_last_sync";
+    const lastSync = sessionStorage.getItem(key);
+    const now = Date.now();
+
+    if (lastSync && now - Number(lastSync) <= 300000) {
+      return;
+    }
+
+    void apiPost<{
+      classCreated: number;
+      studentUpserted: number;
+      settingsSeeded: number;
+    }>("/api/attendance/projection-sync")
+      .then(() => {
+        sessionStorage.setItem(key, now.toString());
+      })
+      .catch(() => {
+        // Keep student list usable even when projection sync endpoint is unavailable.
+      });
   }, []);
 
   return {
     loading,
+    statsLoading,
     searchQuery,
+    setSearchQuery,
     currentPage,
-    totalPages,
-    paginatedData: data,
-    totalCount,
-    sortConfig,
-    editOpen,
-    setEditOpen,
-    editStudent,
-    deleteOpen,
-    setDeleteOpen,
-    deleteStudent,
-    fetchStudents,
-    handleEdit,
-    onEditSuccess,
-    handleDelete,
-    onDeleteSuccess,
-    handleSearchChange,
-    handleSort,
     setCurrentPage,
-    idCardOpen,
-    setIdCardOpen,
-    selectedStudentForCard,
-    handleShowIdCard,
+    students,
+    totalPages,
+    totalCount,
+    stats,
+    error,
+    sortBy,
+    setSortBy,
+    sortDir,
+    setSortDir,
+    fetchStudents,
+    fetchStats,
   };
 }

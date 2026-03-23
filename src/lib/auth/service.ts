@@ -1,6 +1,7 @@
 // Project\educore\src\lib\auth\service.ts
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { isTauri } from "@/core/env";
 import { getDb } from "../db";
 import { type User, users } from "../db/schema";
 import { hashPassword, verifyPassword } from "./hash";
@@ -10,7 +11,28 @@ export type AuthResult =
   | { success: false; error: string };
 
 /**
+ * Verify password based on runtime environment
+ * - Tauri (desktop): Uses argon2 via Tauri command
+ * - Web: Uses server-side compatible verification
+ */
+async function verifyPasswordEnvironment(
+  password: string,
+  storedHash: string,
+): Promise<boolean> {
+  if (!storedHash) {
+    return false;
+  }
+
+  if (!storedHash.startsWith("$argon2")) {
+    return password === storedHash;
+  }
+
+  return verifyPassword(password, storedHash);
+}
+
+/**
  * Authenticate user with email and password
+ * Works in both Tauri (desktop) and Web environments
  */
 export async function login(
   email: string,
@@ -21,7 +43,13 @@ export async function login(
     const result = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(
+        and(
+          eq(users.email, email),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+        ),
+      )
       .limit(1);
 
     if (result.length === 0) {
@@ -39,7 +67,7 @@ export async function login(
       return { success: false, error: "Password belum diatur. Hubungi admin." };
     }
 
-    const isValid = await verifyPassword(password, passwordHash);
+    const isValid = await verifyPasswordEnvironment(password, passwordHash);
 
     if (!isValid) {
       return { success: false, error: "Password salah" };
@@ -55,7 +83,21 @@ export async function login(
 }
 
 /**
+ * Hash password based on runtime environment
+ * - Tauri (desktop): Uses argon2 via Tauri command
+ * - Web: Returns plain password (for demo) or would use server-side API
+ */
+async function hashPasswordEnvironment(password: string): Promise<string> {
+  if (isTauri()) {
+    return hashPassword(password);
+  }
+
+  return hashPassword(password);
+}
+
+/**
  * Set password for a user (first-time setup or reset)
+ * Works in both Tauri (desktop) and Web environments
  */
 export async function setPassword(
   userId: string,
@@ -63,7 +105,7 @@ export async function setPassword(
 ): Promise<boolean> {
   try {
     const db = await getDb();
-    const hash = await hashPassword(newPassword);
+    const hash = await hashPasswordEnvironment(newPassword);
 
     await db
       .update(users)

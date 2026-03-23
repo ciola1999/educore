@@ -1,47 +1,24 @@
-// Project\educore\src\components\dashboard\dashboard-stats.tsx
-
-"use client";
-
 import { ClipboardCheck, GraduationCap, Users } from "lucide-react";
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type DashboardStats,
   getDashboardStats,
 } from "@/lib/services/dashboard";
 
-export function DashboardStatsCards() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+const emptyStats: DashboardStats = {
+  totalStudents: 0,
+  totalTeachers: 0,
+  attendanceToday: {
+    present: 0,
+    sick: 0,
+    permission: 0,
+    alpha: 0,
+    totalRecorded: 0,
+  },
+};
 
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        const data = await getDashboardStats();
-        setStats(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchStats();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex gap-4">
-        {[1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-32 w-full rounded-xl bg-zinc-900 border border-zinc-800 animate-pulse"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (!stats) return null;
+export async function DashboardStatsCards() {
+  const stats = await getDashboardStats().catch(() => emptyStats);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -1,8 +1,11 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,8 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -21,23 +31,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { upsertStudent } from "@/core/services/student-service";
-import type { StudentInput } from "@/core/validation/schemas";
+import type { StudentListItem } from "@/hooks/use-student-list";
+import { apiPatch } from "@/lib/api/request";
+
+const updateStudentSchema = z.object({
+  nis: z.string().min(5, "NIS minimal 5 karakter"),
+  nisn: z
+    .string()
+    .regex(/^[0-9]{10}$/, "NISN harus 10 digit angka")
+    .optional()
+    .or(z.literal("")),
+  fullName: z.string().min(2, "Nama minimal 2 karakter"),
+  gender: z.enum(["L", "P"]),
+  grade: z.string().min(1, "Kelas wajib diisi"),
+  parentName: z.string().optional(),
+  parentPhone: z
+    .string()
+    .regex(/^[0-9+\-\s]+$/, "Nomor HP tidak valid")
+    .optional()
+    .or(z.literal("")),
+  tempatLahir: z.string().optional(),
+  tanggalLahir: z.string().optional(),
+  alamat: z.string().optional(),
+  accountEmail: z
+    .string()
+    .email("Email akun tidak valid")
+    .optional()
+    .or(z.literal("")),
+  newPassword: z
+    .string()
+    .min(8, "Password minimal 8 karakter")
+    .optional()
+    .or(z.literal("")),
+  confirmNewPassword: z
+    .string()
+    .min(8, "Konfirmasi password minimal 8 karakter")
+    .optional()
+    .or(z.literal("")),
+});
+
+type UpdateStudentFormValues = z.infer<typeof updateStudentSchema>;
 
 interface EditStudentDialogProps {
-  student: {
-    id: string;
-    nis: string;
-    nisn?: string | null;
-    fullName: string;
-    gender: "L" | "P";
-    grade: string;
-    parentName?: string | null;
-    parentPhone?: string | null;
-    tempatLahir?: string | null;
-    tanggalLahir?: Date | null;
-    alamat?: string | null;
-  } | null;
+  student: StudentListItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -51,75 +87,95 @@ export function EditStudentDialog({
 }: EditStudentDialogProps) {
   const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    nis: "",
-    nisn: "",
-    email: "",
-    fullName: "",
-    gender: "L" as "L" | "P",
-    grade: "",
-    tempatLahir: "",
-    tanggalLahir: "",
-    alamat: "",
-    parentName: "",
-    parentPhone: "",
+  const form = useForm<UpdateStudentFormValues>({
+    resolver: zodResolver(updateStudentSchema),
+    defaultValues: {
+      nis: "",
+      nisn: "",
+      fullName: "",
+      gender: "L",
+      grade: "",
+      parentName: "",
+      parentPhone: "",
+      tempatLahir: "",
+      tanggalLahir: "",
+      alamat: "",
+      accountEmail: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    },
   });
 
   useEffect(() => {
-    if (student) {
-      setFormData({
-        nis: student.nis,
-        nisn: student.nisn || "",
-        email: "",
-        fullName: student.fullName,
-        gender: student.gender,
-        grade: student.grade,
-        tempatLahir: student.tempatLahir || "",
-        tanggalLahir: student.tanggalLahir
-          ? new Date(student.tanggalLahir).toISOString().split("T")[0]
-          : "",
-        alamat: student.alamat || "",
-        parentName: student.parentName || "",
-        parentPhone: student.parentPhone || "",
-      });
+    if (!student) {
+      return;
     }
-  }, [student]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!student) return;
+    form.reset({
+      nis: student.nis,
+      nisn: student.nisn ?? "",
+      fullName: student.fullName,
+      gender: student.gender,
+      grade: student.grade,
+      parentName: student.parentName ?? "",
+      parentPhone: student.parentPhone ?? "",
+      tempatLahir: student.tempatLahir ?? "",
+      tanggalLahir: student.tanggalLahir
+        ? new Date(student.tanggalLahir).toISOString().slice(0, 10)
+        : "",
+      alamat: student.alamat ?? "",
+      accountEmail: student.accountEmail ?? "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+  }, [form, student]);
+
+  async function handleSubmit(values: UpdateStudentFormValues) {
+    if (!student) {
+      return;
+    }
 
     setLoading(true);
     try {
-      const payload: StudentInput = {
-        id: student.id,
-        nis: formData.nis,
-        fullName: formData.fullName,
-        gender: formData.gender as "L" | "P",
-        grade: formData.grade,
-        tempatLahir: formData.tempatLahir || null,
-        tanggalLahir: formData.tanggalLahir
-          ? new Date(formData.tanggalLahir)
-          : null,
-        alamat: formData.alamat || null,
-        parentName: formData.parentName || null,
-        parentPhone: formData.parentPhone || null,
-        email: formData.email || null,
-      };
+      if (
+        student.hasAccount &&
+        values.newPassword !== values.confirmNewPassword
+      ) {
+        form.setError("confirmNewPassword", {
+          message: "Konfirmasi password tidak cocok",
+        });
+        setLoading(false);
+        return;
+      }
 
-      await upsertStudent(payload);
-
+      await apiPatch<{ updated: true }>(`/api/students/${student.id}`, {
+        nis: values.nis.trim(),
+        nisn: values.nisn?.trim() || "",
+        fullName: values.fullName.trim(),
+        gender: values.gender,
+        grade: values.grade.trim(),
+        parentName: values.parentName?.trim() || "",
+        parentPhone: values.parentPhone?.trim() || "",
+        tempatLahir: values.tempatLahir?.trim() || "",
+        tanggalLahir: values.tanggalLahir || undefined,
+        alamat: values.alamat?.trim() || "",
+        account: student.hasAccount
+          ? {
+              email: values.accountEmail?.trim()
+                ? values.accountEmail.trim().toLowerCase()
+                : undefined,
+              password: values.newPassword || undefined,
+              confirmPassword: values.confirmNewPassword || undefined,
+            }
+          : undefined,
+      });
+      toast.success("Data siswa berhasil diperbarui");
       onOpenChange(false);
       onSuccess();
-      toast.success("Data siswa berhasil diperbarui");
-    } catch (error: any) {
-      console.error("❌ Update failed:", error);
-      const errorMessage = error?.message || String(error);
-      if (errorMessage.includes("UNIQUE constraint failed")) {
-        toast.error("NIS atau email sudah digunakan siswa lain");
-      } else {
-        toast.error("Gagal update data siswa");
-      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Gagal memperbarui siswa",
+      );
     } finally {
       setLoading(false);
     }
@@ -127,194 +183,270 @@ export function EditStudentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800 text-white">
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Edit Student</DialogTitle>
+          <DialogTitle>Edit Siswa</DialogTitle>
           <DialogDescription className="text-zinc-400">
-            Update student information below.
+            Perbarui data identitas siswa.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-nis">NIS</Label>
-              <Input
-                id="edit-nis"
-                value={formData.nis}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, nis: e.target.value }))
-                }
-                className="bg-zinc-950 border-zinc-700"
-                required
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-4 py-2"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="nis"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>NIS</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="nisn"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>NISN</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-nisn">NISN</Label>
-              <Input
-                id="edit-nisn"
-                value={formData.nisn}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, nisn: e.target.value }))
-                }
-                className="bg-zinc-950 border-zinc-700"
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="fullName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nama Lengkap</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="grade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Kelas</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-email">Email Login (Opsional)</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, email: e.target.value }))
-                }
-                placeholder="kosongkan jika tidak diubah"
-                className="bg-zinc-950 border-zinc-700"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Jenis Kelamin</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="L">Laki-laki</SelectItem>
+                        <SelectItem value="P">Perempuan</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tanggalLahir"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tanggal Lahir</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="date"
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-grade">Grade</Label>
-              <Input
-                id="edit-grade"
-                value={formData.grade}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, grade: e.target.value }))
-                }
-                className="bg-zinc-950 border-zinc-700"
-                required
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="tempatLahir"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempat Lahir</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="parentName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nama Wali</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="edit-fullName">Full Name</Label>
-            <Input
-              id="edit-fullName"
-              value={formData.fullName}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, fullName: e.target.value }))
-              }
-              className="bg-zinc-950 border-zinc-700"
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Gender</Label>
-            <Select
-              value={formData.gender}
-              onValueChange={(value: "L" | "P") =>
-                setFormData((prev) => ({ ...prev, gender: value }))
-              }
-            >
-              <SelectTrigger className="bg-zinc-950 border-zinc-700">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                <SelectItem value="L">Male (Laki-laki)</SelectItem>
-                <SelectItem value="P">Female (Perempuan)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-tempatLahir">Tempat Lahir</Label>
-              <Input
-                id="edit-tempatLahir"
-                value={formData.tempatLahir}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    tempatLahir: e.target.value,
-                  }))
-                }
-                className="bg-zinc-950 border-zinc-700"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-tanggalLahir">Tanggal Lahir</Label>
-              <Input
-                id="edit-tanggalLahir"
-                type="date"
-                value={formData.tanggalLahir}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    tanggalLahir: e.target.value,
-                  }))
-                }
-                className="bg-zinc-950 border-zinc-700"
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="edit-alamat">Alamat</Label>
-            <Input
-              id="edit-alamat"
-              value={formData.alamat}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, alamat: e.target.value }))
-              }
-              className="bg-zinc-950 border-zinc-700"
-            />
-          </div>
-
-          <div className="my-2 border-t border-zinc-800"></div>
-          <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
-            Parent Information
-          </p>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-parentName">Parent Name</Label>
-              <Input
-                id="edit-parentName"
-                value={formData.parentName}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    parentName: e.target.value,
-                  }))
-                }
-                className="bg-zinc-950 border-zinc-700"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-parentPhone">Phone</Label>
-              <Input
-                id="edit-parentPhone"
-                value={formData.parentPhone}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    parentPhone: e.target.value,
-                  }))
-                }
-                className="bg-zinc-950 border-zinc-700"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="mt-4">
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700"
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                "Save Changes"
+            <FormField
+              control={form.control}
+              name="parentPhone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>No. HP Wali</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </Button>
-          </DialogFooter>
-        </form>
+            />
+
+            <FormField
+              control={form.control}
+              name="alamat"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Alamat</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {student?.hasAccount ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 space-y-4">
+                <p className="text-sm font-medium text-zinc-200">
+                  Kredensial Akun Login
+                </p>
+                <FormField
+                  control={form.control}
+                  name="accountEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Login</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="email"
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="newPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password Baru</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="password"
+                            className="bg-zinc-950 border-zinc-800"
+                            placeholder="Kosongkan jika tidak diganti"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="confirmNewPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Konfirmasi Password Baru</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="password"
+                            className="bg-zinc-950 border-zinc-800"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Password akun tidak bisa ditampilkan karena disimpan dalam
+                  bentuk hash terenkripsi.
+                </p>
+              </div>
+            ) : null}
+
+            <DialogFooter>
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Simpan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

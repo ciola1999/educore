@@ -6,6 +6,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { AUTH_ROLE_DEFAULT, AUTH_ROLES } from "@/core/auth/roles";
 
 /**
  * EduCore Unified Database Schema (2026 Elite Pattern)
@@ -36,9 +37,7 @@ export const users = sqliteTable("users", {
   id: text("id").primaryKey().$defaultFn(generateId),
   fullName: text("full_name").notNull(),
   email: text("email").notNull().unique(),
-  role: text("role", { enum: ["admin", "teacher", "staff", "student"] })
-    .notNull()
-    .default("teacher"),
+  role: text("role", { enum: AUTH_ROLES }).notNull().default(AUTH_ROLE_DEFAULT),
   passwordHash: text("password_hash"),
   nip: text("nip"),
   nis: text("nis"),

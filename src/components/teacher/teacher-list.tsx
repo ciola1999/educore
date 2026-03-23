@@ -7,7 +7,6 @@ import {
   GraduationCap,
   IdCard,
   Loader2,
-  Pencil,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -27,39 +26,55 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useTeacherList } from "@/hooks/use-teacher-list";
+import { type Teacher, useTeacherList } from "@/hooks/use-teacher-list";
 import { cn } from "@/lib/utils";
+import { InlineState } from "../common/inline-state";
 import { IDCardView } from "../id-card/id-card-view";
 import { DeleteTeacherDialog } from "./delete-teacher-dialog";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
 
-export function TeacherList() {
+export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
   const {
     teachers,
     loading,
+    errorMessage,
     sortBy,
     sortOrder,
     toggleSort,
-    editOpen,
-    setEditOpen,
-    editTeacher,
     deleteOpen,
     setDeleteOpen,
     deleteTeacher,
-    handleEdit,
     handleDelete,
     fetchTeachers,
-  } = useTeacherList();
+  } = useTeacherList(refreshToken);
 
   const [idCardOpen, setIdCardOpen] = useState(false);
   const [selectedTeacherForCard, setSelectedTeacherForCard] =
-    useState<any>(null);
+    useState<Teacher | null>(null);
 
   if (loading && teachers.length === 0) {
     return (
       <div className="flex justify-center items-center py-24 text-zinc-500">
         <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
       </div>
+    );
+  }
+
+  if (errorMessage && teachers.length === 0) {
+    return (
+      <InlineState
+        title="Teacher data unavailable"
+        description={errorMessage}
+        actionLabel="Retry"
+        onAction={() => {
+          void fetchTeachers();
+        }}
+        variant={
+          errorMessage.includes("izin") || errorMessage.includes("login")
+            ? "warning"
+            : "error"
+        }
+      />
     );
   }
 
@@ -93,6 +108,7 @@ export function TeacherList() {
   }
 
   const roleColors: Record<string, string> = {
+    super_admin: "bg-red-500/10 text-red-400 ring-red-500/20",
     teacher: "bg-pink-500/10 text-pink-400 ring-pink-500/20",
     staff: "bg-orange-500/10 text-orange-400 ring-orange-500/20",
     admin: "bg-violet-500/10 text-violet-400 ring-violet-500/20",
@@ -133,6 +149,9 @@ export function TeacherList() {
                 <TableHead className="text-zinc-400 font-medium">
                   Role
                 </TableHead>
+                <TableHead className="text-zinc-400 font-medium">
+                  Wali Kelas
+                </TableHead>
                 <TableHead className="text-zinc-400 font-medium text-right">
                   Actions
                 </TableHead>
@@ -166,8 +185,15 @@ export function TeacherList() {
                         {teacher.role}
                       </span>
                     </TableCell>
+                    <TableCell className="text-zinc-300 text-sm">
+                      {teacher.isHomeroomTeacher ? "Ya" : "Tidak"}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <EditTeacherDialog
+                          teacher={teacher}
+                          onSuccess={fetchTeachers}
+                        />
                         <Button
                           size="icon"
                           variant="ghost"
@@ -178,14 +204,6 @@ export function TeacherList() {
                           }}
                         >
                           <IdCard className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-white/10 rounded-lg"
-                          onClick={() => handleEdit(teacher)}
-                        >
-                          <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
@@ -229,20 +247,23 @@ export function TeacherList() {
             {selectedTeacherForCard && (
               <IDCardView
                 name={selectedTeacherForCard.fullName}
-                id={selectedTeacherForCard.id}
-                role={selectedTeacherForCard.role}
+                id={selectedTeacherForCard.nip || selectedTeacherForCard.id}
+                personRole={selectedTeacherForCard.role}
+                address={selectedTeacherForCard.alamat || undefined}
+                position={
+                  selectedTeacherForCard.role === "teacher"
+                    ? "Guru"
+                    : selectedTeacherForCard.role === "admin"
+                      ? "Administrator"
+                      : selectedTeacherForCard.role === "super_admin"
+                        ? "Super Admin"
+                        : "Staf"
+                }
               />
             )}
           </div>
         </DialogContent>
       </Dialog>
-
-      <EditTeacherDialog
-        teacher={editTeacher}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSuccess={fetchTeachers}
-      />
 
       <DeleteTeacherDialog
         teacher={deleteTeacher}

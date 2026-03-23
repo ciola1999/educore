@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { DashboardAccessGate } from "@/components/dashboard/dashboard-access-gate";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 
 export default function DashboardLayout({
@@ -8,11 +10,19 @@ export default function DashboardLayout({
   return (
     <div className="h-screen w-full flex bg-zinc-950 text-white overflow-hidden font-sans">
       {/* Sidebar Tetap (Fixed Width) */}
-      <DashboardSidebar />
+      <Suspense
+        fallback={
+          <aside className="w-64 border-r border-zinc-800 bg-zinc-900" />
+        }
+      >
+        <DashboardSidebar />
+      </Suspense>
 
       {/* Area Konten Utama (Scrollable) */}
       <main className="flex-1 overflow-y-auto">
-        <div className="p-8 max-w-7xl mx-auto">{children}</div>
+        <DashboardAccessGate>
+          <div className="p-8 max-w-7xl mx-auto">{children}</div>
+        </DashboardAccessGate>
       </main>
     </div>
   );

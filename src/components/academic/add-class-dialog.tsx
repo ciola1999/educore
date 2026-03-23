@@ -1,13 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { eq, or } from "drizzle-orm";
 import { Loader2, Plus, School } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,30 +31,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-import { getDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { addClass } from "@/lib/services/academic";
-
-// 1. Definisikan Schema Validasi (Zod)
-const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Nama kelas minimal 2 karakter (contoh: X-RPL-1).",
-  }),
-  academicYear: z.string().regex(/^\d{4}\/\d{4}$/, {
-    message: "Format harus YYYY/YYYY (contoh: 2025/2026).",
-  }),
-  homeroomTeacherId: z.string().uuid({
-    message: "Pilih wali kelas yang valid.",
-  }),
-});
-
-type FormValues = z.infer<typeof formSchema>;
-
-interface TeacherOption {
-  id: string;
-  fullName: string;
-}
+import { apiGet, apiPost } from "@/lib/api/request";
+import {
+  type ClassFormValues,
+  classFormSchema,
+  type TeacherOption,
+} from "./schemas";
 
 export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
@@ -65,8 +44,8 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
 
   // 2. Setup Form Hook
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<ClassFormValues>({
+    resolver: zodResolver(classFormSchema),
     defaultValues: {
       name: "",
       academicYear: "",
@@ -80,30 +59,27 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
       const fetchTeachers = async () => {
         setLoadingTeachers(true);
         try {
-          const db = await getDb();
-          // Select hanya field yang dibutuhkan untuk performa
-          const result = await db
-            .select({ id: users.id, fullName: users.fullName })
-            .from(users)
-            .where(or(eq(users.role, "teacher"), eq(users.role, "staff")));
-
-          setTeachers(result as TeacherOption[]);
+          const data = await apiGet<TeacherOption[]>(
+            "/api/teachers?role=teacher&sortBy=fullName&sortOrder=asc",
+          );
+          setTeachers(data || []);
         } catch (error) {
-          console.error("Failed to load teachers", error);
-          toast.error("Gagal memuat data guru.");
+          toast.error(
+            error instanceof Error ? error.message : "Gagal memuat data guru.",
+          );
         } finally {
           setLoadingTeachers(false);
         }
       };
 
-      fetchTeachers();
+      void fetchTeachers();
     }
   }, [open]);
 
   // 4. Handle Submission
-  async function onSubmit(values: FormValues) {
+  async function onSubmit(values: ClassFormValues) {
     try {
-      await addClass({
+      await apiPost<{ id: string }>("/api/classes", {
         name: values.name,
         academicYear: values.academicYear,
         homeroomTeacherId: values.homeroomTeacherId,
@@ -117,9 +93,9 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
       setOpen(false);
       onSuccess();
     } catch (error) {
-      console.error(error);
       toast.error("Gagal membuat kelas", {
-        description: "Silakan coba lagi atau cek log error.",
+        description:
+          error instanceof Error ? error.message : "Silakan coba lagi.",
       });
     }
   }

@@ -29,8 +29,10 @@ import {
 } from "@/components/ui/select";
 import { useAddTeacherHook } from "@/hooks/use-add-teacher";
 
-export function AddTeacherDialog() {
-  const { open, setOpen, loading, form, onSubmit } = useAddTeacherHook();
+export function AddTeacherDialog({ onSuccess }: { onSuccess?: () => void }) {
+  const { open, setOpen, loading, form, onSubmit } = useAddTeacherHook({
+    onSuccess,
+  });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -55,7 +57,7 @@ export function AddTeacherDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-8 pt-2">
+        <div className="p-8 pt-2 max-h-[70vh] overflow-y-auto custom-scrollbar">
           <Form {...form}>
             <form onSubmit={onSubmit} className="space-y-5">
               <FormField
@@ -159,6 +161,139 @@ export function AddTeacherDialog() {
                   )}
                 />
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <FormField
+                  control={form.control}
+                  name="nip"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-zinc-300">NIP</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="NIP guru/staff"
+                          className="bg-zinc-950/50 border-zinc-800 focus:border-blue-500/50 rounded-xl py-6"
+                        />
+                      </FormControl>
+                      <FormMessage className="text-red-400 text-xs" />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="noTelepon"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-zinc-300">
+                        No. Telepon
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="08xxxxxxxxxx"
+                          className="bg-zinc-950/50 border-zinc-800 focus:border-blue-500/50 rounded-xl py-6"
+                        />
+                      </FormControl>
+                      <FormMessage className="text-red-400 text-xs" />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <FormField
+                  control={form.control}
+                  name="jenisKelamin"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-zinc-300">
+                        Jenis Kelamin
+                      </FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-950/50 border-zinc-800 focus:border-blue-500/50 py-6 rounded-xl">
+                            <SelectValue placeholder="Pilih gender" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white rounded-xl">
+                          <SelectItem value="L">Laki-laki</SelectItem>
+                          <SelectItem value="P">Perempuan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage className="text-red-400 text-xs" />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="tanggalLahir"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-zinc-300">
+                        Tanggal Lahir
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="date"
+                          className="bg-zinc-950/50 border-zinc-800 focus:border-blue-500/50 py-6 rounded-xl"
+                        />
+                      </FormControl>
+                      <FormMessage className="text-red-400 text-xs" />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="tempatLahir"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-zinc-300">
+                      Tempat Lahir
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Kota lahir"
+                        className="bg-zinc-950/50 border-zinc-800 focus:border-blue-500/50 rounded-xl py-6"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-red-400 text-xs" />
+                  </FormItem>
+                )}
+              />
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm">
+                <p className="font-medium text-zinc-200">Status Wali Kelas</p>
+                <p className="mt-1 text-zinc-400">
+                  Default: Tidak. Penetapan wali kelas dilakukan dari modul Data
+                  Kelas.
+                </p>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="alamat"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-zinc-300">Alamat</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Alamat lengkap"
+                        className="bg-zinc-950/50 border-zinc-800 focus:border-blue-500/50 rounded-xl py-6"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-red-400 text-xs" />
+                  </FormItem>
+                )}
+              />
 
               <DialogFooter className="pt-6 sm:pt-4">
                 <Button

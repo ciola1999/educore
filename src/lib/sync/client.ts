@@ -1,13 +1,64 @@
-import { createClient } from "@libsql/client/web";
+import { type Client, createClient } from "@libsql/client/web";
+import { isTauri } from "@/core/env";
+import { readDesktopSyncStorageConfig } from "./storage";
 
-const url = process.env.NEXT_PUBLIC_DATABASE_URL!;
-const authToken = process.env.NEXT_PUBLIC_DATABASE_AUTH_TOKEN!;
+type SyncConfig = {
+  url: string;
+  authToken: string;
+};
 
-// Elite 2026 Sync Client: Always connect to Turso Cloud
-export const tursoCloud = createClient({
-  url: url.startsWith("libsql://") ? url.replace("libsql://", "https://") : url,
-  authToken: authToken,
-});
+async function resolveDesktopSyncConfig(): Promise<SyncConfig> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const config = await invoke<{ url: string; auth_token: string }>(
+      "get_sync_config",
+    );
+
+    return {
+      url: config.url,
+      authToken: config.auth_token,
+    };
+  } catch {
+    const fallback = readDesktopSyncStorageConfig();
+    if (fallback) {
+      return fallback;
+    }
+    throw new Error(
+      "Konfigurasi sync desktop tidak tersedia (native command gagal dan fallback lokal kosong).",
+    );
+  }
+}
+
+function resolveWebSyncConfig(): SyncConfig {
+  throw new Error(
+    "Browser runtime must not initialize direct sync client credentials. Gunakan route handler /api/sync/* di web runtime.",
+  );
+}
+
+let tursoCloudClient: Client | null = null;
+let tursoCloudClientPromise: Promise<Client> | null = null;
+
+export async function getTursoCloudClient(): Promise<Client> {
+  if (tursoCloudClient) {
+    return tursoCloudClient;
+  }
+
+  if (!tursoCloudClientPromise) {
+    tursoCloudClientPromise = (async () => {
+      const config = isTauri()
+        ? await resolveDesktopSyncConfig()
+        : resolveWebSyncConfig();
+      tursoCloudClient = createClient({
+        url: config.url,
+        authToken: config.authToken,
+      });
+
+      return tursoCloudClient;
+    })();
+  }
+
+  return tursoCloudClientPromise;
+}
 
 export type SyncStatus = "idle" | "syncing" | "success" | "error";
 

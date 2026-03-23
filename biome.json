@@ -7,6 +7,11 @@
   },
   "files": {
     "ignoreUnknown": true,
+    "experimentalScannerIgnores": [
+      ".agent/**",
+      "src/types/tauri.d.ts",
+      "src/lib/sync/turso-sync.ts"
+    ],
     "includes": ["**", "!node_modules", "!.next", "!dist", "!build"]
   },
   "formatter": {

@@ -1,169 +1,213 @@
 "use client";
 
 import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  addHoliday,
-  deleteHoliday,
-  getHolidays,
-} from "@/core/services/attendance-service";
+import { apiDelete, apiGet, apiPost } from "@/lib/api/request";
+import { InlineState } from "../common/inline-state";
 
-export function HolidayManager() {
-  const [holidays, setHolidays] = useState<
-    {
-      id: string;
-      date: string;
-      name: string | null;
-    }[]
-  >([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+type HolidayItem = {
+  id: string;
+  date: string;
+  name: string;
+};
+
+export function HolidayManager({
+  initialHolidays,
+}: {
+  initialHolidays?: HolidayItem[];
+}) {
+  const [holidays, setHolidays] = useState<HolidayItem[]>(
+    initialHolidays ?? [],
+  );
+  const [loading, setLoading] = useState(initialHolidays === undefined);
+  const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
+  const [error, setError] = useState<string | null>(null);
 
-  const loadHolidays = useCallback(async () => {
+  const loadHolidays = useEffectEvent(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const data = await getHolidays();
+      const data = await apiGet<HolidayItem[]>("/api/attendance/holidays", {
+        timeoutMs: 30000,
+      });
       setHolidays(data);
-    } catch {
-      toast.error("Failed to load holidays");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Gagal memuat hari libur";
+      setError(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  });
 
   useEffect(() => {
-    loadHolidays();
-  }, [loadHolidays]);
+    if (initialHolidays !== undefined) {
+      return;
+    }
+    void (async () => {
+      await loadHolidays();
+    })();
+  }, [initialHolidays, loadHolidays]);
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleAdd(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
     if (!newHoliday.date || !newHoliday.name.trim()) {
       toast.error("Tanggal dan nama hari libur wajib diisi");
       return;
     }
 
-    setAdding(true);
+    setSubmitting(true);
     try {
-      await addHoliday(newHoliday.date, newHoliday.name.trim());
-      toast.success("Holiday added");
+      await apiPost("/api/attendance/holidays", {
+        date: newHoliday.date,
+        name: newHoliday.name.trim(),
+      });
+      toast.success("Hari libur berhasil disimpan");
       setNewHoliday({ date: "", name: "" });
       await loadHolidays();
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to add holiday";
-      toast.error(errorMessage);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Gagal menyimpan hari libur",
+      );
     } finally {
-      setAdding(false);
+      setSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
     setDeletingId(id);
     try {
-      await deleteHoliday(id);
-      toast.success("Holiday deleted");
+      await apiDelete(`/api/attendance/holidays/${id}`);
+      toast.success("Hari libur berhasil dihapus");
       await loadHolidays();
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to delete holiday";
-      toast.error(errorMessage);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Gagal menghapus hari libur",
+      );
     } finally {
       setDeletingId(null);
     }
   }
 
-  if (loading)
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="animate-spin" />
-      </div>
-    );
-
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-xl">
-        <h3 className="text-xl font-bold text-white mb-6">Add New Holiday</h3>
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950/40 p-6">
+        <div className="mb-5">
+          <h3 className="text-lg font-semibold text-zinc-100">
+            Kalender Hari Libur
+          </h3>
+          <p className="text-sm text-zinc-400">
+            Hari libur akan memblokir absensi QR otomatis pada tanggal terkait.
+          </p>
+        </div>
+
         <form
           onSubmit={handleAdd}
-          className="flex flex-col md:flex-row gap-6 items-end"
+          className="grid gap-4 lg:grid-cols-[1.4fr_220px_auto]"
         >
-          <div className="flex-1 space-y-3">
-            <Label className="text-zinc-400 text-xs uppercase tracking-widest font-bold">
-              Holiday Name
+          <div className="space-y-2">
+            <Label htmlFor="holiday-name" className="text-zinc-300">
+              Nama Hari Libur
             </Label>
             <Input
-              placeholder="e.g. Independence Day"
+              id="holiday-name"
               value={newHoliday.name}
-              onChange={(e) =>
-                setNewHoliday({ ...newHoliday, name: e.target.value })
+              onChange={(event) =>
+                setNewHoliday((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
               }
-              className="bg-zinc-950 border-zinc-800 h-12 rounded-xl focus:ring-blue-500/20 transition-all font-medium"
+              placeholder="Contoh: Libur Nasional"
+              className="border-zinc-800 bg-zinc-950 text-zinc-100"
             />
           </div>
-          <div className="w-full md:w-64 space-y-3">
-            <Label className="text-zinc-400 text-xs uppercase tracking-widest font-bold">
-              Date
+
+          <div className="space-y-2">
+            <Label htmlFor="holiday-date" className="text-zinc-300">
+              Tanggal
             </Label>
             <Input
+              id="holiday-date"
               type="date"
               value={newHoliday.date}
-              onChange={(e) =>
-                setNewHoliday({ ...newHoliday, date: e.target.value })
+              onChange={(event) =>
+                setNewHoliday((current) => ({
+                  ...current,
+                  date: event.target.value,
+                }))
               }
-              className="bg-zinc-950 border-zinc-800 h-12 rounded-xl focus:ring-blue-500/20 transition-all font-medium"
+              className="border-zinc-800 bg-zinc-950 text-zinc-100"
             />
           </div>
+
           <Button
             type="submit"
-            disabled={adding}
-            className="bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold h-12 px-10 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            disabled={submitting}
+            className="mt-auto bg-emerald-600 text-white hover:bg-emerald-500"
           >
-            {adding ? (
-              <Loader2 className="animate-spin" />
+            {submitting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Plus className="h-5 w-5 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
             )}
-            Assign Holiday
+            Simpan
           </Button>
         </form>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {holidays.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">
-            No holidays scheduled yet.
-          </div>
-        ) : (
-          holidays.map((h) => (
+      {error ? (
+        <InlineState
+          title="Hari libur belum bisa dimuat"
+          description={error}
+          actionLabel="Muat Ulang"
+          onAction={() => {
+            void loadHolidays();
+          }}
+          variant="error"
+        />
+      ) : null}
+
+      {loading ? (
+        <div className="flex justify-center py-12 text-zinc-500">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : holidays.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {holidays.map((holiday) => (
             <div
-              key={h.id}
-              className="p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800 hover:border-zinc-700 transition-all group relative"
+              key={holiday.id}
+              className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5"
             >
-              <div className="flex items-start justify-between">
-                <div className="flex gap-4 items-center">
-                  <div className="p-3 rounded-xl bg-blue-500/10 text-blue-400">
-                    <CalendarIcon className="h-6 w-6" />
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-300">
+                    <CalendarIcon className="h-5 w-5" />
                   </div>
-                  <div>
-                    <h4 className="font-bold text-white text-lg">{h.name}</h4>
-                    <p className="text-zinc-500 font-mono text-sm">
-                      {new Date(h.date).toLocaleDateString()}
-                    </p>
+                  <div className="space-y-1">
+                    <p className="font-medium text-zinc-100">{holiday.name}</p>
+                    <p className="text-sm text-zinc-400">{holiday.date}</p>
                   </div>
                 </div>
+
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDelete(h.id)}
-                  disabled={deletingId === h.id}
-                  className="text-zinc-600 hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                  disabled={deletingId === holiday.id}
+                  onClick={() => {
+                    void handleDelete(holiday.id);
+                  }}
+                  className="text-zinc-500 hover:bg-red-950/40 hover:text-red-300"
                 >
-                  {deletingId === h.id ? (
+                  {deletingId === holiday.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Trash2 className="h-4 w-4" />
@@ -171,9 +215,15 @@ export function HolidayManager() {
                 </Button>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <InlineState
+          title="Belum ada hari libur"
+          description="Tambahkan tanggal penting sekolah atau hari libur nasional agar scanner QR menghormati kalender akademik."
+          variant="info"
+        />
+      )}
     </div>
   );
 }

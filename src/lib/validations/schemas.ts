@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { AUTH_ROLE_DEFAULT, AUTH_ROLES } from "@/core/auth/roles";
 
 // ================================
 // 1. ENUMS & SHARED
 // ================================
-export const UserRoleEnum = z.enum(["admin", "teacher", "staff"]);
+export const UserRoleEnum = z.enum(AUTH_ROLES);
 export const GenderEnum = z.enum(["L", "P"]);
 
 export const AttendanceStatusEnum = z.enum([
@@ -33,10 +34,33 @@ export const userInsertSchema = z.object({
   id: z.string().uuid().optional(),
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   email: z.string().email("Email tidak valid"),
-  role: UserRoleEnum.default("teacher"),
-  password: z.string().min(6, "Password min 6 karakter").optional(),
+  role: UserRoleEnum.default(AUTH_ROLE_DEFAULT),
+  password: z.string().min(8, "Password min 8 karakter"),
+  nip: z.string().max(32).optional().nullable(),
+  jenisKelamin: GenderEnum.optional().nullable(),
+  tempatLahir: z.string().max(100).optional().nullable(),
+  tanggalLahir: z.coerce.date().optional().nullable(),
+  alamat: z.string().max(255).optional().nullable(),
+  noTelepon: z.string().max(32).optional().nullable(),
+  foto: z.string().max(500).optional().nullable(),
+  isActive: z.boolean().optional().default(true),
   passwordHash: z.string().optional(),
   syncStatus: SyncStatusEnum.default("pending"),
+});
+
+export const userUpdateSchema = z.object({
+  fullName: z.string().min(2, "Nama minimal 2 karakter").optional(),
+  email: z.string().email("Email tidak valid").optional(),
+  role: UserRoleEnum.optional(),
+  password: z.string().min(8, "Password min 8 karakter").optional(),
+  nip: z.string().max(32).optional().nullable(),
+  jenisKelamin: GenderEnum.optional().nullable(),
+  tempatLahir: z.string().max(100).optional().nullable(),
+  tanggalLahir: z.coerce.date().optional().nullable(),
+  alamat: z.string().max(255).optional().nullable(),
+  noTelepon: z.string().max(32).optional().nullable(),
+  foto: z.string().max(500).optional().nullable(),
+  isActive: z.boolean().optional(),
 });
 
 export const userSelectSchema = userInsertSchema.extend({
@@ -47,6 +71,7 @@ export const userSelectSchema = userInsertSchema.extend({
 
 export type UserInsert = z.infer<typeof userInsertSchema>;
 export type UserInsertInput = z.input<typeof userInsertSchema>;
+export type UserUpdateInput = z.input<typeof userUpdateSchema>;
 export type UserSelect = z.infer<typeof userSelectSchema>;
 
 // ================================
@@ -74,6 +99,28 @@ export const studentInsertSchema = z.object({
     .optional(),
 });
 
+export const studentUpdateSchema = z.object({
+  nis: z.string().min(5, "NIS minimal 5 karakter").optional(),
+  nisn: z
+    .string()
+    .regex(/^[0-9]{10}$/, "NISN harus 10 digit angka")
+    .optional()
+    .or(z.literal("")),
+  email: z.string().email("Email tidak valid").optional().or(z.literal("")),
+  fullName: z.string().min(2, "Nama minimal 2 karakter").optional(),
+  gender: GenderEnum.optional(),
+  grade: z.string().min(1, "Kelas wajib diisi").optional(),
+  tempatLahir: z.string().max(100).optional().or(z.literal("")),
+  tanggalLahir: z.coerce.date().optional(),
+  alamat: z.string().max(255).optional().or(z.literal("")),
+  parentName: z.string().optional().or(z.literal("")),
+  parentPhone: z
+    .string()
+    .regex(/^[0-9+\-\s]+$/, "Nomor HP tidak valid")
+    .optional()
+    .or(z.literal("")),
+});
+
 export const studentSelectSchema = studentInsertSchema.extend({
   id: z.string(),
   createdAt: z.number().nullable(),
@@ -81,6 +128,7 @@ export const studentSelectSchema = studentInsertSchema.extend({
 });
 
 export type StudentInsert = z.infer<typeof studentInsertSchema>;
+export type StudentUpdateInput = z.input<typeof studentUpdateSchema>;
 export type StudentSelect = z.infer<typeof studentSelectSchema>;
 
 // ================================
@@ -185,6 +233,36 @@ export const attendanceSettingsSchema = z.object({
 });
 export type AttendanceSettingsInput = z.infer<typeof attendanceSettingsSchema>;
 
+export const qrScanSchema = z.object({
+  qrData: z.string().trim().min(3).max(512),
+});
+export type QrScanInput = z.infer<typeof qrScanSchema>;
+
+export const holidayInputSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  name: z.string().min(2).max(120),
+});
+
+export const attendanceHistoryFilterSchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  studentId: z.string().optional(),
+  status: z.string().optional(),
+  source: z.enum(["all", "qr", "manual"]).optional().default("all"),
+  sortBy: z.enum(["earliest", "latest"]).optional().default("latest"),
+  limit: z.number().int().min(1).max(500).optional().default(100),
+  searchQuery: z.string().optional(),
+});
+export type AttendanceHistoryFilter = z.infer<
+  typeof attendanceHistoryFilterSchema
+>;
+
 // ================================
 // 11. BULK OPERATIONS
 // ================================
@@ -202,3 +280,4 @@ export const bulkAttendanceSchema = z.object({
 });
 
 export type BulkAttendance = z.infer<typeof bulkAttendanceSchema>;
+export type BulkAttendanceInput = z.infer<typeof bulkAttendanceSchema>;

@@ -1,8 +1,11 @@
 "use client";
 
-import { Loader2, UserPlus } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,8 +16,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,62 +32,144 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { upsertStudent } from "@/core/services/student-service";
-import type { StudentInput } from "@/core/validation/schemas";
+import { apiPost } from "@/lib/api/request";
 
-export function AddStudentDialog() {
+const createStudentSchema = z
+  .object({
+    nis: z.string().min(5, "NIS minimal 5 karakter"),
+    nisn: z
+      .string()
+      .regex(/^[0-9]{10}$/, "NISN harus 10 digit angka")
+      .optional()
+      .or(z.literal("")),
+    fullName: z.string().min(2, "Nama minimal 2 karakter"),
+    gender: z.enum(["L", "P"]),
+    grade: z.string().min(1, "Kelas wajib diisi"),
+    parentName: z.string().optional(),
+    parentPhone: z
+      .string()
+      .regex(/^[0-9+\-\s]+$/, "Nomor HP tidak valid")
+      .optional()
+      .or(z.literal("")),
+    tempatLahir: z.string().optional(),
+    tanggalLahir: z.string().optional(),
+    alamat: z.string().optional(),
+    createAccount: z.boolean(),
+    email: z
+      .string()
+      .email("Email akun tidak valid")
+      .optional()
+      .or(z.literal("")),
+    password: z
+      .string()
+      .min(8, "Password minimal 8 karakter")
+      .optional()
+      .or(z.literal("")),
+    confirmPassword: z
+      .string()
+      .min(8, "Konfirmasi password minimal 8 karakter")
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((value, context) => {
+    if (!value.createAccount) {
+      return;
+    }
+
+    if (!value.email?.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["email"],
+        message: "Email akun siswa wajib diisi",
+      });
+    }
+
+    if (!value.password?.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["password"],
+        message: "Password akun siswa wajib diisi",
+      });
+    }
+
+    if (value.password !== value.confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Konfirmasi password tidak cocok",
+      });
+    }
+  });
+
+type CreateStudentFormValues = z.infer<typeof createStudentSchema>;
+
+interface AddStudentDialogProps {
+  onSuccess: () => void;
+}
+
+export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  const form = useForm<CreateStudentFormValues>({
+    resolver: zodResolver(createStudentSchema),
+    defaultValues: {
+      nis: "",
+      nisn: "",
+      fullName: "",
+      gender: "L",
+      grade: "",
+      parentName: "",
+      parentPhone: "",
+      tempatLahir: "",
+      tanggalLahir: "",
+      alamat: "",
+      createAccount: false,
+      email: "",
+      password: "",
+      confirmPassword: "",
+    },
+  });
+  const createAccount = form.watch("createAccount");
+
+  async function handleSubmit(values: CreateStudentFormValues) {
     setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const rawTanggalLahir = (formData.get("tanggalLahir") as string) || "";
-    const data: StudentInput = {
-      nis: formData.get("nis") as string,
-      fullName: formData.get("fullName") as string,
-      gender: (formData.get("gender") as "L" | "P") || "L",
-      grade: formData.get("grade") as string,
-      parentName: (formData.get("parentName") as string) || null,
-      parentPhone: (formData.get("parentPhone") as string) || null,
-      email: (formData.get("email") as string) || null,
-      nisn: (formData.get("nisn") as string) || null,
-      tempatLahir: (formData.get("tempatLahir") as string) || null,
-      tanggalLahir: rawTanggalLahir ? new Date(rawTanggalLahir) : null,
-      alamat: (formData.get("alamat") as string) || null,
-    };
-
     try {
-      await upsertStudent(data);
-      toast.success("Siswa berhasil ditambahkan!");
-      setOpen(false);
-      window.dispatchEvent(new Event("students:changed"));
-    } catch (error: unknown) {
-      // ✅ Perbaikan Biome: Menggunakan 'unknown' alih-alih 'any' untuk Type-Safety
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      const errObj = error as Record<string, unknown>;
+      const result = await apiPost<{
+        id: string;
+        created: true;
+        userCreated?: boolean;
+      }>("/api/students", {
+        nis: values.nis.trim(),
+        nisn: values.nisn?.trim() || undefined,
+        fullName: values.fullName.trim(),
+        gender: values.gender,
+        grade: values.grade.trim(),
+        parentName: values.parentName?.trim() || undefined,
+        parentPhone: values.parentPhone?.trim() || undefined,
+        tempatLahir: values.tempatLahir?.trim() || undefined,
+        tanggalLahir: values.tanggalLahir || undefined,
+        alamat: values.alamat?.trim() || undefined,
+        account: values.createAccount
+          ? {
+              email: values.email?.trim().toLowerCase(),
+              password: values.password || "",
+            }
+          : undefined,
+      });
 
-      if (
-        errorMessage.includes("UNIQUE constraint failed: students.nis") ||
-        errorMessage.includes("code: 2067") ||
-        errObj.code === "NIS_ALREADY_EXISTS"
-      ) {
-        toast.error("Gagal: NIS ini sudah terdaftar di database!", {
-          description: "Silakan gunakan NIS yang berbeda.",
-        });
-      } else if (errObj.name === "ZodError") {
-        const zodErrors = errObj.errors as { message: string }[] | undefined;
-        toast.error("Data tidak valid", {
-          description: zodErrors?.[0]?.message || "Periksa kembali isian Anda.",
-        });
-      } else {
-        toast.error("Terjadi Kesalahan", {
-          description: errorMessage,
-        });
-      }
+      toast.success(
+        result.userCreated
+          ? "Siswa dan akun login berhasil ditambahkan"
+          : "Siswa berhasil ditambahkan",
+      );
+      form.reset();
+      setOpen(false);
+      onSuccess();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Gagal menambahkan siswa",
+      );
     } finally {
       setLoading(false);
     }
@@ -86,166 +178,288 @@ export function AddStudentDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          suppressHydrationWarning={true}
-          className="bg-blue-600 hover:bg-blue-500 gap-2 shadow-lg shadow-blue-900/20"
-        >
-          <UserPlus className="h-4 w-4" /> Add Student
+        <Button className="bg-sky-600 hover:bg-sky-500 text-white gap-2">
+          <Plus className="h-4 w-4" />
+          Tambah Siswa
         </Button>
       </DialogTrigger>
-      {/* ✅ PERBAIKAN RESPONSIVITAS: Ditambahkan max-h-[85dvh] dan overflow-y-auto */}
-      <DialogContent className="sm:max-w-[500px] max-h-[85dvh] overflow-y-auto bg-zinc-900 border-zinc-800 text-white">
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add New Student</DialogTitle>
+          <DialogTitle>Tambah Siswa</DialogTitle>
           <DialogDescription className="text-zinc-400">
-            Fill in the student's academic and personal details.
+            Lengkapi data identitas siswa baru.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-          {/* Section: Academic Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="nis">NIS (Nomor Induk)</Label>
-              <Input
-                id="nis"
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-4 py-2"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
                 name="nis"
-                placeholder="e.g. 2024001"
-                className="bg-zinc-950 border-zinc-700"
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>NIS</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="nisn">NISN</Label>
-              <Input
-                id="nisn"
+              <FormField
+                control={form.control}
                 name="nisn"
-                placeholder="e.g. 0098765432"
-                className="bg-zinc-950 border-zinc-700"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>NISN</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email Login (Opsional)</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="siswa@sekolah.sch.id"
-                className="bg-zinc-950 border-zinc-700"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="fullName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nama Lengkap</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="grade">Grade / Class</Label>
-              <Input
-                id="grade"
+              <FormField
+                control={form.control}
                 name="grade"
-                placeholder="e.g. X-RPL-1"
-                className="bg-zinc-950 border-zinc-700"
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Kelas</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="fullName">Full Name</Label>
-            <Input
-              id="fullName"
-              name="fullName"
-              placeholder="Student Full Name"
-              className="bg-zinc-950 border-zinc-700"
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Gender</Label>
-            <Select name="gender" required defaultValue="L">
-              <SelectTrigger className="bg-zinc-950 border-zinc-700">
-                <SelectValue placeholder="Select Gender" />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                <SelectItem value="L">Male (Laki-laki)</SelectItem>
-                <SelectItem value="P">Female (Perempuan)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="tempatLahir">Tempat Lahir</Label>
-              <Input
-                id="tempatLahir"
-                name="tempatLahir"
-                placeholder="e.g. Bandung"
-                className="bg-zinc-950 border-zinc-700"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Jenis Kelamin</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="L">Laki-laki</SelectItem>
+                        <SelectItem value="P">Perempuan</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="tanggalLahir">Tanggal Lahir</Label>
-              <Input
-                id="tanggalLahir"
+              <FormField
+                control={form.control}
                 name="tanggalLahir"
-                type="date"
-                className="bg-zinc-950 border-zinc-700"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tanggal Lahir</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="date"
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="alamat">Alamat</Label>
-            <Input
-              id="alamat"
-              name="alamat"
-              placeholder="Alamat lengkap siswa"
-              className="bg-zinc-950 border-zinc-700"
-            />
-          </div>
-
-          <div className="my-2 border-t border-zinc-800"></div>
-          <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
-            Parent Information
-          </p>
-
-          {/* Section: Parent Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="parentName">Parent Name</Label>
-              <Input
-                id="parentName"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="tempatLahir"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempat Lahir</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="parentName"
-                placeholder="Father/Mother"
-                className="bg-zinc-950 border-zinc-700"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nama Wali</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="parentPhone">Phone Number</Label>
-              <Input
-                id="parentPhone"
-                name="parentPhone"
-                type="tel"
-                placeholder="0812..."
-                className="bg-zinc-950 border-zinc-700"
-              />
-            </div>
-          </div>
 
-          <DialogFooter className="mt-4">
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700"
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                "Save Record"
+            <FormField
+              control={form.control}
+              name="parentPhone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>No. HP Wali</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </Button>
-          </DialogFooter>
-        </form>
+            />
+
+            <FormField
+              control={form.control}
+              name="alamat"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Alamat</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="createAccount"
+              render={({ field }) => (
+                <FormItem>
+                  <label className="flex items-center gap-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={field.value}
+                      onChange={(event) => field.onChange(event.target.checked)}
+                    />
+                    Buat akun login untuk siswa ini
+                  </label>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {createAccount ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 space-y-4">
+                <p className="text-sm font-medium text-zinc-200">
+                  Kredensial Akun Siswa
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email Login</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="email"
+                            className="bg-zinc-950 border-zinc-800"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password Login</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="password"
+                            className="bg-zinc-950 border-zinc-800"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Konfirmasi Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            ) : null}
+
+            <DialogFooter>
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Simpan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

@@ -1,5 +1,4 @@
-"use client";
-
+import { AttendanceRiskInsights } from "@/components/dashboard/attendance-risk-insights";
 import { DashboardStatsCards } from "@/components/dashboard/dashboard-stats";
 
 export default function DashboardPage() {
@@ -15,6 +14,7 @@ export default function DashboardPage() {
       </div>
 
       <DashboardStatsCards />
+      <AttendanceRiskInsights />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8 opacity-50 pointer-events-none grayscale">
         <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 h-64 flex items-center justify-center">

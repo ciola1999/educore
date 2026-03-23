@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rustc generate_hash.rs --edition 2021 -L \"%USERPROFILE%\\\\.cargo\\\\registry\\\\cache\" -o generate_hash.exe)",
+      "Bash(cargo run:*)",
+      "Bash(bun add:*)",
+      "Bash(npm install:*)",
+      "Bash(bun run:*)",
+      "Bash(del /Q \"E:\\\\Freelance\\\\Project\\\\educore\\\\generate_hash.rs\" \"E:\\\\Freelance\\\\Project\\\\educore\\\\generate_hash.ts\")",
+      "Bash(find E:FreelanceProjecteducore -name *.db -type f)"
+    ]
+  }
+}

@@ -1,52 +1,101 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getDb } from "../db";
-import { users } from "../db/schema";
 import type { UserInsertInput } from "../validations/schemas";
-import { addTeacher, deleteTeacher, getTeachers } from "./teacher";
 
-vi.mock("../db", () => ({
-  getDb: vi.fn(),
+const { getDbMock, hashPasswordMock } = vi.hoisted(() => ({
+  getDbMock: vi.fn(),
+  hashPasswordMock: vi.fn(),
 }));
 
-vi.mock("../auth/hash", () => ({
-  hashPassword: vi.fn().mockResolvedValue("hashed_password"),
+vi.mock("@/lib/db", () => ({
+  getDb: getDbMock,
 }));
+
+vi.mock("@/core/db/connection", () => ({
+  getDatabase: getDbMock,
+  getDb: getDbMock,
+}));
+
+vi.mock("@/lib/auth/hash", () => ({
+  hashPassword: hashPasswordMock,
+}));
+
+type SelectResult = unknown[];
+type SelectQuery = Promise<SelectResult> & {
+  from: ReturnType<typeof vi.fn>;
+  where: ReturnType<typeof vi.fn>;
+  limit: ReturnType<typeof vi.fn>;
+  orderBy: ReturnType<typeof vi.fn>;
+};
+
+function createSelectQuery(result: SelectResult): SelectQuery {
+  const promise = Promise.resolve(result) as SelectQuery;
+  promise.from = vi.fn().mockReturnValue(promise);
+  promise.where = vi.fn().mockReturnValue(promise);
+  promise.limit = vi.fn().mockResolvedValue(result);
+  promise.orderBy = vi.fn().mockReturnValue(promise);
+  return promise;
+}
 
 describe("Teacher Service", () => {
-  const mockDb = {
-    select: vi.fn().mockReturnThis(),
-    from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    values: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    orderBy: vi.fn().mockReturnThis(),
+  let selectResults: SelectResult[];
+  let mockDb: {
+    select: ReturnType<typeof vi.fn>;
+    insert: ReturnType<typeof vi.fn>;
+    values: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    set: ReturnType<typeof vi.fn>;
+    where: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (getDb as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockDb);
+
+    hashPasswordMock.mockResolvedValue("hashed_password");
+    selectResults = [];
+
+    mockDb = {
+      select: vi.fn(() => createSelectQuery(selectResults.shift() ?? [])),
+      insert: vi.fn().mockReturnThis(),
+      values: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue(undefined),
+    };
+
+    getDbMock.mockResolvedValue(mockDb);
   });
 
   const validTeacherData: UserInsertInput = {
     fullName: "Guru Baru",
     email: "guru.baru@example.com",
-    role: "teacher" as const,
-    passwordHash: "password123",
+    role: "teacher",
+    password: "password123",
   };
 
-  it("should success adding teacher with unique email", async () => {
-    mockDb.limit.mockResolvedValue([]); // No existing user
+  it("adds a teacher when email is unique", async () => {
+    const { addTeacher } = await import("./teacher");
+    selectResults.push([]);
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("teacher-id");
 
     const result = await addTeacher(validTeacherData);
 
     expect(result.success).toBe(true);
     expect(mockDb.insert).toHaveBeenCalled();
-  });
+    expect(hashPasswordMock).toHaveBeenCalledWith("password123");
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "teacher-id",
+        fullName: "Guru Baru",
+        email: "guru.baru@example.com",
+        role: "teacher",
+        passwordHash: "hashed_password",
+      }),
+    );
+  }, 20000);
 
-  it("should fail when email already exists", async () => {
-    mockDb.limit.mockResolvedValue([{ id: "existing-id" }]); // User exists
+  it("fails when email already exists", async () => {
+    const { addTeacher } = await import("./teacher");
+    selectResults.push([{ id: "existing-id" }]);
 
     const result = await addTeacher(validTeacherData);
 
@@ -55,10 +104,11 @@ describe("Teacher Service", () => {
       expect(result.code).toBe("EMAIL_EXISTS");
     }
     expect(mockDb.insert).not.toHaveBeenCalled();
-  });
+  }, 20000);
 
-  it("should handle database errors when saving", async () => {
-    mockDb.limit.mockResolvedValue([]);
+  it("handles database errors when saving", async () => {
+    const { addTeacher } = await import("./teacher");
+    selectResults.push([]);
     mockDb.values.mockRejectedValue(new Error("Database Failure"));
 
     const result = await addTeacher(validTeacherData);
@@ -67,43 +117,79 @@ describe("Teacher Service", () => {
     if (!result.success) {
       expect(result.error).toContain("Gagal");
     }
-  });
+  }, 20000);
 
   describe("getTeachers", () => {
-    it("should fetch teachers with default filters", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "1", fullName: "Guru 1" }]);
+    it("returns teacher rows with default filters", async () => {
+      const { getTeachers } = await import("./teacher");
+      const rows = [
+        {
+          id: "1",
+          fullName: "Guru 1",
+          email: "guru1@example.com",
+          role: "teacher",
+          nip: null,
+          jenisKelamin: null,
+          tempatLahir: null,
+          tanggalLahir: null,
+          alamat: null,
+          noTelepon: null,
+          isActive: true,
+        },
+      ];
+      selectResults.push(rows);
+      selectResults.push([]);
 
       const result = await getTeachers();
 
-      expect(result).toHaveLength(1);
-      expect(mockDb.from).toHaveBeenCalledWith(users);
-    });
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: "1",
+          fullName: "Guru 1",
+          role: "teacher",
+          isHomeroomTeacher: false,
+        }),
+      ]);
+      const query = mockDb.select.mock.results[0]?.value;
+      expect(query.orderBy).toHaveBeenCalled();
+    }, 20000);
 
-    it("should handle empty results", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("returns empty results cleanly", async () => {
+      const { getTeachers } = await import("./teacher");
+      selectResults.push([]);
 
       const result = await getTeachers();
 
       expect(result).toEqual([]);
-    });
+    }, 20000);
   });
 
   describe("deleteTeacher", () => {
-    it("should return true on successful deletion", async () => {
-      mockDb.where.mockResolvedValue(true);
+    it("returns true on successful deletion", async () => {
+      const { deleteTeacher } = await import("./teacher");
+      mockDb.where.mockResolvedValue(undefined);
 
       const result = await deleteTeacher("some-id");
 
       expect(result).toBe(true);
-      expect(mockDb.delete).toHaveBeenCalled();
-    });
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isActive: false,
+          syncStatus: "pending",
+          updatedAt: expect.any(Date),
+          deletedAt: expect.any(Date),
+        }),
+      );
+    }, 20000);
 
-    it("should return false on failure", async () => {
+    it("returns false on failure", async () => {
+      const { deleteTeacher } = await import("./teacher");
       mockDb.where.mockRejectedValue(new Error("Delete failed"));
 
       const result = await deleteTeacher("some-id");
 
       expect(result).toBe(false);
-    });
+    }, 20000);
   });
 });

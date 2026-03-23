@@ -1,6 +1,16 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { attendanceSettings, classes, students, users } from "@/lib/db/schema";
+import {
+  attendance,
+  attendanceSettings,
+  classes,
+  students,
+  users,
+} from "@/lib/db/schema";
+import {
+  isUuidLikeClassValue,
+  sanitizeClassDisplayName,
+} from "@/lib/utils/class-name";
 
 const DEFAULT_ACTIVE_DAYS = [1, 2, 3, 4, 5] as const;
 
@@ -82,6 +92,40 @@ export async function syncUsersToStudentsProjection(): Promise<{
       ),
     );
 
+  const studentUserIds = studentUsers.map((entry) => entry.user.id);
+  const latestAttendanceRows =
+    studentUserIds.length > 0
+      ? await db
+          .select({
+            studentId: attendance.studentId,
+            classId: attendance.classId,
+            date: attendance.date,
+            updatedAt: attendance.updatedAt,
+            createdAt: attendance.createdAt,
+          })
+          .from(attendance)
+          .where(
+            and(
+              inArray(attendance.studentId, studentUserIds),
+              isNull(attendance.deletedAt),
+            ),
+          )
+          .orderBy(
+            desc(attendance.date),
+            desc(attendance.updatedAt),
+            desc(attendance.createdAt),
+          )
+      : [];
+  const latestAttendanceClassByStudent = new Map<string, string>();
+  for (const row of latestAttendanceRows) {
+    const studentId = row.studentId?.trim();
+    const classId = row.classId?.trim();
+    if (!studentId || !classId) continue;
+    if (!latestAttendanceClassByStudent.has(studentId)) {
+      latestAttendanceClassByStudent.set(studentId, classId);
+    }
+  }
+
   const existingStudents = await db
     .select()
     .from(students)
@@ -115,6 +159,7 @@ export async function syncUsersToStudentsProjection(): Promise<{
     if (
       grade &&
       grade !== "UNASSIGNED" &&
+      !isUuidLikeClassValue(grade) &&
       !classById.has(grade) &&
       !classByName.has(grade)
     ) {
@@ -126,8 +171,8 @@ export async function syncUsersToStudentsProjection(): Promise<{
     // If it's a UUID, we shouldn't add it as a candidate name
     // unless we really don't have a className from the join
     if (cr && !classById.has(cr) && !classByName.has(cr)) {
-      const bestName = entry.className || cr;
-      if (bestName && !classByName.has(bestName)) {
+      const bestName = sanitizeClassDisplayName(entry.className, cr);
+      if (bestName !== "UNASSIGNED" && !classByName.has(bestName)) {
         classCandidates.add(bestName);
       }
     }
@@ -154,25 +199,62 @@ export async function syncUsersToStudentsProjection(): Promise<{
     const { user, className } = entry;
     const nis = user.nis?.trim() || "";
     if (!nis) continue;
+    const existingByNis = studentMap.get(nis);
+    const existingById = studentMapById.get(user.id);
+    const existingCandidate = existingByNis || existingById;
     const classRef = user.kelasId?.trim();
-    let grade = "UNASSIGNED";
+    const attendanceClassId = latestAttendanceClassByStudent.get(user.id);
+    const attendanceClassName = attendanceClassId
+      ? classById.get(attendanceClassId)
+      : undefined;
+    let resolvedClassId: string | null = null;
+    const existingRawGrade = existingCandidate?.grade?.trim();
+    let grade = sanitizeClassDisplayName(
+      existingCandidate?.grade,
+      existingRawGrade ? classById.get(existingRawGrade) : null,
+    );
 
-    if (className) {
-      grade = className;
-    } else if (classRef) {
-      grade = classById.get(classRef) ?? classByName.get(classRef) ?? classRef;
-    } else if (studentMap.get(nis)?.grade) {
-      grade = studentMap.get(nis)?.grade || "UNASSIGNED";
+    if (className && !isUuidLikeClassValue(className)) {
+      grade = sanitizeClassDisplayName(className);
+      resolvedClassId = classRef || classByName.get(className) || null;
+    } else if (classRef && !isUuidLikeClassValue(classRef)) {
+      grade = sanitizeClassDisplayName(
+        classById.get(classRef),
+        classRef,
+        classByName.get(classRef),
+      );
+      resolvedClassId = classById.has(classRef)
+        ? classRef
+        : classByName.get(grade) || null;
+    } else if (
+      attendanceClassName &&
+      !isUuidLikeClassValue(attendanceClassName)
+    ) {
+      grade = sanitizeClassDisplayName(attendanceClassName);
+      resolvedClassId = attendanceClassId || null;
+    } else if (grade !== "UNASSIGNED") {
+      resolvedClassId = classByName.get(grade) || null;
+    }
+
+    if (resolvedClassId && classRef !== resolvedClassId) {
+      await db
+        .update(users)
+        .set({
+          kelasId: resolvedClassId,
+          updatedAt: now,
+          syncStatus: "pending",
+        })
+        .where(eq(users.id, user.id));
     }
 
     const gender = user.jenisKelamin === "P" ? "P" : "L";
 
     // 1. Try finding by NIS (Primary uniqueness for projection)
-    let existing = studentMap.get(nis);
+    let existing = existingByNis;
 
     // 2. Fallback check by ID to ensure consistency
     if (!existing) {
-      existing = studentMapById.get(user.id);
+      existing = existingById;
     }
 
     const needsUpdate =

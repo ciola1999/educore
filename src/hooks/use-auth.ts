@@ -1,46 +1,150 @@
 "use client";
 
-import { useCallback } from "react";
-import { login as authLogin } from "@/lib/auth";
-import { useStore } from "@/lib/store/use-store";
+import type { Session } from "next-auth";
+import { getSession, signIn, signOut, useSession } from "next-auth/react";
+import { useEffect, useMemo } from "react";
+import { type UserSession, useStore } from "@/lib/store/use-store";
+
+type SessionRole = UserSession["role"];
+
+function buildUserSession(
+  sessionUser: NonNullable<Session["user"]>,
+): UserSession | null {
+  if (!sessionUser.id) {
+    return null;
+  }
+
+  const now = new Date();
+
+  return {
+    id: sessionUser.id,
+    fullName: sessionUser.name || "",
+    email: sessionUser.email || "",
+    role: ((sessionUser as { role?: SessionRole }).role ||
+      "teacher") as SessionRole,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    version: 1,
+    hlc: null,
+    syncStatus: "synced",
+    nip: null,
+    nis: null,
+    nisn: null,
+    tempatLahir: null,
+    tanggalLahir: null,
+    jenisKelamin: null,
+    alamat: null,
+    noTelepon: null,
+    foto: null,
+    kelasId: null,
+    isActive: true,
+    lastLoginAt: null,
+    provider: null,
+    providerId: null,
+  };
+}
 
 /**
  * Auth hook for managing user authentication state
  */
 export function useAuth() {
+  const { data: session, status } = useSession();
   const user = useStore((state) => state.user);
   const setUser = useStore((state) => state.login);
   const clearUser = useStore((state) => state.logout);
 
-  const isAuthenticated = user !== null;
+  const sessionUser = useMemo(
+    () => (session?.user ? buildUserSession(session.user) : null),
+    [session],
+  );
+  const isLoading = status === "loading";
+  const isAuthenticated = status === "authenticated" && sessionUser !== null;
+
+  useEffect(() => {
+    if (status === "loading") {
+      return;
+    }
+
+    if (status === "authenticated" && sessionUser) {
+      const shouldSync =
+        !user ||
+        user.id !== sessionUser.id ||
+        user.email !== sessionUser.email ||
+        user.role !== sessionUser.role ||
+        user.fullName !== sessionUser.fullName;
+
+      if (shouldSync) {
+        setUser({
+          ...user,
+          ...sessionUser,
+          createdAt: user?.createdAt ?? sessionUser.createdAt,
+          updatedAt: new Date(),
+        });
+      }
+      return;
+    }
+
+    if (user) {
+      clearUser();
+    }
+  }, [status, sessionUser, user, setUser, clearUser]);
 
   /**
    * Login with email and password
    */
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const result = await authLogin(email, password);
+  async function login(email: string, password: string) {
+    const identifier = email.trim();
+    const result = await signIn("credentials", {
+      email: identifier,
+      password,
+      redirect: false,
+    });
 
-      if (result.success) {
-        setUser(result.user);
-        return { success: true as const };
-      }
+    if (!result || result.error) {
+      return {
+        success: false as const,
+        error: "Email atau password salah",
+      };
+    }
 
-      return { success: false as const, error: result.error };
-    },
-    [setUser],
-  );
+    const session = await getSession();
+    if (!session?.user?.id) {
+      return {
+        success: false as const,
+        error: "Sesi login gagal dibuat",
+      };
+    }
+
+    const nextUser = buildUserSession(session.user);
+    if (!nextUser) {
+      return {
+        success: false as const,
+        error: "Data sesi login tidak valid",
+      };
+    }
+
+    setUser(nextUser);
+
+    return { success: true as const };
+  }
 
   /**
    * Logout current user
    */
-  const logout = useCallback(() => {
-    clearUser();
-  }, [clearUser]);
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      await signOut({ redirect: false });
+      clearUser();
+    }
+  }
 
   return {
-    user,
+    user: sessionUser ?? user,
     isAuthenticated,
+    isLoading,
     login,
     logout,
   };

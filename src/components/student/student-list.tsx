@@ -1,60 +1,54 @@
-// Project\educore\src\components\student\student-list.tsx
-
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
+  ArrowDownAZ,
   ChevronLeft,
   ChevronRight,
-  Filter,
-  Loader2,
+  Eye,
+  IdCard,
   Pencil,
-  QrCode, // ✅ 1. Import Icon QR
   RefreshCw,
   Search,
   Trash2,
+  UserRoundPlus,
+  Users,
 } from "lucide-react";
-import { useEffect } from "react";
-// ✅ 2. Import Dialog ID Card (Pastikan path import sesuai lokasi file Anda)
-import { StudentIdDialog } from "@/components/student/student-id-dialog";
+import Link from "next/link";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/hooks/use-auth";
+import type { StudentListItem } from "@/hooks/use-student-list";
 import { useStudentList } from "@/hooks/use-student-list";
-import { Badge } from "../ui/badge";
-// Dialogs
+import { InlineState } from "../common/inline-state";
+import { AddStudentDialog } from "./add-student-dialog";
+import { BulkCreateStudentAccountsDialog } from "./bulk-create-student-accounts-dialog";
+import { BulkRepairStudentClassesDialog } from "./bulk-repair-student-classes-dialog";
+import { BulkResetStudentPasswordDialog } from "./bulk-reset-student-password-dialog";
+import { CreateStudentAccountDialog } from "./create-student-account-dialog";
 import { DeleteStudentDialog } from "./delete-student-dialog";
 import { EditStudentDialog } from "./edit-student-dialog";
-
-function SortIcon({
-  active,
-  direction,
-}: {
-  active: boolean;
-  direction?: "asc" | "desc";
-}) {
-  if (!active)
-    return (
-      <ArrowUpDown className="h-3 w-3 opacity-0 group-hover/head:opacity-50 transition-opacity" />
-    );
-  if (direction === "asc") return <ArrowUp className="h-3 w-3 text-blue-400" />;
-  return <ArrowDown className="h-3 w-3 text-blue-400" />;
-}
+import { ImportStudentsExcelDialog } from "./import-students-excel-dialog";
+import { StudentIdDialog } from "./student-id-dialog";
+import { StudentStats } from "./student-stats";
 
 function formatBirthInfo(
-  tempatLahir: string | null,
-  tanggalLahir: Date | null,
-): string {
+  tempatLahir?: string | null,
+  tanggalLahir?: string | Date | null,
+) {
   const place = tempatLahir?.trim();
   const date = tanggalLahir
     ? new Intl.DateTimeFormat("id-ID", {
@@ -70,315 +64,736 @@ function formatBirthInfo(
   return "-";
 }
 
+function getTodayDateString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+const attendanceBadgeStyle: Record<
+  NonNullable<StudentListItem["attendanceToday"]>["status"],
+  string
+> = {
+  present: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  late: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  sick: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300",
+  permission: "border-sky-500/40 bg-sky-500/10 text-sky-300",
+  alpha: "border-red-500/40 bg-red-500/10 text-red-300",
+};
+
+const attendanceLabel: Record<
+  NonNullable<StudentListItem["attendanceToday"]>["status"],
+  string
+> = {
+  present: "Hadir",
+  late: "Terlambat",
+  sick: "Sakit",
+  permission: "Izin",
+  alpha: "Alpha",
+};
+const statsSkeletonKeys = [
+  "stats-skeleton-1",
+  "stats-skeleton-2",
+  "stats-skeleton-3",
+  "stats-skeleton-4",
+];
+const cardSkeletonKeys = [
+  "card-skeleton-1",
+  "card-skeleton-2",
+  "card-skeleton-3",
+  "card-skeleton-4",
+  "card-skeleton-5",
+  "card-skeleton-6",
+];
+
 export function StudentList() {
+  const today = getTodayDateString();
+  const [selectedStudent, setSelectedStudent] =
+    useState<StudentListItem | null>(null);
+  const [selectedStudentForCard, setSelectedStudentForCard] =
+    useState<StudentListItem | null>(null);
+  const [selectedStudentForEdit, setSelectedStudentForEdit] =
+    useState<StudentListItem | null>(null);
+  const [selectedStudentForDelete, setSelectedStudentForDelete] =
+    useState<StudentListItem | null>(null);
+  const [selectedStudentForAccount, setSelectedStudentForAccount] =
+    useState<StudentListItem | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [idCardOpen, setIdCardOpen] = useState(false);
+  const [accountFilter, setAccountFilter] = useState<
+    "all" | "with_account" | "without_account"
+  >("all");
+  const { user } = useAuth();
+  const isStudentView = user?.role === "student";
+  const canManageStudents =
+    user?.role === "admin" || user?.role === "super_admin";
   const {
     loading,
+    statsLoading,
     searchQuery,
+    setSearchQuery,
     currentPage,
-    totalPages,
-    paginatedData,
-    totalCount,
-    sortConfig,
-    // --- Edit & Delete States ---
-    editOpen,
-    setEditOpen,
-    editStudent,
-    deleteOpen,
-    setDeleteOpen,
-    deleteStudent,
-    // --- ✅ 3. ID Card States (Dari Hook yang baru diupdate) ---
-    idCardOpen,
-    setIdCardOpen,
-    selectedStudentForCard,
-    handleShowIdCard,
-    // --- Handlers ---
-    fetchStudents,
-    handleEdit,
-    handleDelete,
-    handleSearchChange,
-    handleSort,
     setCurrentPage,
+    students,
+    totalPages,
+    totalCount,
+    stats,
+    error,
+    sortBy,
+    setSortBy,
+    sortDir,
+    setSortDir,
+    fetchStudents,
+    fetchStats,
   } = useStudentList();
 
-  useEffect(() => {
-    const onStudentsChanged = () => {
-      void fetchStudents();
-    };
-
-    window.addEventListener("students:changed", onStudentsChanged);
-    return () =>
-      window.removeEventListener("students:changed", onStudentsChanged);
-  }, [fetchStudents]);
-
-  // --- RENDER ---
-  if (loading && totalCount === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-4">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-        <p className="text-sm text-zinc-500 animate-pulse">
-          Memuat data siswa...
-        </p>
-      </div>
-    );
-  }
+  const visibleStudents = students.filter((student) => {
+    if (accountFilter === "with_account") {
+      return student.hasAccount;
+    }
+    if (accountFilter === "without_account") {
+      return !student.hasAccount;
+    }
+    return true;
+  });
+  const accountSummary = students.reduce(
+    (accumulator, student) => {
+      if (student.hasAccount) {
+        accumulator.withAccount += 1;
+      } else {
+        accumulator.withoutAccount += 1;
+      }
+      return accumulator;
+    },
+    { withAccount: 0, withoutAccount: 0 },
+  );
 
   return (
-    <div className="space-y-4">
-      {/* 1. TOOLBAR (Search & Stats) */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/40 backdrop-blur-md p-4 rounded-2xl border border-zinc-800 shadow-xl">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-          <Input
-            placeholder="Search Name, NIS, or Grade..."
-            className="pl-10 bg-zinc-950/50 border-zinc-800 focus-visible:ring-blue-500/50 h-11 rounded-xl"
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-          />
+    <div className="space-y-6">
+      {!isStudentView && stats ? (
+        <StudentStats
+          total={stats.total}
+          male={stats.male}
+          female={stats.female}
+          activeGrades={stats.activeGrades}
+        />
+      ) : !isStudentView && statsLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {statsSkeletonKeys.map((key) => (
+            <div
+              key={key}
+              className="h-28 rounded-2xl border border-zinc-800 bg-zinc-900/40 animate-pulse"
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {error ? (
+        <InlineState
+          title="Data siswa tidak tersedia"
+          description={error}
+          actionLabel="Coba Lagi"
+          onAction={() => {
+            void fetchStats();
+            void fetchStudents();
+          }}
+          variant="error"
+        />
+      ) : null}
+
+      {isStudentView ? (
+        <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-5">
+          <p className="text-sm font-semibold text-sky-200">Profil Siswa</p>
+          <p className="mt-1 text-sm text-sky-100/80">
+            Halaman ini menampilkan data identitas siswa yang sedang login dalam
+            mode read-only.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
+        <div className="flex flex-col gap-6">
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold tracking-tight text-zinc-100">
+              {isStudentView ? "Identitas Siswa" : "Roster Siswa"}
+            </h2>
+            <p className="max-w-2xl text-sm text-zinc-400">
+              {isStudentView
+                ? "Data mengikuti projection backend dan hanya menampilkan record milik akun yang sedang login."
+                : "Kelola data siswa dengan CRUD penuh, status absensi harian, dan akses cepat ke attendance."}
+            </p>
+          </div>
+
+          {!isStudentView ? (
+            <div className="flex flex-col gap-5">
+              <div className="relative w-full lg:max-w-md">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Cari nama, NIS, kelas..."
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-500/20 transition-all shadow-inner"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                  <Select
+                    value={accountFilter}
+                    onValueChange={(value) =>
+                      setAccountFilter(
+                        value as "all" | "with_account" | "without_account",
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-full sm:w-[170px] border-zinc-800 bg-zinc-950 text-zinc-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      <SelectItem value="all">Semua Akun</SelectItem>
+                      <SelectItem value="with_account">
+                        Sudah Punya Akun
+                      </SelectItem>
+                      <SelectItem value="without_account">
+                        Belum Punya Akun
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={sortBy}
+                    onValueChange={(value) => {
+                      setSortBy(value);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-full sm:w-[140px] border-zinc-800 bg-zinc-950 text-zinc-200">
+                      <ArrowDownAZ className="h-4 w-4 mr-2 text-zinc-500" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      <SelectItem value="createdAt">Terbaru</SelectItem>
+                      <SelectItem value="fullName">Nama</SelectItem>
+                      <SelectItem value="nis">NIS</SelectItem>
+                      <SelectItem value="grade">Kelas</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={sortDir}
+                    onValueChange={(value) => {
+                      setSortDir(value as "asc" | "desc");
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-full sm:w-[100px] border-zinc-800 bg-zinc-950 text-zinc-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      <SelectItem value="desc">Desc</SelectItem>
+                      <SelectItem value="asc">Asc</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="h-4 w-px bg-zinc-800 hidden sm:block mx-1" />
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      void fetchStats();
+                      void fetchStudents(
+                        currentPage,
+                        searchQuery,
+                        sortBy,
+                        sortDir,
+                      );
+                    }}
+                    className="flex-1 sm:flex-none border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                  {canManageStudents ? (
+                    <div className="flex-1 sm:flex-none">
+                      <AddStudentDialog
+                        onSuccess={() => {
+                          void fetchStats();
+                          void fetchStudents(
+                            currentPage,
+                            searchQuery,
+                            sortBy,
+                            sortDir,
+                          );
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {canManageStudents ? (
+                    <div className="flex-1 sm:flex-none">
+                      <ImportStudentsExcelDialog
+                        onSuccess={() => {
+                          void fetchStats();
+                          void fetchStudents(
+                            currentPage,
+                            searchQuery,
+                            sortBy,
+                            sortDir,
+                          );
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {canManageStudents ? (
+                    <div className="flex-1 sm:flex-none">
+                      <BulkCreateStudentAccountsDialog
+                        students={students}
+                        visibleStudents={visibleStudents}
+                        onSuccess={() => {
+                          void fetchStudents(
+                            currentPage,
+                            searchQuery,
+                            sortBy,
+                            sortDir,
+                          );
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {canManageStudents ? (
+                    <div className="flex-1 sm:flex-none">
+                      <BulkRepairStudentClassesDialog
+                        students={students}
+                        onSuccess={() => {
+                          void fetchStudents(
+                            currentPage,
+                            searchQuery,
+                            sortBy,
+                            sortDir,
+                          );
+                          void fetchStats();
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {canManageStudents ? (
+                    <div className="flex-1 sm:flex-none">
+                      <BulkResetStudentPasswordDialog
+                        students={students}
+                        visibleStudents={visibleStudents}
+                        onSuccess={() => {
+                          void fetchStudents(
+                            currentPage,
+                            searchQuery,
+                            sortBy,
+                            sortDir,
+                          );
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-start">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void fetchStats();
+                  void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+                }}
+                className="border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 text-sm">
-          <Badge
-            variant="secondary"
-            className="bg-zinc-800/80 text-zinc-300 px-3 py-1.5 rounded-lg border border-zinc-700/50"
-          >
-            Total:{" "}
-            <span className="text-white ml-1 font-bold">{totalCount}</span>{" "}
-            Siswa
-          </Badge>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={fetchStudents}
-            title="Refresh Data"
-            className="hover:bg-blue-500/10 hover:text-blue-400 rounded-xl transition-all duration-300"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center justify-between text-sm text-zinc-500">
+          <span className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            {totalCount} {isStudentView ? "profil" : "siswa"}
+          </span>
+          {!isStudentView ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                Akun Aktif: {accountSummary.withAccount}
+              </span>
+              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-300">
+                Belum Ada Akun: {accountSummary.withoutAccount}
+              </span>
+            </span>
+          ) : null}
+          {!isStudentView ? (
+            <span>
+              Halaman {currentPage} dari {totalPages}
+            </span>
+          ) : null}
         </div>
       </div>
 
-      {/* 2. TABLE CONTENT */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-md overflow-hidden shadow-2xl">
-        <Table>
-          <TableHeader className="bg-zinc-900/80">
-            <TableRow className="border-zinc-800 hover:bg-transparent">
-              <TableHead
-                className="w-[120px] text-zinc-500 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-white transition-colors group/head"
-                onClick={() => handleSort("nis")}
-              >
-                <div className="flex items-center gap-2">
-                  NIS / NISN
-                  <SortIcon
-                    active={sortConfig?.key === "nis"}
-                    direction={sortConfig?.direction}
-                  />
-                </div>
-              </TableHead>
-              <TableHead
-                className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-white transition-colors group/head"
-                onClick={() => handleSort("fullName")}
-              >
-                <div className="flex items-center gap-2">
-                  Nama Lengkap
-                  <SortIcon
-                    active={sortConfig?.key === "fullName"}
-                    direction={sortConfig?.direction}
-                  />
-                </div>
-              </TableHead>
-              <TableHead
-                className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] cursor-pointer hover:text-white transition-colors group/head"
-                onClick={() => handleSort("grade")}
-              >
-                <div className="flex items-center gap-2">
-                  Kelas
-                  <SortIcon
-                    active={sortConfig?.key === "grade"}
-                    direction={sortConfig?.direction}
-                  />
-                </div>
-              </TableHead>
-              <TableHead className="text-zinc-500 font-bold uppercase tracking-wider text-[10px]">
-                L/P
-              </TableHead>
-              <TableHead className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] hidden lg:table-cell">
-                TTL
-              </TableHead>
-              <TableHead className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] hidden xl:table-cell">
-                Alamat
-              </TableHead>
-              <TableHead className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">
-                Wali Murid
-              </TableHead>
-              <TableHead className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] text-right">
-                Aksi
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="h-[300px] text-center">
-                  <div className="flex flex-col items-center justify-center space-y-4 text-zinc-500">
-                    <div className="p-4 bg-zinc-800/50 rounded-full border border-zinc-700/50">
-                      <Filter className="h-8 w-8" />
-                    </div>
-                    <p className="font-medium text-zinc-400">
-                      Data tidak ditemukan.
-                    </p>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              <AnimatePresence mode="popLayout">
-                {paginatedData.map((student, index) => (
-                  <motion.tr
-                    layout
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.2, delay: index * 0.05 }}
-                    key={student.id}
-                    className="border-zinc-800 hover:bg-zinc-800/40 transition-colors group cursor-default"
-                  >
-                    <TableCell className="font-mono text-zinc-500 group-hover:text-blue-400 transition-colors">
-                      <div className="flex flex-col">
-                        <span>{student.nis}</span>
-                        <span className="text-[10px] text-zinc-600">
-                          {student.nisn || "NISN -"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-semibold text-white">
-                      {student.fullName}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="border-zinc-700 group-hover:border-zinc-500 text-zinc-400 transition-all rounded-md"
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {cardSkeletonKeys.map((key) => (
+            <div
+              key={key}
+              className="h-48 rounded-2xl border border-zinc-800 bg-zinc-900/40 animate-pulse"
+            />
+          ))}
+        </div>
+      ) : visibleStudents.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleStudents.map((student) => (
+            <article
+              key={student.id}
+              className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 transition-colors hover:border-zinc-700 hover:bg-zinc-900/60"
+            >
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p className="font-mono text-xs font-semibold text-blue-400">
+                    {student.nis}
+                    {student.nisn ? ` • NISN ${student.nisn}` : ""}
+                  </p>
+                  <h3 className="text-lg font-semibold text-zinc-100">
+                    {student.fullName}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+                    <span>{student.grade}</span>
+                    {student.accountEmail ? (
+                      <span className="rounded-full border border-zinc-700 bg-zinc-800/50 px-2.5 py-0.5 text-[11px] text-zinc-200">
+                        {student.accountEmail}
+                      </span>
+                    ) : null}
+                    <span
+                      className={
+                        student.hasAccount
+                          ? "inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300"
+                          : "inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-red-300"
+                      }
+                    >
+                      {student.hasAccount ? "Akun Aktif" : "Belum Ada Akun"}
+                    </span>
+                    {student.attendanceToday ? (
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${attendanceBadgeStyle[student.attendanceToday.status]}`}
                       >
-                        {student.grade}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {student.gender === "L" ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                          <span className="text-blue-400 text-xs font-bold font-mono">
-                            L
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-1.5 w-1.5 rounded-full bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]" />
-                          <span className="text-pink-400 text-xs font-bold font-mono">
-                            P
-                          </span>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-zinc-400 text-sm">
+                        {attendanceLabel[student.attendanceToday.status]}
+                        {" • "}
+                        {student.attendanceToday.source === "qr"
+                          ? "QR"
+                          : "Manual"}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/40 px-2.5 py-0.5 text-[11px] text-zinc-300">
+                        Belum Absen Hari Ini
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-zinc-500">Gender</dt>
+                    <dd className="text-zinc-200">
+                      {student.gender === "L" ? "Laki-laki" : "Perempuan"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-zinc-500">TTL</dt>
+                    <dd className="text-right text-zinc-200">
                       {formatBirthInfo(
                         student.tempatLahir,
                         student.tanggalLahir,
                       )}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell text-zinc-400 text-sm max-w-[240px] truncate">
-                      {student.alamat || "-"}
-                    </TableCell>
-                    <TableCell className="text-zinc-500 hidden md:table-cell text-sm italic">
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-zinc-500">Wali</dt>
+                    <dd className="text-right text-zinc-200">
                       {student.parentName || "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {/* --- ACTION BUTTONS --- */}
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-                        {/* ✅ 4. Tombol ID CARD Baru */}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-zinc-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-xl"
-                          onClick={() => handleShowIdCard(student)}
-                          title="Generate ID Card"
-                        >
-                          <QrCode className="h-4 w-4" />
-                        </Button>
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-zinc-500">No. Wali</dt>
+                    <dd className="text-right text-zinc-200">
+                      {student.parentPhone || "-"}
+                    </dd>
+                  </div>
+                </dl>
 
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-xl"
-                          onClick={() => handleEdit(student)}
-                          title="Edit Data"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 text-zinc-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl"
-                          onClick={() => handleDelete(student)}
-                          title="Hapus Siswa"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                {student.alamat ? (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-400">
+                    {student.alamat}
+                  </div>
+                ) : null}
 
-      {/* 3. PAGINATION FOOTER */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-3 py-4">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-600 mr-4">
-            Halaman {currentPage} <span className="text-zinc-800 mx-1">/</span>{" "}
-            {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 border-zinc-800 bg-zinc-900/50 rounded-xl hover:bg-zinc-800 transition-all"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 border-zinc-800 bg-zinc-900/50 rounded-xl hover:bg-zinc-800 transition-all"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
+                <div className="pt-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedStudentForCard(student);
+                        setIdCardOpen(true);
+                      }}
+                      className="border-blue-700/60 text-blue-300 hover:bg-blue-900/20"
+                    >
+                      <IdCard className="mr-2 h-4 w-4" />
+                      Cetak Kartu
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setSelectedStudent(student)}
+                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      Detail
+                    </Button>
+                    <Button
+                      asChild
+                      type="button"
+                      variant="outline"
+                      className="border-sky-700/60 text-sky-300 hover:bg-sky-900/20"
+                    >
+                      <Link
+                        href={`/dashboard/attendance?tab=history&studentId=${encodeURIComponent(student.id)}&className=${encodeURIComponent(student.grade)}&startDate=${today}&endDate=${today}`}
+                      >
+                        Lihat Absensi
+                      </Link>
+                    </Button>
+                    {canManageStudents ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-amber-700/60 text-amber-300 hover:bg-amber-900/20"
+                        onClick={() => {
+                          setSelectedStudentForEdit(student);
+                          setEditOpen(true);
+                        }}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit
+                      </Button>
+                    ) : null}
+                    {canManageStudents && !student.hasAccount ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20"
+                        onClick={() => {
+                          setSelectedStudentForAccount(student);
+                          setAccountOpen(true);
+                        }}
+                      >
+                        <UserRoundPlus className="mr-2 h-4 w-4" />
+                        Buat Akun
+                      </Button>
+                    ) : null}
+                    {canManageStudents ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-red-700/60 text-red-300 hover:bg-red-900/20"
+                        onClick={() => {
+                          setSelectedStudentForDelete(student);
+                          setDeleteOpen(true);
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Hapus
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
+      ) : (
+        <InlineState
+          title="Belum ada data siswa"
+          description="Data roster siswa belum tersedia untuk filter saat ini."
+          variant="info"
+        />
       )}
 
-      {/* DIALOGS */}
+      {!isStudentView && totalPages > 1 ? (
+        <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+          <p className="text-sm text-zinc-500">
+            Menampilkan halaman {currentPage} dari {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              disabled={currentPage === 1}
+              onClick={() => {
+                const nextPage = Math.max(1, currentPage - 1);
+                setCurrentPage(nextPage);
+                void fetchStudents(nextPage, searchQuery, sortBy, sortDir);
+              }}
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              disabled={currentPage === totalPages}
+              onClick={() => {
+                const nextPage = Math.min(totalPages, currentPage + 1);
+                setCurrentPage(nextPage);
+                void fetchStudents(nextPage, searchQuery, sortBy, sortDir);
+              }}
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <Dialog
+        open={selectedStudent !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedStudent(null);
+          }
+        }}
+      >
+        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedStudent?.fullName || "Detail Siswa"}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Detail data diri siswa.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedStudent ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  ["NIS", selectedStudent.nis],
+                  ["NISN", selectedStudent.nisn || "-"],
+                  ["Kelas", selectedStudent.grade],
+                  ["Email Login", selectedStudent.accountEmail || "-"],
+                  [
+                    "Password Login",
+                    selectedStudent.hasAccount
+                      ? "Tersimpan aman (hash), gunakan reset password untuk mengganti."
+                      : "-",
+                  ],
+                  [
+                    "Gender",
+                    selectedStudent.gender === "L" ? "Laki-laki" : "Perempuan",
+                  ],
+                  [
+                    "TTL",
+                    formatBirthInfo(
+                      selectedStudent.tempatLahir,
+                      selectedStudent.tanggalLahir,
+                    ),
+                  ],
+                  ["Nama Wali", selectedStudent.parentName || "-"],
+                  ["No. Wali", selectedStudent.parentPhone || "-"],
+                  [
+                    "Status Akun",
+                    selectedStudent.hasAccount
+                      ? "Sudah ada akun"
+                      : "Belum ada akun",
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4"
+                  >
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">
+                      {label}
+                    </p>
+                    <p className="mt-2 text-sm text-zinc-100">{value}</p>
+                  </div>
+                ))}
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 md:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-zinc-500">
+                    Alamat
+                  </p>
+                  <p className="mt-2 text-sm text-zinc-300">
+                    {selectedStudent.alamat || "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedStudentForCard(selectedStudent);
+                    setIdCardOpen(true);
+                  }}
+                  className="border-blue-700/60 text-blue-300 hover:bg-blue-900/20"
+                >
+                  <IdCard className="mr-2 h-4 w-4" />
+                  Cetak Kartu
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <StudentIdDialog
+        open={idCardOpen}
+        onOpenChange={setIdCardOpen}
+        student={selectedStudentForCard}
+      />
+
       <EditStudentDialog
-        student={editStudent}
+        student={selectedStudentForEdit}
         open={editOpen}
         onOpenChange={setEditOpen}
-        onSuccess={fetchStudents}
+        onSuccess={() => {
+          void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+          void fetchStats();
+        }}
       />
 
       <DeleteStudentDialog
-        student={deleteStudent}
+        student={selectedStudentForDelete}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        onSuccess={fetchStudents}
+        onSuccess={() => {
+          void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+          void fetchStats();
+        }}
       />
 
-      {/* ✅ 5. Render Dialog ID Card Disini */}
-      <StudentIdDialog
-        student={selectedStudentForCard}
-        open={idCardOpen}
-        onOpenChange={setIdCardOpen}
+      <CreateStudentAccountDialog
+        student={selectedStudentForAccount}
+        open={accountOpen}
+        onOpenChange={setAccountOpen}
+        onSuccess={() => {
+          void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+        }}
       />
     </div>
   );

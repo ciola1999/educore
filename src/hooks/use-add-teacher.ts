@@ -5,22 +5,29 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { addTeacher } from "@/lib/services/teacher";
+import { apiPost } from "@/lib/api/request";
 
 const addTeacherSchema = z.object({
   fullName: z.string().min(2, "Nama minimal 2 karakter"),
   email: z.string().email("Email tidak valid"),
   role: z.enum(["admin", "teacher", "staff"]),
-  password: z
-    .string()
-    .min(6, "Password minimal 6 karakter")
-    .optional()
-    .or(z.literal("")),
+  password: z.string().min(8, "Password minimal 8 karakter"),
+  nip: z.string().optional(),
+  jenisKelamin: z.enum(["L", "P"]).optional(),
+  tempatLahir: z.string().optional(),
+  tanggalLahir: z.string().optional(),
+  alamat: z.string().optional(),
+  noTelepon: z.string().optional(),
+  isActive: z.boolean(),
 });
 
 type AddTeacherFormValues = z.infer<typeof addTeacherSchema>;
 
-export function useAddTeacherHook() {
+type UseAddTeacherHookOptions = {
+  onSuccess?: () => void;
+};
+
+export function useAddTeacherHook(options: UseAddTeacherHookOptions = {}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -31,6 +38,13 @@ export function useAddTeacherHook() {
       email: "",
       role: "teacher",
       password: "",
+      nip: "",
+      jenisKelamin: undefined,
+      tempatLahir: "",
+      tanggalLahir: "",
+      alamat: "",
+      noTelepon: "",
+      isActive: true,
     },
   });
 
@@ -38,34 +52,32 @@ export function useAddTeacherHook() {
     setLoading(true);
 
     try {
-      // Prepare data for service
-      const result = await addTeacher({
+      await apiPost<{ id: string }>("/api/teachers", {
         fullName: values.fullName,
         email: values.email,
         role: values.role,
-        passwordHash: values.password || undefined, // We'll hash it in the service
+        password: values.password,
+        nip: values.nip || null,
+        jenisKelamin: values.jenisKelamin || null,
+        tempatLahir: values.tempatLahir || null,
+        tanggalLahir: values.tanggalLahir || null,
+        alamat: values.alamat || null,
+        noTelepon: values.noTelepon || null,
+        isActive: values.isActive,
       });
-
-      if (result.success) {
-        toast.success("Guru berhasil ditambahkan!");
-        setOpen(false);
-        form.reset();
-
-        // Force refresh to update the list
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        if (result.code === "EMAIL_EXISTS") {
-          form.setError("email", { message: result.error });
-          toast.error("Email sudah terdaftar");
-        } else {
-          toast.error(result.error);
-        }
-      }
+      toast.success("Guru berhasil ditambahkan!");
+      setOpen(false);
+      form.reset();
+      options.onSuccess?.();
     } catch (error) {
-      console.error("Submit error:", error);
-      toast.error("Terjadi kesalahan sistem");
+      const message =
+        error instanceof Error ? error.message : "Terjadi kesalahan sistem";
+
+      if (message.toLowerCase().includes("email")) {
+        form.setError("email", { message });
+      }
+
+      toast.error(message);
     } finally {
       setLoading(false);
     }

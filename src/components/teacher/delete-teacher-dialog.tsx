@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { deleteTeacher as deleteTeacherService } from "@/lib/services/teacher";
+import { apiDelete } from "@/lib/api/request";
 
 interface DeleteTeacherDialogProps {
   teacher: { id: string; fullName: string } | null;
@@ -35,17 +35,14 @@ export function DeleteTeacherDialog({
 
     setLoading(true);
     try {
-      const success = await deleteTeacherService(teacher.id);
-      if (success) {
-        toast.success("Guru berhasil dihapus");
-        onOpenChange(false);
-        onSuccess();
-      } else {
-        toast.error("Gagal menghapus guru");
-      }
+      await apiDelete<{ deleted: true }>(`/api/teachers/${teacher.id}`);
+      toast.success("Guru berhasil dihapus");
+      onOpenChange(false);
+      onSuccess();
     } catch (error) {
-      console.error("❌ Delete failed:", error);
-      toast.error("Terjadi kesalahan sistem");
+      toast.error(
+        error instanceof Error ? error.message : "Terjadi kesalahan sistem",
+      );
     } finally {
       setLoading(false);
     }

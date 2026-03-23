@@ -1,5 +1,3 @@
-import { getDefaultAdminHash } from "@/lib/auth/hash";
-
 /**
  * Interface that matches both @tauri-apps/plugin-sql and @libsql/client
  */
@@ -17,12 +15,40 @@ export interface DatabaseLike {
 }
 
 const DEFAULT_ADMIN_EMAIL = "admin@educore.school";
-
 const DEFAULT_ACTIVE_DAYS = [1, 2, 3, 4, 5] as const;
+const UUID_LIKE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export interface MigrationOptions {
+  seedData?: boolean;
+  forceResetAdmin?: boolean;
+}
+
+function parseBooleanEnv(value: string | undefined): boolean {
+  if (!value) return false;
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function resolveMigrationOptions(
+  options?: MigrationOptions,
+): Required<MigrationOptions> {
+  return {
+    seedData: options?.seedData ?? true,
+    forceResetAdmin:
+      options?.forceResetAdmin ??
+      parseBooleanEnv(process.env.FORCE_RESET_ADMIN),
+  };
+}
 
 function getAcademicYearLabel(): string {
   const year = new Date().getFullYear();
   return `${year}/${year + 1}`;
+}
+
+function isUuidLikeClassValue(value: string | null | undefined): boolean {
+  return UUID_LIKE_PATTERN.test((value || "").trim());
 }
 
 async function seedClassesFromLegacyData(db: DatabaseLike): Promise<void> {
@@ -46,13 +72,13 @@ async function seedClassesFromLegacyData(db: DatabaseLike): Promise<void> {
   const classCandidates = new Set<string>();
 
   for (const row of classFromUsers) {
-    if (row.kelas_id) {
+    if (row.kelas_id && !isUuidLikeClassValue(row.kelas_id)) {
       classCandidates.add(row.kelas_id.trim());
     }
   }
 
   for (const row of classFromStudents) {
-    if (row.grade) {
+    if (row.grade && !isUuidLikeClassValue(row.grade)) {
       classCandidates.add(row.grade.trim());
     }
   }
@@ -155,7 +181,7 @@ async function syncStudentsFromUsers(db: DatabaseLike): Promise<void> {
     let grade = "UNASSIGNED";
     const rawClassRef = user.kelas_id?.trim();
 
-    if (rawClassRef) {
+    if (rawClassRef && !isUuidLikeClassValue(rawClassRef)) {
       const classById = await db.select<{ name: string }>(
         `SELECT name
          FROM classes
@@ -165,6 +191,20 @@ async function syncStudentsFromUsers(db: DatabaseLike): Promise<void> {
       );
 
       grade = classById[0]?.name?.trim() || rawClassRef;
+    } else if (rawClassRef) {
+      const classById = await db.select<{ name: string }>(
+        `SELECT name
+         FROM classes
+         WHERE id = ? AND deleted_at IS NULL
+         LIMIT 1`,
+        [rawClassRef],
+      );
+
+      const resolvedName = classById[0]?.name?.trim();
+      grade =
+        resolvedName && !isUuidLikeClassValue(resolvedName)
+          ? resolvedName
+          : "UNASSIGNED";
     }
 
     const gender = user.jenis_kelamin === "P" ? "P" : "L";
@@ -336,6 +376,7 @@ async function ensureUserStudentProjectionTriggers(
         'pending'
       WHERE NEW.kelas_id IS NOT NULL
         AND TRIM(NEW.kelas_id) != ''
+        AND NEW.kelas_id NOT GLOB '????????-????-????-????-????????????'
         AND NOT EXISTS (
           SELECT 1 FROM classes
           WHERE deleted_at IS NULL
@@ -367,8 +408,7 @@ async function ensureUserStudentProjectionTriggers(
         NEW.full_name,
         CASE WHEN NEW.jenis_kelamin = 'P' THEN 'P' ELSE 'L' END,
         COALESCE(
-          (SELECT name FROM classes WHERE id = NEW.kelas_id AND deleted_at IS NULL LIMIT 1),
-          NEW.kelas_id,
+          NULLIF((SELECT name FROM classes WHERE id = NEW.kelas_id AND deleted_at IS NULL LIMIT 1), NEW.kelas_id),
           'UNASSIGNED'
         ),
         NULL,
@@ -432,6 +472,7 @@ async function ensureUserStudentProjectionTriggers(
         'pending'
       WHERE NEW.kelas_id IS NOT NULL
         AND TRIM(NEW.kelas_id) != ''
+        AND NEW.kelas_id NOT GLOB '????????-????-????-????-????????????'
         AND NOT EXISTS (
           SELECT 1 FROM classes
           WHERE deleted_at IS NULL
@@ -444,8 +485,7 @@ async function ensureUserStudentProjectionTriggers(
           full_name = NEW.full_name,
           gender = CASE WHEN NEW.jenis_kelamin = 'P' THEN 'P' ELSE 'L' END,
           grade = COALESCE(
-            (SELECT name FROM classes WHERE id = NEW.kelas_id AND deleted_at IS NULL LIMIT 1),
-            NEW.kelas_id,
+            NULLIF((SELECT name FROM classes WHERE id = NEW.kelas_id AND deleted_at IS NULL LIMIT 1), NEW.kelas_id),
             'UNASSIGNED'
           ),
           nisn = NEW.nisn,
@@ -482,8 +522,7 @@ async function ensureUserStudentProjectionTriggers(
         NEW.full_name,
         CASE WHEN NEW.jenis_kelamin = 'P' THEN 'P' ELSE 'L' END,
         COALESCE(
-          (SELECT name FROM classes WHERE id = NEW.kelas_id AND deleted_at IS NULL LIMIT 1),
-          NEW.kelas_id,
+          NULLIF((SELECT name FROM classes WHERE id = NEW.kelas_id AND deleted_at IS NULL LIMIT 1), NEW.kelas_id),
           'UNASSIGNED'
         ),
         NULL,
@@ -521,33 +560,66 @@ async function ensureUserStudentProjectionTriggers(
   `);
 }
 
-async function seedDefaultAdmin(db: DatabaseLike): Promise<void> {
+async function seedDefaultAdmin(
+  db: DatabaseLike,
+  options: Required<MigrationOptions>,
+): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
 
-  const existing = await db.select<any[]>(
+  const existing = await db.select<Record<string, unknown>>(
     "SELECT * FROM users WHERE email = ? LIMIT 1",
     [DEFAULT_ADMIN_EMAIL],
   );
 
-  // REPAIR MECHANISM
-  const admin = existing[0] as Record<string, any> | undefined;
-  const currentHash = admin ? admin.password_hash || admin.passwordHash : null;
+  // REPAIR MECHANISM - Force recreate admin with invalid hash format
+  const admin = existing[0] as Record<string, unknown> | undefined;
+  const currentHash = admin
+    ? (admin.password_hash as string | undefined) ||
+      (admin.passwordHash as string | undefined) ||
+      null
+    : null;
 
-  if (admin && !currentHash) {
-    console.warn(
-      `[Seed] 🛠️ REPAIRING Admin ${DEFAULT_ADMIN_EMAIL}: Missing password hash. Recreating...`,
-    );
+  // Check if hash is valid Argon2id format (must have proper structure)
+  // Valid format: $argon2id$v=19$m=65536,t=3,p=4$[salt]$[hash]
+  // Invalid hash has short hash part (like y6T8X/Y3G7pZ6H9W2O1V5A)
+  const isValidArgon2Hash =
+    typeof currentHash === "string" &&
+    currentHash.startsWith("$argon2id$") &&
+    currentHash.split("$").length === 6 &&
+    currentHash.length > 80; // Valid hash should be ~100+ chars
+
+  const shouldReset = options.forceResetAdmin || (admin && !isValidArgon2Hash);
+
+  if (shouldReset) {
+    if (options.forceResetAdmin && admin) {
+      console.warn(
+        `[Seed] 🛠️ FORCE_RESET_ADMIN enabled. Purging admin ${DEFAULT_ADMIN_EMAIL}...`,
+      );
+    } else if (admin) {
+      console.warn(
+        `[Seed] 🛠️ INVALID/BROKEN HASH DETECTED for ${DEFAULT_ADMIN_EMAIL}. Hash length: ${currentHash?.length || 0}. Purging and recreating...`,
+      );
+    }
     await db.execute("DELETE FROM users WHERE email = ?", [
       DEFAULT_ADMIN_EMAIL,
     ]);
-    existing.length = 0; // Force recreation below
+    // Force existing to be empty so it falls through to the creation block
+    existing.length = 0;
+  } else if (admin) {
+    console.info(
+      `[Seed] Admin ${DEFAULT_ADMIN_EMAIL} has valid Argon2id hash (${currentHash?.length} chars).`,
+    );
   }
 
   if (existing.length === 0) {
     console.info(
       `[Seed] 🚀 Creating fresh default admin: ${DEFAULT_ADMIN_EMAIL}`,
     );
-    const passwordHash = await getDefaultAdminHash();
+    const passwordHash =
+      "$argon2id$v=19$m=65536,t=3,p=4$9+c59FN6Z2xHL2A3jy+Egg$PN/cvonv7WS47qVhhjqsok+sFRWtDvyl4oHCgyTCVOw";
+    console.info(
+      `[Seed] Using password hash (len: ${passwordHash.length}): ${passwordHash.substring(0, 20)}...`,
+    );
     const id = crypto.randomUUID();
 
     // Explicitly use snake_case since that's what's in the PRAGMA table_info
@@ -573,7 +645,247 @@ async function seedDefaultAdmin(db: DatabaseLike): Promise<void> {
     return;
   }
 
-  console.info(`[Seed] Admin ${DEFAULT_ADMIN_EMAIL} is healthy.`);
+  console.info(
+    `[Seed] ✅ Admin ${DEFAULT_ADMIN_EMAIL} is healthy with valid credentials.`,
+  );
+}
+
+async function seedDefaultStaffAccounts(db: DatabaseLike): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const defaultAccounts = [
+    {
+      fullName: "Guru Default",
+      email: "guru@educore.school",
+      role: "teacher",
+      passwordHash:
+        "$argon2id$v=19$m=19456,t=2,p=1$ABPxeDjIPpirmcvDRbiJBg$/zVBHUf8YpiWLvvbF1sNJHIKJSQOU8NmThJN040nwwE",
+    },
+    {
+      fullName: "Staff Default",
+      email: "staff@educore.school",
+      role: "staff",
+      passwordHash:
+        "$argon2id$v=19$m=19456,t=2,p=1$aR/qtnO9mHSlo1aOT5i4tg$Abr9GfnkgVSpEtUnxEaSfA/dtS150//pwgow490RJzk",
+    },
+  ] as const;
+
+  for (const account of defaultAccounts) {
+    const existing = await db.select<{
+      id: string;
+      password_hash: string | null;
+    }>("SELECT id, password_hash FROM users WHERE email = ? LIMIT 1", [
+      account.email,
+    ]);
+
+    const nextHash = account.passwordHash;
+    if (existing.length === 0) {
+      await db.execute(
+        `INSERT INTO users (id, full_name, email, role, password_hash, is_active, version, hlc, deleted_at, created_at, updated_at, sync_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          account.fullName,
+          account.email,
+          account.role,
+          nextHash,
+          1,
+          1,
+          null,
+          null,
+          now,
+          now,
+          "pending",
+        ],
+      );
+      continue;
+    }
+
+    const currentHash = existing[0]?.password_hash;
+    if (!currentHash || !currentHash.startsWith("$argon2id$")) {
+      await db.execute(
+        `UPDATE users
+         SET password_hash = ?, role = ?, is_active = 1, deleted_at = NULL, updated_at = ?, sync_status = 'pending'
+         WHERE email = ?`,
+        [nextHash, account.role, now, account.email],
+      );
+    }
+  }
+}
+
+/**
+ * Seed default roles and permissions for RBAC
+ */
+async function seedRolesAndPermissions(db: DatabaseLike): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+
+  // Define default roles
+  const defaultRoles = [
+    {
+      id: "role_admin",
+      name: "admin",
+      description: "Administrator with full access",
+    },
+    { id: "role_teacher", name: "teacher", description: "Teacher/Guru" },
+    { id: "role_staff", name: "staff", description: "Staff/Tata Usaha" },
+    { id: "role_student", name: "student", description: "Student/Siswa" },
+    { id: "role_parent", name: "parent", description: "Parent/Orang Tua" },
+  ];
+
+  // Define default permissions (resource:action format)
+  const defaultPermissions = [
+    // User management
+    {
+      id: "perm_users_read",
+      name: "users:read",
+      resource: "users",
+      action: "read",
+    },
+    {
+      id: "perm_users_write",
+      name: "users:write",
+      resource: "users",
+      action: "write",
+    },
+    {
+      id: "perm_users_delete",
+      name: "users:delete",
+      resource: "users",
+      action: "delete",
+    },
+    // Academic
+    {
+      id: "perm_academic_read",
+      name: "academic:read",
+      resource: "academic",
+      action: "read",
+    },
+    {
+      id: "perm_academic_write",
+      name: "academic:write",
+      resource: "academic",
+      action: "write",
+    },
+    // Attendance
+    {
+      id: "perm_attendance_read",
+      name: "attendance:read",
+      resource: "attendance",
+      action: "read",
+    },
+    {
+      id: "perm_attendance_write",
+      name: "attendance:write",
+      resource: "attendance",
+      action: "write",
+    },
+    // Finance
+    {
+      id: "perm_finance_read",
+      name: "finance:read",
+      resource: "finance",
+      action: "read",
+    },
+    {
+      id: "perm_finance_write",
+      name: "finance:write",
+      resource: "finance",
+      action: "write",
+    },
+    // Reports
+    {
+      id: "perm_reports",
+      name: "reports:generate",
+      resource: "reports",
+      action: "generate",
+    },
+    // Settings
+    {
+      id: "perm_settings",
+      name: "settings:manage",
+      resource: "settings",
+      action: "manage",
+    },
+  ];
+
+  // Seed roles
+  for (const role of defaultRoles) {
+    const existingRole = await db.select<{ id: string }>(
+      "SELECT id FROM roles WHERE id = ?",
+      [role.id],
+    );
+
+    if (existingRole.length === 0) {
+      await db.execute(
+        `INSERT INTO roles (id, name, description, version, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [role.id, role.name, role.description, 1, now, now, null],
+      );
+      console.info(`✅ [Seed] Role '${role.name}' created.`);
+    }
+  }
+
+  // Seed permissions
+  for (const perm of defaultPermissions) {
+    const existingPerm = await db.select<{ id: string }>(
+      "SELECT id FROM permissions WHERE id = ?",
+      [perm.id],
+    );
+
+    if (existingPerm.length === 0) {
+      await db.execute(
+        `INSERT INTO permissions (id, name, resource, action, version, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [perm.id, perm.name, perm.resource, perm.action, 1, now, now, null],
+      );
+      console.info(`✅ [Seed] Permission '${perm.name}' created.`);
+    }
+  }
+
+  // Assign all permissions to admin role
+  const adminRoleId = "role_admin";
+  for (const perm of defaultPermissions) {
+    const existingAssignment = await db.select<{ id: string }>(
+      "SELECT id FROM role_permissions WHERE role_id = ? AND permission_id = ?",
+      [adminRoleId, perm.id],
+    );
+
+    if (existingAssignment.length === 0) {
+      await db.execute(
+        `INSERT INTO role_permissions (id, role_id, permission_id, version, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), adminRoleId, perm.id, 1, now, now, null],
+      );
+    }
+  }
+
+  // Assign teacher permissions
+  const teacherRoleId = "role_teacher";
+  const teacherPerms = [
+    "perm_academic_read",
+    "perm_academic_write",
+    "perm_attendance_read",
+    "perm_attendance_write",
+    "perm_reports",
+  ];
+  for (const permName of teacherPerms) {
+    const perm = defaultPermissions.find((p) => p.name === permName);
+    if (!perm) continue;
+
+    const existingAssignment = await db.select<{ id: string }>(
+      "SELECT id FROM role_permissions WHERE role_id = ? AND permission_id = ?",
+      [teacherRoleId, perm.id],
+    );
+
+    if (existingAssignment.length === 0) {
+      await db.execute(
+        `INSERT INTO role_permissions (id, role_id, permission_id, version, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), teacherRoleId, perm.id, 1, now, now, null],
+      );
+    }
+  }
+
+  console.info(`✅ [Seed] Roles and permissions seeded successfully.`);
 }
 
 /**
@@ -610,7 +922,12 @@ async function safeAddColumn(
 /**
  * Run all migrations — safe to call multiple times (idempotent)
  */
-export async function runMigrations(db: DatabaseLike): Promise<void> {
+export async function runMigrations(
+  db: DatabaseLike,
+  options?: MigrationOptions,
+): Promise<void> {
+  const resolvedOptions = resolveMigrationOptions(options);
+
   console.info("🔄 [Migration] Starting database sync...");
 
   // ============================================================
@@ -1567,10 +1884,17 @@ export async function runMigrations(db: DatabaseLike): Promise<void> {
     throw new Error("Migration failed: required table 'users' was not created");
   }
 
-  await seedDefaultAdmin(db);
-  await seedClassesFromLegacyData(db);
-  await syncStudentsFromUsers(db);
-  await seedDefaultAttendanceSettings(db);
+  if (resolvedOptions.seedData) {
+    await seedDefaultAdmin(db, resolvedOptions);
+    await seedDefaultStaffAccounts(db);
+    await seedRolesAndPermissions(db);
+    await seedClassesFromLegacyData(db);
+    await syncStudentsFromUsers(db);
+    await seedDefaultAttendanceSettings(db);
+  } else {
+    console.info("ℹ️ [Migration] Seed phase skipped for read-only inspection.");
+  }
+
   await ensureUserStudentProjectionTriggers(db);
 
   console.info("✅ [Migration] Database sync complete!");

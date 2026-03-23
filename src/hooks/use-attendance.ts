@@ -1,60 +1,97 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { recordBulkAttendance } from "@/core/services/attendance-service";
-import type { BulkAttendance } from "@/lib/validations/schemas";
+import { apiGet, apiPost } from "@/lib/api/request";
 
-// Temporary stub since these are missing in attendance.ts
-type AttendanceSummary = {
-  present: number;
-  sick: number;
-  permission: number;
-  alpha: number;
+export type QrScanResult = {
+  success: boolean;
+  message: string;
+  type: "CHECK_IN" | "CHECK_OUT" | "ERROR";
+  data?: {
+    fullName: string;
+    nis: string;
+    grade: string;
+    time: string;
+    status: "on-time" | "late";
+    type: "in" | "out";
+    lateMinutes: number;
+    photo?: string;
+  };
 };
 
-/**
- * Hook to record bulk attendance
- */
-export function useRecordAttendance() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export type TodayAttendanceLog = {
+  id: string;
+  studentId: string;
+  snapshotStudentName: string | null;
+  snapshotStudentNis: string | null;
+  date: string;
+  checkInTime: string | Date | null;
+  checkOutTime: string | Date | null;
+  status: "PRESENT" | "LATE" | "EXCUSED" | "ABSENT";
+  lateDuration: number | null;
+  syncStatus: "synced" | "pending" | "error";
+};
 
-  const submit = useCallback(async (data: BulkAttendance) => {
-    setIsSubmitting(true);
-    setError(null);
+export type QrAttendanceOptions = {
+  onSuccess?: (result: QrScanResult) => void;
+  onError?: (error: Error) => void;
+};
+
+export function useQrAttendance(options: QrAttendanceOptions = {}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logs, setLogs] = useState<TodayAttendanceLog[]>([]);
+  const [lastResult, setLastResult] = useState<QrScanResult | null>(null);
+
+  const loadTodayLogs = useCallback(async () => {
+    setLoadingLogs(true);
     try {
-      const result = await recordBulkAttendance(data);
-      if (!result.success) {
-        setError(result.message || "Failed to submit");
-        return false;
-      }
-      return true;
-    } catch {
-      setError("System error");
-      return false;
+      const data = await apiGet<TodayAttendanceLog[]>("/api/attendance/today");
+      setLogs(data);
     } finally {
-      setIsSubmitting(false);
+      setLoadingLogs(false);
     }
   }, []);
 
-  return { submit, isSubmitting, error };
-}
-
-/**
- * Hook to fetch attendance summary
- */
-export function useAttendanceSummary(_classId: string, _date: string) {
-  const [summary, setSummary] = useState<AttendanceSummary | null>(null);
-  const [loading, _setLoading] = useState(false);
-
-  const fetchSummary = useCallback(async () => {
-    // Stub implementation
-    setSummary({ present: 0, sick: 0, permission: 0, alpha: 0 });
-  }, []);
+  async function submitQrScan(qrData: string) {
+    setSubmitting(true);
+    try {
+      const result = await apiPost<QrScanResult>("/api/attendance/scan", {
+        qrData,
+      });
+      setLastResult(result);
+      await loadTodayLogs();
+      if (result.success && options.onSuccess) {
+        options.onSuccess(result);
+      }
+      return result;
+    } catch (error) {
+      const fallbackResult: QrScanResult = {
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Gagal memproses QR scan",
+        type: "ERROR",
+      };
+      setLastResult(fallbackResult);
+      if (options.onError && error instanceof Error) {
+        options.onError(error);
+      }
+      throw error;
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   useEffect(() => {
-    fetchSummary();
-  }, [fetchSummary]);
+    void loadTodayLogs();
+  }, [loadTodayLogs]);
 
-  return { summary, loading, refetch: fetchSummary };
+  return {
+    submitting,
+    loadingLogs,
+    logs,
+    lastResult,
+    loadTodayLogs,
+    submitQrScan,
+  };
 }

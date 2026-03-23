@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Wajib untuk Tauri (Static Export)
-  output: "export",
-
-  // Disable Image Optimization API (karena tidak ada Node server di desktop)
+  // Keep Next.js server capabilities enabled (App Router + API routes).
+  // Phase 1 UI depends on /api/* contract, so static export is not compatible.
   images: {
     unoptimized: true,
   },

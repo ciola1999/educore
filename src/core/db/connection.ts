@@ -1,7 +1,12 @@
+import type { InValue } from "@libsql/client";
 import type Database from "@tauri-apps/plugin-sql";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { isTauri } from "../env";
-import { type DatabaseLike, runMigrations } from "./migrations";
+import {
+  type DatabaseLike,
+  type MigrationOptions,
+  runMigrations,
+} from "./migrations";
 import * as schema from "./schema";
 
 /**
@@ -22,27 +27,90 @@ let _sqliteRemote: Database | null = null;
 let _initializing: Promise<ReturnType<typeof drizzle<typeof schema>>> | null =
   null;
 
+export interface DatabaseInitOptions extends MigrationOptions {}
+
+function shouldUseSharedDbCache(options?: DatabaseInitOptions): boolean {
+  return (
+    (options?.seedData ?? true) === true &&
+    options?.forceResetAdmin === undefined
+  );
+}
+
+function normalizeLibsqlUrl(url: string): string {
+  return url.startsWith("libsql://")
+    ? url.replace("libsql://", "https://")
+    : url;
+}
+
+function resolveServerDatabaseConfig() {
+  const url =
+    process.env.AUTH_DATABASE_URL ||
+    process.env.TURSO_DATABASE_URL ||
+    process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "Database URL is not configured for server runtime. Set DATABASE_URL, AUTH_DATABASE_URL, or TURSO_DATABASE_URL.",
+    );
+  }
+
+  return {
+    url: normalizeLibsqlUrl(url),
+    authToken:
+      process.env.AUTH_DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN,
+  };
+}
+
+function resolveBrowserDatabaseConfig() {
+  const url = process.env.NEXT_PUBLIC_DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "NEXT_PUBLIC_DATABASE_URL is required for browser runtime database access.",
+    );
+  }
+
+  return {
+    url: normalizeLibsqlUrl(url),
+    authToken: undefined,
+  };
+}
+
 /**
  * Initialize and get the database instance
  */
-export const getDatabase = async () => {
-  if (_db) return _db;
-  if (_initializing) return _initializing;
+export const getDatabase = async (options?: DatabaseInitOptions) => {
+  const useSharedCache = shouldUseSharedDbCache(options);
 
-  _initializing = (async () => {
+  if (useSharedCache && _db) return _db;
+  if (useSharedCache && _initializing) return _initializing;
+
+  const initialize = (async () => {
     if (isTauri()) {
       // Desktop: Native SQLite via Tauri Plugin SQL
       const { default: Database } = await import("@tauri-apps/plugin-sql");
-      _sqliteRemote = await Database.load("sqlite:educore_v4.db");
+      _sqliteRemote = await Database.load("sqlite:educore.db");
+
+      // Set encryption key for SQLCipher (if provided)
+      const key = process.env.TAURI_DB_KEY;
+      if (key) {
+        // Escape single quotes in key to prevent SQL injection
+        const safeKey = key.replace(/'/g, "''");
+        await _sqliteRemote.execute(`PRAGMA key = '${safeKey}';`);
+      } else {
+        console.warn(
+          "⚠️ [DB] TAURI_DB_KEY not set. Using unencrypted database for development.",
+        );
+      }
 
       // Hardening & integrity defaults
       await _sqliteRemote.execute("PRAGMA foreign_keys = ON");
       await _sqliteRemote.execute("PRAGMA journal_mode = WAL");
 
       // Ensure schema exists before any query execution
-      await runMigrations(_sqliteRemote);
+      console.info("⚡ [DB] Starting migrations...");
+      await runMigrations(_sqliteRemote, options);
+      console.info("✅ [DB] Migrations completed successfully.");
 
-      _db = drizzle(
+      const drizzleDb = drizzle(
         async (sql, params, method) => {
           try {
             if (!_sqliteRemote) throw new Error("DB not loaded");
@@ -79,40 +147,45 @@ export const getDatabase = async () => {
         },
         { schema },
       );
-    } else {
-      // Web: libSQL WASM for local-first in browser
-      try {
-        const { createClient } = await import("@libsql/client/web");
-        let url = process.env.NEXT_PUBLIC_DATABASE_URL || "libsql://local.db";
-        const authToken = process.env.NEXT_PUBLIC_DATABASE_AUTH_TOKEN;
 
-        // Elite 2026 Web Pattern: Always use https for Turso in browser to avoid protocol issues
-        if (url.startsWith("libsql://")) {
-          url = url.replace("libsql://", "https://");
-        }
+      if (useSharedCache) {
+        _db = drizzleDb;
+      }
+
+      return drizzleDb;
+    } else {
+      // Web/Server non-Tauri: libSQL over HTTP(S)
+      try {
+        const isServerRuntime = typeof window === "undefined";
+        const dbConfig = isServerRuntime
+          ? resolveServerDatabaseConfig()
+          : resolveBrowserDatabaseConfig();
 
         console.info(
-          `🌐 [DB] Connecting to libSQL at: ${url} (Token: ${authToken ? "Present" : "Missing"})`,
+          `🌐 [DB] Connecting to libSQL at: ${dbConfig.url} (runtime: ${
+            isServerRuntime ? "server" : "browser"
+          }, token: ${dbConfig.authToken ? "present" : "missing"})`,
         );
 
-        const client = createClient({
-          url: url,
-          authToken: authToken,
-        });
+        const client = isServerRuntime
+          ? (await import("@libsql/client")).createClient({
+              url: dbConfig.url,
+              authToken: dbConfig.authToken,
+            })
+          : (await import("@libsql/client/web")).createClient({
+              url: dbConfig.url,
+              authToken: dbConfig.authToken,
+            });
 
-        if (url === "libsql://local.db") {
-          console.warn(
-            "⚠️ [DB] Using default local.db URL on web. This WILL FAIL to fetch unless a local sqld server is running and accessible.",
-          );
-        }
+        console.info("🌐 [DB] libSQL client created");
 
-        _db = drizzle(
+        const drizzleDb = drizzle(
           async (sql, params, method) => {
             try {
               if (method === "run") {
                 const result = await client.execute({
                   sql,
-                  args: params as any[],
+                  args: params as InValue[],
                 });
                 return {
                   rows: [],
@@ -123,7 +196,7 @@ export const getDatabase = async () => {
 
               const result = await client.execute({
                 sql,
-                args: params as any[],
+                args: params as InValue[],
               });
               return {
                 rows: result.rows.map((row) =>
@@ -138,54 +211,66 @@ export const getDatabase = async () => {
           { schema },
         );
 
+        if (useSharedCache) {
+          _db = drizzleDb;
+        }
+
         // Run migrations for web too
         const dbLike: DatabaseLike = {
           execute: async (sql, params) => {
             const res = await client.execute({
               sql,
-              args: (params || []) as any[],
+              args: (params || []) as InValue[],
             });
             return {
               rowsAffected: res.rowsAffected,
               lastInsertId: res.lastInsertRowid?.toString() || 0,
-              rows: res.rows as any[],
+              rows: res.rows as unknown[],
             };
           },
-          select: async (sql, params) => {
+          select: async <T>(sql: string, params?: unknown[]): Promise<T[]> => {
             const res = await client.execute({
               sql,
-              args: (params || []) as any[],
+              args: (params || []) as InValue[],
             });
-            return res.rows as any[];
+            return res.rows as T[];
           },
         };
 
         try {
-          await runMigrations(dbLike);
+          await runMigrations(dbLike, options);
         } catch (migrationError) {
           console.error(
             "❌ [DB_MIGRATION_WEB_ERROR] Could not run migrations on web.",
             migrationError,
           );
         }
+
+        return drizzleDb;
       } catch (e) {
         console.error("❌ [DB_INIT_WEB_ERROR]", e);
         // Fallback or error
         throw e;
       }
     }
+  })();
 
-    if (!_db) {
+  if (useSharedCache) {
+    _initializing = initialize;
+  }
+
+  try {
+    const db = await initialize;
+
+    if (!db) {
       throw new Error("Failed to initialize database connection");
     }
 
-    return _db;
-  })();
-
-  try {
-    return await _initializing;
+    return db;
   } finally {
-    _initializing = null;
+    if (useSharedCache) {
+      _initializing = null;
+    }
   }
 };
 

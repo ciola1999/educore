@@ -22,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -34,18 +33,36 @@ import {
 import { isTauri } from "@/core/env";
 import { useAttendanceForm } from "@/hooks/use-attendance-form";
 import type { AttendanceStatus } from "@/lib/validations/schemas";
+import { InlineState } from "../common/inline-state";
 
-export function AttendanceForm() {
+type AttendanceFormProps = {
+  initialClassId?: string;
+  initialClassName?: string;
+  initialDate?: string;
+};
+
+export function AttendanceForm({
+  initialClassId,
+  initialClassName,
+  initialDate,
+}: AttendanceFormProps) {
   const [viewMode, setViewMode] = useState<"compact" | "detailed">("detailed");
   const [exportFilter, setExportFilter] = useState<AttendanceStatus | "all">(
     "all",
   );
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const attendance = useAttendanceForm({
+    initialClassId,
+    initialClassName,
+    initialDate,
+  });
   const {
     isMounted,
     loading,
     submitting,
+    classLoadError,
+    studentLoadError,
     studentList,
     paginatedStudentList,
     currentPage,
@@ -63,8 +80,9 @@ export function AttendanceForm() {
     updateStatus,
     setAllPresent,
     handleSubmit,
+    loadClasses,
     refreshStudents,
-  } = useAttendanceForm();
+  } = attendance;
 
   if (!isMounted) return null;
 
@@ -212,8 +230,60 @@ export function AttendanceForm() {
     }
   };
 
+  const attendanceSummary = studentList.reduce(
+    (accumulator, student) => {
+      if (student.status === "present") accumulator.present += 1;
+      if (student.status === "sick") accumulator.sick += 1;
+      if (student.status === "permission") accumulator.permission += 1;
+      if (student.status === "alpha") accumulator.alpha += 1;
+      if (student.isLocked) accumulator.locked += 1;
+      return accumulator;
+    },
+    {
+      present: 0,
+      sick: 0,
+      permission: 0,
+      alpha: 0,
+      locked: 0,
+    },
+  );
+
+  const selectedClassName =
+    classList.find((classItem) => classItem.id === selectedClass)?.name || "-";
+
   return (
     <div className="space-y-6">
+      {classLoadError ? (
+        <InlineState
+          title="Attendance classes unavailable"
+          description={classLoadError}
+          actionLabel="Retry"
+          onAction={() => {
+            void loadClasses();
+          }}
+          variant={
+            classLoadError.includes("izin") || classLoadError.includes("login")
+              ? "warning"
+              : "error"
+          }
+        />
+      ) : null}
+
+      {studentLoadError && selectedClass ? (
+        <InlineState
+          title="Student attendance data unavailable"
+          description={studentLoadError}
+          actionLabel="Retry"
+          onAction={refreshStudents}
+          variant={
+            studentLoadError.includes("izin") ||
+            studentLoadError.includes("login")
+              ? "warning"
+              : "error"
+          }
+        />
+      ) : null}
+
       {/* Controls */}
       <div className="flex flex-col gap-4 p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-md shadow-xl">
         {/* Row 1: Primary Filters */}
@@ -320,6 +390,46 @@ export function AttendanceForm() {
 
       {classList.length > 0 && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              {
+                label: "Kelas Aktif",
+                value: selectedClassName,
+                tone: "text-sky-300 border-sky-500/20 bg-sky-500/5",
+              },
+              {
+                label: "Hadir",
+                value: attendanceSummary.present,
+                tone: "text-emerald-300 border-emerald-500/20 bg-emerald-500/5",
+              },
+              {
+                label: "Sakit / Izin",
+                value: attendanceSummary.sick + attendanceSummary.permission,
+                tone: "text-amber-300 border-amber-500/20 bg-amber-500/5",
+              },
+              {
+                label: "Alpha",
+                value: attendanceSummary.alpha,
+                tone: "text-red-300 border-red-500/20 bg-red-500/5",
+              },
+              {
+                label: "QR Locked",
+                value: attendanceSummary.locked,
+                tone: "text-indigo-300 border-indigo-500/20 bg-indigo-500/5",
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={`rounded-2xl border p-4 ${item.tone}`}
+              >
+                <p className="text-xs uppercase tracking-wider opacity-70">
+                  {item.label}
+                </p>
+                <p className="mt-2 text-2xl font-semibold">{item.value}</p>
+              </div>
+            ))}
+          </div>
+
           {/* Legend */}
           <div className="flex flex-wrap gap-4 text-xs font-medium text-zinc-400 uppercase tracking-wider px-1">
             <span className="flex items-center gap-2">
@@ -541,19 +651,31 @@ export function AttendanceForm() {
 
           {/* Submit Button */}
           {studentList.length > 0 && (
-            <div className="flex justify-end pt-6 border-t border-zinc-800/50 mt-4">
-              <Button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-6 px-8 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 gap-3 min-w-[200px]"
-              >
-                {submitting ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Check className="h-5 w-5" />
-                )}
-                Save Attendance
-              </Button>
+            <div className="pt-6 border-t border-zinc-800/50 mt-4 space-y-3">
+              {selectedClass === "all" ? (
+                <InlineState
+                  title="Mode baca semua kelas"
+                  description="All Students hanya untuk melihat data lintas kelas. Untuk simpan absensi manual, pilih satu kelas spesifik."
+                  variant="warning"
+                  className="text-sm"
+                />
+              ) : null}
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting || selectedClass === "all"}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-6 px-8 rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 gap-3 min-w-[200px]"
+                >
+                  {submitting ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Check className="h-5 w-5" />
+                  )}
+                  {selectedClass === "all"
+                    ? "Pilih Kelas Untuk Simpan"
+                    : "Save Attendance"}
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -578,26 +700,22 @@ export function AttendanceForm() {
                 <Label className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
                   Tanggal
                 </Label>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  disabled
-                  className="bg-zinc-950 border-zinc-800 text-zinc-400 h-10"
-                />
+                <div className="flex h-10 items-center rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-300">
+                  {selectedDate}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
                   Kelas
                 </Label>
-                <Input
-                  value={
-                    classList.find((c) => c.id === selectedClass)?.name || "-"
-                  }
-                  disabled
-                  className="bg-zinc-950 border-zinc-800 text-zinc-400 h-10"
-                />
+                <div className="flex h-10 items-center rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-300">
+                  {classList.find((c) => c.id === selectedClass)?.name || "-"}
+                </div>
               </div>
             </div>
+            <p className="text-[11px] text-zinc-500 italic">
+              Tanggal dan kelas mengikuti filter aktif pada halaman absensi.
+            </p>
 
             <div className="space-y-2">
               <Label className="text-xs text-zinc-500 font-bold uppercase tracking-wider">

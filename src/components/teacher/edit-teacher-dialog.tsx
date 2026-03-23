@@ -1,9 +1,11 @@
 "use client";
 
-import { eq } from "drizzle-orm";
-import { Loader2 } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,8 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,160 +31,367 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import type { Teacher } from "@/hooks/use-teacher-list";
+import { apiPatch } from "@/lib/api/request";
 
-interface EditTeacherDialogProps {
-  teacher: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: "admin" | "teacher" | "staff";
-  } | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+const updateTeacherSchema = z.object({
+  fullName: z.string().min(2, "Nama minimal 2 karakter"),
+  email: z.string().email("Email tidak valid"),
+  role: z.enum(["super_admin", "admin", "teacher", "staff"]),
+  password: z.string().min(8, "Password minimal 8 karakter").optional(),
+  nip: z.string().optional(),
+  jenisKelamin: z.enum(["L", "P"]).nullable().optional(),
+  tempatLahir: z.string().optional(),
+  tanggalLahir: z.string().optional(),
+  alamat: z.string().optional(),
+  noTelepon: z.string().optional(),
+  isActive: z.boolean(),
+});
+
+type UpdateTeacherFormValues = z.infer<typeof updateTeacherSchema>;
+
+type EditTeacherDialogProps = {
+  teacher: Teacher;
   onSuccess: () => void;
-}
+};
 
 export function EditTeacherDialog({
   teacher,
-  open,
-  onOpenChange,
   onSuccess,
 }: EditTeacherDialogProps) {
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    role: "teacher" as "admin" | "teacher" | "staff",
+  const form = useForm<UpdateTeacherFormValues>({
+    resolver: zodResolver(updateTeacherSchema),
+    defaultValues: {
+      fullName: teacher.fullName,
+      email: teacher.email,
+      role: teacher.role,
+      password: "",
+      nip: teacher.nip ?? "",
+      jenisKelamin: teacher.jenisKelamin ?? null,
+      tempatLahir: teacher.tempatLahir ?? "",
+      tanggalLahir: teacher.tanggalLahir
+        ? new Date(teacher.tanggalLahir).toISOString().slice(0, 10)
+        : "",
+      alamat: teacher.alamat ?? "",
+      noTelepon: teacher.noTelepon ?? "",
+      isActive: teacher.isActive,
+    },
   });
 
   useEffect(() => {
-    if (teacher) {
-      setFormData({
-        fullName: teacher.fullName,
-        email: teacher.email,
-        role: teacher.role,
-      });
-    }
-  }, [teacher]);
+    form.reset({
+      fullName: teacher.fullName,
+      email: teacher.email,
+      role: teacher.role,
+      password: "",
+      nip: teacher.nip ?? "",
+      jenisKelamin: teacher.jenisKelamin ?? null,
+      tempatLahir: teacher.tempatLahir ?? "",
+      tanggalLahir: teacher.tanggalLahir
+        ? new Date(teacher.tanggalLahir).toISOString().slice(0, 10)
+        : "",
+      alamat: teacher.alamat ?? "",
+      noTelepon: teacher.noTelepon ?? "",
+      isActive: teacher.isActive,
+    });
+  }, [form, teacher]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!teacher) return;
-
+  async function handleSubmit(values: UpdateTeacherFormValues) {
     setLoading(true);
     try {
-      const db = await getDb();
-      await db
-        .update(users)
-        .set({
-          fullName: formData.fullName,
-          email: formData.email,
-          role: formData.role,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, teacher.id));
-
-      onOpenChange(false);
+      await apiPatch<{ updated: true }>(`/api/teachers/${teacher.id}`, {
+        fullName: values.fullName,
+        email: values.email,
+        role: values.role,
+        password: values.password || undefined,
+        nip: values.nip || null,
+        jenisKelamin: values.jenisKelamin || null,
+        tempatLahir: values.tempatLahir || null,
+        tanggalLahir: values.tanggalLahir || null,
+        alamat: values.alamat || null,
+        noTelepon: values.noTelepon || null,
+        isActive: values.isActive,
+      });
+      toast.success("Data user berhasil diperbarui");
+      setOpen(false);
       onSuccess();
-      toast.success("Guru berhasil diperbarui");
-    } catch (error: unknown) {
-      console.error("❌ Update failed:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("UNIQUE constraint failed")) {
-        toast.error("Email sudah digunakan");
-      } else {
-        toast.error("Gagal memperbarui data");
-      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Gagal memperbarui data user",
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800 text-white rounded-2xl shadow-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Edit Teacher</DialogTitle>
-          <DialogDescription className="text-zinc-400">
-            Update teacher information below. Changes are saved instantly.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-9 w-9 text-zinc-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg"
+        onClick={() => setOpen(true)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid gap-6 py-6 border-y border-zinc-800 my-2"
-        >
-          <div className="grid gap-2">
-            <Label htmlFor="edit-fullName" className="text-zinc-300">
-              Full Name
-            </Label>
-            <Input
-              id="edit-fullName"
-              value={formData.fullName}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, fullName: e.target.value }))
-              }
-              className="bg-zinc-950 border-zinc-800 h-11 rounded-xl focus:ring-blue-500/20"
-              placeholder="e.g. John Doe"
-              required
-            />
-          </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Lengkapi data diri user dan reset password jika diperlukan.
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="grid gap-2">
-            <Label htmlFor="edit-email" className="text-zinc-300">
-              Email Address
-            </Label>
-            <Input
-              id="edit-email"
-              type="email"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, email: e.target.value }))
-              }
-              className="bg-zinc-950 border-zinc-800 h-11 rounded-xl focus:ring-blue-500/20"
-              placeholder="name@school.com"
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label className="text-zinc-300">Role</Label>
-            <Select
-              value={formData.role}
-              onValueChange={(value: "admin" | "teacher" | "staff") =>
-                setFormData((prev) => ({ ...prev, role: value }))
-              }
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="space-y-4 py-2"
             >
-              <SelectTrigger className="bg-zinc-950 border-zinc-800 h-11 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white rounded-xl">
-                <SelectItem value="teacher">Teacher</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nama Lengkap</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-          <DialogFooter className="pt-2">
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-900/20"
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                "Save Changes"
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                          <SelectItem value="super_admin">
+                            Super Admin
+                          </SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="teacher">Teacher</SelectItem>
+                          <SelectItem value="staff">Staff</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password Baru (opsional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="password"
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm">
+                <p className="font-medium text-zinc-200">Status Wali Kelas</p>
+                <p className="mt-1 text-zinc-300">
+                  {teacher.isHomeroomTeacher ? "Ya" : "Tidak"}
+                </p>
+                <p className="mt-1 text-zinc-500">
+                  Status ini mengikuti assignment pada modul Data Kelas.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="nip"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>NIP</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="noTelepon"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>No. Telepon</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="jenisKelamin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Jenis Kelamin</FormLabel>
+                      <Select
+                        value={field.value ?? "unset"}
+                        onValueChange={(value) =>
+                          field.onChange(value === "unset" ? null : value)
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-950 border-zinc-800">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                          <SelectItem value="unset">-</SelectItem>
+                          <SelectItem value="L">Laki-laki</SelectItem>
+                          <SelectItem value="P">Perempuan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="tanggalLahir"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tanggal Lahir</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="date"
+                          className="bg-zinc-950 border-zinc-800"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="tempatLahir"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tempat Lahir</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="alamat"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Alamat</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="bg-zinc-950 border-zinc-800"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={field.value}
+                        onChange={(event) =>
+                          field.onChange(event.target.checked)
+                        }
+                      />
+                      Akun aktif
+                    </label>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="submit" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Simpan"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

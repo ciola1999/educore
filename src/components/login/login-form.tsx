@@ -14,10 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-// Import Logic Baru (Local DB & Store)
-import { login } from "@/lib/auth/service";
-import { useStore } from "@/lib/store/use-store";
+import { useAuth } from "@/hooks/use-auth";
 
 // --- SENSORY UTILS (Fitur Baru) ---
 const triggerErrorHaptic = () => {
@@ -27,10 +24,12 @@ const triggerErrorHaptic = () => {
 };
 
 const playSuccessSound = () => {
-  const AudioContext =
-    window.AudioContext || (window as any).webkitAudioContext;
-  if (AudioContext) {
-    const ctx = new AudioContext();
+  const audioContextCtor =
+    window.AudioContext ||
+    (window as Window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (audioContextCtor) {
+    const ctx = new audioContextCtor();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -51,9 +50,7 @@ const playSuccessSound = () => {
 
 export function LoginForm() {
   const router = useRouter();
-
-  // Menggunakan Global Store untuk simpan sesi
-  const setAuth = useStore((state) => state.login);
+  const { login } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -72,19 +69,14 @@ export function LoginForm() {
     const password = target.password.value;
 
     try {
-      // 1. Panggil Service Login (SQLite Local)
       const result = await login(email, password);
 
-      // CUKUP CEK SUCCESS SAJA
       if (result.success) {
-        // ✅ SUKSES: TypeScript otomatis tahu di sini ada result.user
         playSuccessSound();
-        setAuth(result.user);
         router.push("/dashboard");
       } else {
-        // ❌ GAGAL: TypeScript otomatis tahu di sini ada result.error
         triggerErrorHaptic();
-        setError(result.error); // Error merah akan hilang di sini
+        setError(result.error);
         setIsLoading(false);
       }
     } catch (e) {
@@ -115,12 +107,12 @@ export function LoginForm() {
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Email / Username / NIP / NIS</Label>
             <Input
               id="email"
               name="email"
-              type="email"
-              placeholder="admin@educore.school"
+              type="text"
+              placeholder="admin@educore.school, guru, NIP, atau NIS"
               className="bg-zinc-950/50 border-zinc-700 focus-visible:ring-blue-500 transition-all"
               disabled={isLoading}
               required

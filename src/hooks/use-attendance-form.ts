@@ -1,13 +1,9 @@
 "use client";
 
 import { format } from "date-fns";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { recordBulkAttendance } from "@/core/services/attendance-service";
-import { getDb } from "@/lib/db";
-import { classes, studentDailyAttendance, students } from "@/lib/db/schema";
-import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
+import { apiGet, apiPost } from "@/lib/api/request";
 import { useStore } from "@/lib/store/use-store";
 import type { AttendanceStatus } from "@/lib/validations/schemas";
 
@@ -34,20 +30,77 @@ export interface ClassOption {
   name: string;
 }
 
-export function useAttendanceForm() {
+type AttendanceFormInitialState = {
+  initialClassId?: string;
+  initialClassName?: string;
+  initialDate?: string;
+};
+
+function normalizeDateInput(value?: string): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function resolveInitialClassId(
+  options: ClassOption[],
+  initialClassId?: string,
+  initialClassName?: string,
+): string | null {
+  const normalizedClassId = initialClassId?.trim();
+  if (
+    normalizedClassId &&
+    options.some((option) => option.id === normalizedClassId)
+  ) {
+    return normalizedClassId;
+  }
+
+  const normalizedClassName = initialClassName?.trim().toLowerCase();
+  if (normalizedClassName) {
+    const byName = options.find(
+      (option) => option.name.trim().toLowerCase() === normalizedClassName,
+    );
+    if (byName) {
+      return byName.id;
+    }
+  }
+
+  return null;
+}
+
+export function useAttendanceForm(
+  initialState: AttendanceFormInitialState = {},
+) {
   const authUser = useStore((state) => state.user);
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [classLoadError, setClassLoadError] = useState<string | null>(null);
+  const [studentLoadError, setStudentLoadError] = useState<string | null>(null);
   const [studentList, setStudentList] = useState<StudentRecord[]>([]);
+  const initialDate = normalizeDateInput(initialState.initialDate);
   const [selectedDate, setSelectedDate] = useState<string>(
-    format(new Date(), "yyyy-MM-dd"),
+    initialDate || format(new Date(), "yyyy-MM-dd"),
   );
   const [classList, setClassList] = useState<ClassOption[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(25);
   const [searchQuery, setSearchQuery] = useState("");
+
+  async function loadClasses() {
+    const data = await apiGet<ClassOption[]>("/api/attendance/classes");
+    const options = [{ id: "all", name: "All Students" }, ...(data || [])];
+    setClassList(options);
+    const initialClassId = resolveInitialClassId(
+      options,
+      initialState.initialClassId,
+      initialState.initialClassName,
+    );
+    setSelectedClass(
+      (prev) => prev || initialClassId || data?.[0]?.id || "all",
+    );
+  }
 
   // 1. Initial Mount & Background Sync Guard
   useEffect(() => {
@@ -59,12 +112,24 @@ export function useAttendanceForm() {
 
     // Only sync once every 5 minutes in background
     if (!lastSync || now - Number(lastSync) > 300000) {
-      void syncUsersToStudentsProjection().then(() => {
-        sessionStorage.setItem(
-          "attendance_projection_last_sync",
-          now.toString(),
-        );
-      });
+      void apiPost<{
+        classCreated: number;
+        studentUpserted: number;
+        settingsSeeded: number;
+      }>("/api/attendance/projection-sync")
+        .then(() => {
+          sessionStorage.setItem(
+            "attendance_projection_last_sync",
+            now.toString(),
+          );
+        })
+        .catch((error) => {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Sinkronisasi proyeksi attendance gagal";
+          toast.warning(message);
+        });
     }
   }, []);
 
@@ -72,120 +137,93 @@ export function useAttendanceForm() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadClasses() {
+    async function loadAttendanceClasses() {
       try {
-        const db = await getDb();
-        const result = await db
-          .select({ id: classes.id, name: classes.name })
-          .from(classes)
-          .where(isNull(classes.deletedAt));
-
-        if (!cancelled) {
-          const options = [{ id: "all", name: "All Students" }, ...result];
-          setClassList(options);
-          // Set default class if not set
-          setSelectedClass((prev) => prev || "all");
+        setClassLoadError(null);
+        const data = await apiGet<ClassOption[]>("/api/attendance/classes");
+        if (cancelled) {
+          return;
         }
+        const options = [{ id: "all", name: "All Students" }, ...(data || [])];
+        const initialClassId = resolveInitialClassId(
+          options,
+          initialState.initialClassId,
+          initialState.initialClassName,
+        );
+        setClassList(options);
+        setSelectedClass(
+          (prev) => prev || initialClassId || data?.[0]?.id || "all",
+        );
       } catch (error) {
-        console.error("Failed to load classes:", error);
+        if (!cancelled) {
+          setClassList([]);
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Gagal memuat daftar kelas attendance";
+          setClassLoadError(message);
+          toast.error(message);
+        }
       }
     }
 
-    void loadClasses();
+    void loadAttendanceClasses();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialState.initialClassId, initialState.initialClassName]);
 
   // 3. Student Loader (Stabilized)
   const loadStudentsByClass = useCallback(
     async (classId: string, date: string, isAutoRefresh = false) => {
       if (!isAutoRefresh) setLoading(true);
       try {
-        const db = await getDb();
-        let studentResults: (typeof students.$inferSelect)[];
-
-        if (classId === "all") {
-          studentResults = await db
-            .select()
-            .from(students)
-            .where(isNull(students.deletedAt));
-        } else {
-          const classData = classList.find((item) => item.id === classId);
-          if (!classData) return;
-
-          studentResults = await db
-            .select()
-            .from(students)
-            .where(
-              and(
-                or(
-                  eq(
-                    sql`LOWER(${students.grade})`,
-                    classData.name.toLowerCase(),
-                  ),
-                  eq(students.grade, classData.id),
-                ),
-                isNull(students.deletedAt),
-              ),
-            );
-        }
-
-        const dailyLogs = await db
-          .select()
-          .from(studentDailyAttendance)
-          .where(
-            and(
-              eq(studentDailyAttendance.date, date),
-              isNull(studentDailyAttendance.deletedAt),
-            ),
-          );
-
-        const logMap = new Map(dailyLogs.map((log) => [log.studentId, log]));
-
-        setStudentList(
-          studentResults.map((student) => {
-            const log = logMap.get(student.id);
-            return {
-              id: student.id,
-              nis: student.nis,
-              nisn: student.nisn,
-              fullName: student.fullName,
-              grade: student.grade,
-              tempatLahir: student.tempatLahir,
-              tanggalLahir: student.tanggalLahir,
-              alamat: student.alamat,
-              parentName: student.parentName,
-              parentPhone: student.parentPhone,
-              status: "present", // Default for manual entry
-              notes: "",
-              checkInTime: log?.checkInTime,
-              checkOutTime: log?.checkOutTime,
-              isLocked: !!log,
-            };
-          }),
+        setStudentLoadError(null);
+        const params = new URLSearchParams({
+          classId,
+          date,
+        });
+        const data = await apiGet<StudentRecord[]>(
+          `/api/attendance/students?${params.toString()}`,
         );
+        setStudentList(data || []);
       } catch (error) {
-        console.error("Failed to fetch students:", error);
+        setStudentList([]);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Gagal memuat daftar siswa untuk attendance";
+        setStudentLoadError(message);
+        toast.error(message);
       } finally {
         if (!isAutoRefresh) setLoading(false);
       }
     },
-    [classList],
+    [],
   );
 
-  const refreshStudents = useCallback(() => {
+  function refreshStudents() {
     if (selectedClass) {
       void loadStudentsByClass(selectedClass, selectedDate);
     }
-  }, [loadStudentsByClass, selectedClass, selectedDate]);
+  }
 
   // 4. Data Refresh Effect
   useEffect(() => {
+    let cancelled = false;
     if (!selectedClass) return;
 
-    loadStudentsByClass(selectedClass, selectedDate);
+    void (async () => {
+      if (!selectedClass) return;
+      if (!cancelled) {
+        await loadStudentsByClass(selectedClass, selectedDate);
+      }
+    })();
     setCurrentPage(1);
+
+    return () => {
+      cancelled = true;
+    };
   }, [loadStudentsByClass, selectedClass, selectedDate]);
 
   const updateStatus = (studentId: string, status: AttendanceStatus) => {
@@ -207,6 +245,13 @@ export function useAttendanceForm() {
       return;
     }
 
+    if (selectedClass === "all") {
+      toast.error(
+        "Pilih satu kelas spesifik untuk menyimpan absensi manual. Opsi All Students hanya untuk melihat data.",
+      );
+      return;
+    }
+
     if (!authUser) {
       toast.error("Unauthenticated");
       return;
@@ -222,21 +267,24 @@ export function useAttendanceForm() {
         return;
       }
 
-      await recordBulkAttendance({
-        classId: selectedClass === "all" ? "manual_bulk" : selectedClass,
-        date: selectedDate,
-        records: recordableStudents.map((s) => ({
-          studentId: s.id,
-          status: s.status,
-          notes: s.notes,
-        })),
-        recordedBy: authUser.id,
-      });
-
-      toast.success("Attendance recorded successfully");
+      const result = await apiPost<{ success: true; message: string }>(
+        "/api/attendance/bulk",
+        {
+          classId: selectedClass,
+          date: selectedDate,
+          records: recordableStudents.map((s) => ({
+            studentId: s.id,
+            status: s.status,
+            notes: s.notes,
+          })),
+        },
+      );
+      toast.success(result.message || "Attendance recorded successfully");
+      await loadStudentsByClass(selectedClass, selectedDate, true);
     } catch (error) {
-      console.error("Error recording attendance:", error);
-      toast.error("Failed to record attendance");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to record attendance",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -262,6 +310,8 @@ export function useAttendanceForm() {
     isMounted,
     loading,
     submitting,
+    classLoadError,
+    studentLoadError,
     studentList,
     paginatedStudentList,
     currentPage,
@@ -279,6 +329,7 @@ export function useAttendanceForm() {
     updateStatus,
     setAllPresent,
     handleSubmit,
+    loadClasses,
     refreshStudents,
   };
 }

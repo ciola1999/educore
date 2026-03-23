@@ -1,7 +1,10 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Pencil } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,10 +13,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -21,134 +30,182 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateClass } from "@/core/services/academic-service";
-import { getTeachers } from "@/core/services/teacher-service";
+import { apiGet, apiPatch } from "@/lib/api/request";
+import {
+  type ClassFormValues,
+  type ClassItem,
+  classFormSchema,
+  type TeacherOption,
+} from "./schemas";
 
 export function EditClassDialog({
   classData,
   onSuccess,
 }: {
-  classData: {
-    id: string;
-    name: string;
-    academicYear: string;
-    homeroomTeacherId: string | null;
-  };
+  classData: ClassItem;
   onSuccess: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [teachers, setTeachers] = useState<{ id: string; fullName: string }[]>(
-    [],
-  );
+  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
 
-  const fetchTeachers = useCallback(async () => {
-    const result = await getTeachers();
-    setTeachers(result.map((r) => ({ id: r.id, fullName: r.fullName })));
-  }, []);
+  const form = useForm<ClassFormValues>({
+    resolver: zodResolver(classFormSchema),
+    defaultValues: {
+      name: classData.name,
+      academicYear: classData.academicYear,
+      homeroomTeacherId: classData.homeroomTeacherId ?? "",
+    },
+  });
 
   useEffect(() => {
-    if (open) {
-      fetchTeachers();
-    }
-  }, [open, fetchTeachers]);
+    form.reset({
+      name: classData.name,
+      academicYear: classData.academicYear,
+      homeroomTeacherId: classData.homeroomTeacherId ?? "",
+    });
+  }, [classData, form]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  useEffect(() => {
+    if (!open) return;
+
+    void apiGet<TeacherOption[]>(
+      "/api/teachers?role=teacher&sortBy=fullName&sortOrder=asc",
+    )
+      .then((data) => {
+        setTeachers(data || []);
+      })
+      .catch((error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Gagal memuat data guru",
+        );
+      });
+  }, [open]);
+
+  async function handleSubmit(values: ClassFormValues) {
     setLoading(true);
-    const formData = new FormData(e.currentTarget);
-
     try {
-      await updateClass(classData.id, {
-        name: formData.get("name") as string,
-        academicYear: formData.get("academicYear") as string,
-        homeroomTeacherId: formData.get("homeroomTeacherId") as string,
+      await apiPatch<{ updated: true }>(`/api/classes/${classData.id}`, {
+        name: values.name,
+        academicYear: values.academicYear,
+        homeroomTeacherId: values.homeroomTeacherId,
       });
       setOpen(false);
       onSuccess();
+      toast.success("Kelas berhasil diperbarui");
     } catch (error) {
-      console.error(error);
-      alert("Failed to update class");
+      toast.error(
+        error instanceof Error ? error.message : "Gagal memperbarui kelas",
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 text-zinc-400 hover:text-blue-400"
-          type="button"
-        >
-          <Pencil className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-zinc-900 border-zinc-800 text-white">
-        <DialogHeader>
-          <DialogTitle>Edit Class</DialogTitle>
-          <DialogDescription className="text-zinc-400">
-            Update class details and homeroom teacher.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Class Name</Label>
-            <Input
-              id="name"
-              name="name"
-              defaultValue={classData.name}
-              placeholder="e.g. X-RPL-1"
-              className="bg-zinc-950 border-zinc-700"
-              required
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="academicYear">Academic Year</Label>
-            <Input
-              id="academicYear"
-              name="academicYear"
-              defaultValue={classData.academicYear}
-              placeholder="e.g. 2025/2026"
-              className="bg-zinc-950 border-zinc-700"
-              required
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label>Homeroom Teacher</Label>
-            <Select
-              name="homeroomTeacherId"
-              defaultValue={classData.homeroomTeacherId || undefined}
+    <>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8 text-zinc-400 hover:text-blue-400"
+        type="button"
+        onClick={() => setOpen(true)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-zinc-900 border-zinc-800 text-white">
+          <DialogHeader>
+            <DialogTitle>Edit Class</DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Update class details and homeroom teacher.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...form}>
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="grid gap-4 py-4"
             >
-              <SelectTrigger className="bg-zinc-950 border-zinc-700">
-                <SelectValue placeholder="Select teacher" />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                {teachers.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-500"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Save Changes"
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Class Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g. X-RPL-1"
+                        className="bg-zinc-950 border-zinc-700"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="academicYear"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Academic Year</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g. 2025/2026"
+                        className="bg-zinc-950 border-zinc-700"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="homeroomTeacherId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Homeroom Teacher</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="bg-zinc-950 border-zinc-700">
+                          <SelectValue placeholder="Select teacher" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        {teachers.map((teacher) => (
+                          <SelectItem key={teacher.id} value={teacher.id}>
+                            {teacher.fullName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-500"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -3,19 +3,24 @@
 import { parseAsString, parseAsStringEnum, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  deleteTeacher as deleteTeacherService,
-  getTeachers,
-} from "@/core/services/teacher-service";
+import { apiGet } from "@/lib/api/request";
 
 export interface Teacher {
   id: string;
   fullName: string;
   email: string;
-  role: "admin" | "teacher" | "staff";
+  role: "super_admin" | "admin" | "teacher" | "staff";
+  nip: string | null;
+  jenisKelamin: "L" | "P" | null;
+  tempatLahir: string | null;
+  tanggalLahir: string | Date | null;
+  alamat: string | null;
+  noTelepon: string | null;
+  isActive: boolean;
+  isHomeroomTeacher: boolean;
 }
 
-export function useTeacherList() {
+export function useTeacherList(refreshToken = 0) {
   // --- URL STATE (nuqs) ---
   const [search, setSearch] = useQueryState(
     "q",
@@ -24,9 +29,11 @@ export function useTeacherList() {
 
   const [roleFilter, setRoleFilter] = useQueryState(
     "role",
-    parseAsStringEnum(["admin", "teacher", "staff"]).withOptions({
-      shallow: false,
-    }),
+    parseAsStringEnum(["super_admin", "admin", "teacher", "staff"]).withOptions(
+      {
+        shallow: false,
+      },
+    ),
   );
 
   const [sortBy, setSortBy] = useQueryState(
@@ -46,60 +53,54 @@ export function useTeacherList() {
   // --- LOCAL STATE ---
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Dialog States
-  const [editOpen, setEditOpen] = useState(false);
-  const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
-
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTeacher, setDeleteTeacher] = useState<Teacher | null>(null);
 
   // --- FETCH DATA ---
   const fetchTeachers = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
-      const data = await getTeachers({
-        search: search || undefined,
-        role: roleFilter || undefined,
-        sortBy: sortBy as "fullName" | "email" | "createdAt",
-        sortOrder: sortOrder as "asc" | "desc",
+      const params = new URLSearchParams({
+        sortBy,
+        sortOrder,
       });
-      setTeachers(data as Teacher[]);
+      if (search) params.set("search", search);
+      if (roleFilter) params.set("role", roleFilter);
+
+      const data = await apiGet<Teacher[]>(
+        `/api/teachers?${params.toString()}`,
+      );
+      setTeachers(data || []);
     } catch (error) {
-      console.error("Failed to fetch teachers:", error);
-      toast.error("Gagal memuat data guru");
+      const message =
+        error instanceof Error ? error.message : "Gagal memuat data guru";
+      setTeachers([]);
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter, sortBy, sortOrder]);
+  }, [roleFilter, search, sortBy, sortOrder]);
 
   useEffect(() => {
-    fetchTeachers();
+    void fetchTeachers();
   }, [fetchTeachers]);
 
-  // --- HANDLERS ---
-  const handleEdit = useCallback((teacher: Teacher) => {
-    setEditTeacher(teacher);
-    setEditOpen(true);
-  }, []);
+  useEffect(() => {
+    if (refreshToken > 0) {
+      void fetchTeachers();
+    }
+  }, [fetchTeachers, refreshToken]);
 
-  const handleDelete = useCallback((teacher: Teacher) => {
+  // --- HANDLERS ---
+  function handleDelete(teacher: Teacher) {
     setDeleteTeacher(teacher);
     setDeleteOpen(true);
-  }, []);
-
-  const confirmDelete = async () => {
-    if (!deleteTeacher) return;
-
-    const success = await deleteTeacherService(deleteTeacher.id);
-    if (success) {
-      toast.success("Guru berhasil dihapus");
-      setDeleteOpen(false);
-      fetchTeachers();
-    } else {
-      toast.error("Gagal menghapus guru");
-    }
-  };
+  }
 
   const toggleSort = (key: "fullName" | "email" | "createdAt") => {
     if (sortBy === key) {
@@ -114,6 +115,7 @@ export function useTeacherList() {
     // Data & Loading
     teachers,
     loading,
+    errorMessage,
 
     // Filters (nuqs)
     search,
@@ -124,18 +126,12 @@ export function useTeacherList() {
     sortOrder,
     toggleSort,
 
-    // Dialog state
-    editOpen,
-    setEditOpen,
-    editTeacher,
     deleteOpen,
     setDeleteOpen,
     deleteTeacher,
 
     // Handlers
     fetchTeachers,
-    handleEdit,
     handleDelete,
-    confirmDelete,
   };
 }

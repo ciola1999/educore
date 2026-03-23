@@ -2,8 +2,6 @@ import { desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../db";
 import { classes, subjects, users } from "../db/schema";
 
-// --- CLASSES ---
-
 export async function getClasses() {
   const db = await getDb();
 
