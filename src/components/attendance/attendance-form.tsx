@@ -250,6 +250,8 @@ export function AttendanceForm({
 
   const selectedClassName =
     classList.find((classItem) => classItem.id === selectedClass)?.name || "-";
+  const actionButtonBase =
+    "group h-11 rounded-xl px-4 !text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:!text-white hover:shadow-md disabled:border-zinc-700 disabled:!from-zinc-800 disabled:!to-zinc-800 disabled:!text-zinc-300";
 
   return (
     <div className="space-y-6">
@@ -330,12 +332,12 @@ export function AttendanceForm({
         </div>
 
         {/* Row 2: Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-800/50">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-3 border-t border-zinc-800/50 pt-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:items-center">
             <Button
               onClick={refreshStudents}
               variant="default"
-              className="group h-11 rounded-xl border border-sky-500/35 bg-linear-to-br from-sky-500/22 to-sky-600/14 px-4 !text-white shadow-sm shadow-sky-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/60 hover:from-sky-500/28 hover:to-sky-600/18 hover:!text-white hover:shadow-md hover:shadow-sky-950/40"
+              className={`${actionButtonBase} w-full border border-sky-400/60 !bg-linear-to-br !from-sky-700 !to-cyan-600 shadow-sky-950/35 hover:border-sky-300/80 hover:!from-sky-600 hover:!to-cyan-500 hover:shadow-sky-950/45 sm:w-auto`}
               title="Refresh students"
             >
               <RefreshCw className="mr-2 h-4 w-4 !text-sky-100 transition-transform duration-500 group-hover:rotate-90 group-active:rotate-180" />
@@ -345,7 +347,7 @@ export function AttendanceForm({
             <Button
               onClick={() => setShowExportDialog(true)}
               variant="default"
-              className="group h-11 rounded-xl border border-emerald-500/35 bg-linear-to-br from-emerald-500/22 to-emerald-600/14 px-4 !text-white shadow-sm shadow-emerald-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-400/60 hover:from-emerald-500/28 hover:to-emerald-600/18 hover:!text-white hover:shadow-md hover:shadow-emerald-950/40"
+              className={`${actionButtonBase} w-full border border-emerald-400/60 !bg-linear-to-br !from-emerald-700 !to-emerald-600 shadow-emerald-950/35 hover:border-emerald-300/80 hover:!from-emerald-600 hover:!to-emerald-500 hover:shadow-emerald-950/45 sm:w-auto`}
             >
               <FileSpreadsheet className="mr-2 h-4 w-4 !text-emerald-100 transition-transform duration-200 group-hover:scale-110" />{" "}
               <span className="!text-white">Export XLSX</span>
@@ -357,8 +359,9 @@ export function AttendanceForm({
                   prevMode === "detailed" ? "compact" : "detailed",
                 )
               }
+              aria-pressed={viewMode === "compact"}
               variant="default"
-              className="group h-11 rounded-xl border border-violet-500/35 bg-linear-to-br from-violet-500/22 to-violet-600/14 px-4 !text-white shadow-sm shadow-violet-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-400/60 hover:from-violet-500/28 hover:to-violet-600/18 hover:!text-white hover:shadow-md hover:shadow-violet-950/40"
+              className={`${actionButtonBase} w-full border border-violet-400/60 !bg-linear-to-br !from-violet-700 !to-fuchsia-600 shadow-violet-950/35 hover:border-violet-300/80 hover:!from-violet-600 hover:!to-fuchsia-500 hover:shadow-violet-950/45 sm:w-auto`}
             >
               <LayoutList className="mr-2 h-4 w-4 !text-violet-100 transition-transform duration-200 group-hover:scale-110" />
               <span className="!text-white">
@@ -370,7 +373,7 @@ export function AttendanceForm({
           <Button
             onClick={setAllPresent}
             variant="default"
-            className="group h-11 rounded-xl border border-blue-400/45 bg-linear-to-br from-blue-500/26 to-cyan-500/16 px-5 font-semibold !text-white shadow-sm shadow-blue-950/35 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300/70 hover:from-blue-500/32 hover:to-cyan-500/20 hover:!text-white hover:shadow-md hover:shadow-blue-950/45"
+            className={`${actionButtonBase} w-full border border-blue-400/60 !bg-linear-to-br !from-blue-700 !to-cyan-600 px-5 font-semibold shadow-blue-950/35 hover:border-blue-300/80 hover:!from-blue-600 hover:!to-cyan-500 hover:shadow-blue-950/45 sm:w-auto`}
           >
             <Check className="mr-2 h-4 w-4 !text-blue-50 transition-transform duration-200 group-hover:scale-110" />{" "}
             <span className="!text-white">Mark All Present</span>

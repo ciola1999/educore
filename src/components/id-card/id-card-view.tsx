@@ -185,20 +185,20 @@ export function IDCardView({
                 </h2>
               </div>
 
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                <div>
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+                <div className="min-w-0">
                   <p className="text-[6px] text-zinc-400 font-bold uppercase tracking-wider mb-0.5">
                     {isStudent ? "NIS" : "NIP"}
                   </p>
-                  <p className="text-[9px] font-bold text-zinc-800 font-mono leading-none">
+                  <p className="text-[9px] font-bold text-zinc-800 font-mono leading-tight break-all">
                     {id}
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[6px] text-zinc-400 font-bold uppercase tracking-wider mb-0.5">
                     {isStudent ? "NISN" : "Jabatan"}
                   </p>
-                  <p className="text-[9px] font-bold text-zinc-800 leading-none break-words">
+                  <p className="text-[9px] font-bold text-zinc-800 leading-tight break-words whitespace-normal">
                     {isStudent ? nisn || "-" : position || personRole}
                   </p>
                 </div>

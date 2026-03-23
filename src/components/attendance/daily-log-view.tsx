@@ -1,54 +1,39 @@
 "use client";
 
-import {
-  CalendarRange,
-  Download,
-  FileText,
-  Loader2,
-  Printer,
-  Search,
-} from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPost, apiPut } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { InlineState } from "../common/inline-state";
-
-type TodayAttendanceLog = {
-  id: string;
-  studentId: string;
-  snapshotStudentName: string | null;
-  snapshotStudentNis: string | null;
-  className?: string | null;
-  date: string;
-  checkInTime: string | Date | null;
-  checkOutTime: string | Date | null;
-  status: "PRESENT" | "LATE" | "EXCUSED" | "ABSENT";
-  lateDuration: number | null;
-  notes?: string | null;
-  syncStatus: "synced" | "pending" | "error";
-  source?: "qr" | "manual";
-};
-
-type HistoryFilterStatus =
-  | "all"
-  | "present"
-  | "late"
-  | "sick"
-  | "permission"
-  | "alpha";
+import { HistoryAnalyticsPanel } from "./history/history-analytics-panel";
+import { HistoryExportToolbar } from "./history/history-export-toolbar";
+import { HistoryFiltersPanel } from "./history/history-filters-panel";
+import { HistoryGroupedLogList } from "./history/history-grouped-log-list";
+import { HistoryInsightsPanel } from "./history/history-insights-panel";
+import { HistoryLoadingSkeleton } from "./history/history-loading-skeleton";
+import { HistoryLogList } from "./history/history-log-list";
+import { HistoryRiskPanel } from "./history/history-risk-panel";
+import type {
+  AttendanceHistoryClassSummary,
+  AttendanceHistoryHeatmapPoint,
+  AttendanceHistoryStudentSummary,
+  AttendanceHistorySummary,
+  AttendanceHistoryTrendPoint,
+  AttendanceRiskFollowUpHistoryItem,
+  HistoryDensity,
+  HistoryFilterStatus,
+  HistoryGroupBy,
+  HistoryLogGroup,
+  HistoryQuickRange,
+  HistorySourceFilter,
+  StudentOption,
+  TodayAttendanceLog,
+} from "./history/history-types";
 
 type AttendanceHistoryResponse = {
   data: TodayAttendanceLog[];
@@ -57,89 +42,17 @@ type AttendanceHistoryResponse = {
   offset: number;
 };
 
-type AttendanceHistorySummary = {
-  total: number;
-  present: number;
-  late: number;
-  excused: number;
-  absent: number;
-  qr: number;
-  manual: number;
-};
-
-type AttendanceHistoryClassSummary = {
-  className: string;
-  total: number;
-  present: number;
-  late: number;
-  excused: number;
-  absent: number;
-  qr: number;
-  manual: number;
-  attendanceRate: number;
-};
-
-type AttendanceHistoryStudentSummary = {
-  studentId: string;
-  studentName: string;
-  nis: string;
-  className: string;
-  total: number;
-  present: number;
-  late: number;
-  excused: number;
-  absent: number;
-  qr: number;
-  manual: number;
-  attendanceRate: number;
-};
-
-type AttendanceHistoryTrendPoint = {
-  label: string;
-  period: string;
-  total: number;
-  present: number;
-  late: number;
-  excused: number;
-  absent: number;
-  attendanceRate: number;
-};
-
-type AttendanceHistoryHeatmapPoint = {
-  date: string;
-  dayLabel: string;
-  total: number;
-  present: number;
-  late: number;
-  excused: number;
-  absent: number;
-  attendanceRate: number;
-};
-
 type AttendanceRiskSettings = {
   alphaThreshold: number;
   lateThreshold: number;
   rateThreshold: number;
 };
 
-type AttendanceRiskFollowUpHistoryItem = {
-  id: string;
-  judul: string;
-  pesan: string;
-  link: string | null;
-  isRead: boolean;
-  createdAt: string | Date;
-};
-
-type HistorySourceFilter = "all" | "qr" | "manual";
-type HistoryGroupBy = "none" | "date" | "class";
-
-type StudentOption = {
-  id: string;
-  fullName: string;
-  nis: string;
-  grade: string;
-};
+const HISTORY_DENSITY_STORAGE_KEY = "attendance:daily-log:history-density";
+const HISTORY_ADVANCED_FILTERS_STORAGE_KEY =
+  "attendance:daily-log:history-advanced-filters";
+const HISTORY_QUICK_RANGE_STORAGE_KEY =
+  "attendance:daily-log:history-quick-range";
 
 type StudentOptionsResponse = {
   data: StudentOption[];
@@ -213,6 +126,12 @@ export function DailyLogView({
     useState<HistorySourceFilter>("all");
   const [historyGroupBy, setHistoryGroupBy] = useState<HistoryGroupBy>("none");
   const [historySort, setHistorySort] = useState("latest");
+  const [showHistoryAdvancedFilters, setShowHistoryAdvancedFilters] =
+    useState(false);
+  const [historyQuickRange, setHistoryQuickRange] =
+    useState<HistoryQuickRange>("all");
+  const [historyDensity, setHistoryDensity] =
+    useState<HistoryDensity>("comfortable");
   const [historyStudentSearch, setHistoryStudentSearch] = useState("");
   const [historyStudentOptions, setHistoryStudentOptions] = useState<
     StudentOption[]
@@ -481,6 +400,95 @@ export function DailyLogView({
         // keep defaults if settings unavailable
       });
   }, [isAdminView]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedDensity = window.localStorage.getItem(
+      HISTORY_DENSITY_STORAGE_KEY,
+    );
+    if (storedDensity === "comfortable" || storedDensity === "compact") {
+      setHistoryDensity(storedDensity);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(HISTORY_DENSITY_STORAGE_KEY, historyDensity);
+  }, [historyDensity]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedAdvancedFilters = window.localStorage.getItem(
+      HISTORY_ADVANCED_FILTERS_STORAGE_KEY,
+    );
+    if (
+      storedAdvancedFilters === "open" ||
+      storedAdvancedFilters === "closed"
+    ) {
+      setShowHistoryAdvancedFilters(storedAdvancedFilters === "open");
+    }
+
+    const storedQuickRange = window.localStorage.getItem(
+      HISTORY_QUICK_RANGE_STORAGE_KEY,
+    );
+    if (
+      storedQuickRange === "today" ||
+      storedQuickRange === "7d" ||
+      storedQuickRange === "30d" ||
+      storedQuickRange === "month" ||
+      storedQuickRange === "all" ||
+      storedQuickRange === "custom"
+    ) {
+      setHistoryQuickRange(storedQuickRange);
+      if (!initialStartDate && !initialEndDate) {
+        if (storedQuickRange === "all") {
+          setHistoryStartDate("");
+          setHistoryEndDate("");
+        } else if (storedQuickRange === "today") {
+          const today = getTodayDateString();
+          setHistoryStartDate(today);
+          setHistoryEndDate(today);
+        } else if (storedQuickRange === "7d") {
+          setHistoryStartDate(getDaysAgoDateString(6));
+          setHistoryEndDate(getTodayDateString());
+        } else if (storedQuickRange === "30d") {
+          setHistoryStartDate(getDaysAgoDateString(29));
+          setHistoryEndDate(getTodayDateString());
+        } else if (storedQuickRange === "month") {
+          setHistoryStartDate(getMonthStartDateString());
+          setHistoryEndDate(getTodayDateString());
+        }
+      }
+    }
+  }, [initialEndDate, initialStartDate]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      HISTORY_ADVANCED_FILTERS_STORAGE_KEY,
+      showHistoryAdvancedFilters ? "open" : "closed",
+    );
+  }, [showHistoryAdvancedFilters]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      HISTORY_QUICK_RANGE_STORAGE_KEY,
+      historyQuickRange,
+    );
+  }, [historyQuickRange]);
 
   useEffect(() => {
     if (!selectedHistoryStudentId || selectedHistoryStudentId === "all") {
@@ -1181,9 +1189,45 @@ export function DailyLogView({
 
   const historyPage = Math.floor(historyOffset / historyLimit) + 1;
   const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / historyLimit));
+  const activeHistoryFilterCount = [
+    historySearch.trim().length > 0,
+    !isStudentView && selectedHistoryStudentId !== "all",
+    historyStatus !== "all",
+    historySource !== "all",
+    historyGroupBy !== "none",
+    historySort !== "latest",
+    Boolean(historyStartDate),
+    Boolean(historyEndDate),
+  ].filter(Boolean).length;
+  const hasHistoryFiltersActive = activeHistoryFilterCount > 0;
+
+  function resetHistoryFilters(options?: {
+    clearOffset?: boolean;
+    clearError?: boolean;
+  }) {
+    setHistorySearch("");
+    setHistoryStudentSearch("");
+    setSelectedHistoryStudentId(isStudentView && user?.id ? user.id : "all");
+    setHistoryStatus("all");
+    setHistorySource("all");
+    setHistoryGroupBy("none");
+    setHistorySort("latest");
+    setHistoryQuickRange("all");
+    setHistoryStartDate("");
+    setHistoryEndDate("");
+
+    if (options?.clearOffset) {
+      setHistoryOffset(0);
+    }
+
+    if (options?.clearError) {
+      setError(null);
+    }
+  }
 
   function applyQuickRange(range: "today" | "7d" | "30d" | "month" | "all") {
     const today = getTodayDateString();
+    setHistoryQuickRange(range);
 
     if (range === "today") {
       setHistoryStartDate(today);
@@ -1213,12 +1257,52 @@ export function DailyLogView({
     setHistoryEndDate("");
   }
 
+  function handleHistoryStartDateChange(value: string) {
+    setHistoryStartDate(value);
+    setHistoryQuickRange("custom");
+  }
+
+  function handleHistoryEndDateChange(value: string) {
+    setHistoryEndDate(value);
+    setHistoryQuickRange("custom");
+  }
+
+  function isQuickRangeActive(range: "today" | "7d" | "30d" | "month" | "all") {
+    const today = getTodayDateString();
+    if (range === "all") {
+      return !historyStartDate && !historyEndDate;
+    }
+
+    if (!historyStartDate || !historyEndDate) {
+      return false;
+    }
+
+    if (range === "today") {
+      return historyStartDate === today && historyEndDate === today;
+    }
+
+    if (range === "7d") {
+      return (
+        historyStartDate === getDaysAgoDateString(6) && historyEndDate === today
+      );
+    }
+
+    if (range === "30d") {
+      return (
+        historyStartDate === getDaysAgoDateString(29) &&
+        historyEndDate === today
+      );
+    }
+
+    return (
+      historyStartDate === getMonthStartDateString() && historyEndDate === today
+    );
+  }
+
   const groupedHistoryLogs =
     historyGroupBy === "none"
       ? []
-      : historyLogs.reduce<
-          Array<{ title: string; items: TodayAttendanceLog[] }>
-        >((groups, log) => {
+      : historyLogs.reduce<HistoryLogGroup[]>((groups, log) => {
           const title =
             historyGroupBy === "date" ? log.date : log.className || "-";
           const existingGroup = groups.find((group) => group.title === title);
@@ -1339,20 +1423,20 @@ export function DailyLogView({
         >
           <TabsTrigger
             value="today"
-            className="rounded-2xl border border-transparent px-4 py-3 text-zinc-300 after:hidden hover:text-zinc-100 data-[state=active]:border-emerald-500/30 data-[state=active]:bg-linear-to-br data-[state=active]:from-emerald-500/16 data-[state=active]:to-emerald-500/8 data-[state=active]:text-zinc-50"
+            className="rounded-2xl border border-transparent px-4 py-3 text-zinc-200 after:hidden hover:text-white data-[state=active]:border-emerald-400/45 data-[state=active]:bg-linear-to-br data-[state=active]:from-emerald-600/25 data-[state=active]:to-emerald-500/15 data-[state=active]:text-white"
           >
             Hari Ini
           </TabsTrigger>
           <TabsTrigger
             value="history"
-            className="rounded-2xl border border-transparent px-4 py-3 text-zinc-300 after:hidden hover:text-zinc-100 data-[state=active]:border-sky-500/30 data-[state=active]:bg-linear-to-br data-[state=active]:from-sky-500/16 data-[state=active]:to-sky-500/8 data-[state=active]:text-zinc-50"
+            className="rounded-2xl border border-transparent px-4 py-3 text-zinc-200 after:hidden hover:text-white data-[state=active]:border-sky-400/45 data-[state=active]:bg-linear-to-br data-[state=active]:from-sky-600/25 data-[state=active]:to-cyan-500/15 data-[state=active]:text-white"
           >
             Riwayat
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="today" className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <p className="text-sm text-zinc-400">
               {isStudentView
                 ? "Log check-in dan check-out milik akun siswa yang sedang login."
@@ -1363,8 +1447,9 @@ export function DailyLogView({
               onClick={() => {
                 void loadTodayLogs();
               }}
-              className="h-11 rounded-xl border border-sky-400/45 !bg-linear-to-br !from-sky-500 !to-cyan-500 px-4 !text-white shadow-sm shadow-sky-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/70 hover:!from-sky-400 hover:!to-cyan-400 hover:!text-white hover:shadow-md hover:shadow-sky-950/40"
+              className="h-11 w-full rounded-xl border border-sky-400/60 !bg-linear-to-br !from-sky-700 !to-cyan-600 px-4 !text-white shadow-sm shadow-sky-950/35 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/80 hover:!from-sky-600 hover:!to-cyan-500 hover:!text-white hover:shadow-md hover:shadow-sky-950/45 disabled:border-zinc-700 disabled:!from-zinc-800 disabled:!to-zinc-800 disabled:!text-zinc-300 sm:w-auto"
             >
+              <RefreshCw className="mr-2 h-4 w-4 text-sky-100" />
               <span className="!text-white">Refresh</span>
             </Button>
           </div>
@@ -1420,176 +1505,46 @@ export function DailyLogView({
             </div>
           ) : null}
 
-          <div className="grid gap-3 xl:grid-cols-3">
-            {!isStudentView ? (
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <Input
-                  value={historySearch}
-                  onChange={(event) => setHistorySearch(event.target.value)}
-                  placeholder="Cari nama atau NIS..."
-                  className="border-zinc-800 bg-zinc-950 pl-11 text-zinc-100"
-                />
-              </div>
-            ) : (
-              <div className="rounded-md border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-zinc-500">
-                Pencarian lintas siswa disembunyikan pada mode siswa.
-              </div>
-            )}
-
-            {isAdminView ? (
-              <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3">
-                <Input
-                  value={historyStudentSearch}
-                  onChange={(event) =>
-                    setHistoryStudentSearch(event.target.value)
-                  }
-                  placeholder="Cari siswa spesifik..."
-                  className="border-zinc-800 bg-zinc-950 text-zinc-100"
-                />
-                <Select
-                  value={selectedHistoryStudentId}
-                  onValueChange={setSelectedHistoryStudentId}
-                >
-                  <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                    <SelectValue placeholder="Semua siswa" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    <SelectItem value="all">Semua Siswa</SelectItem>
-                    {historyStudentOptions.map((student) => (
-                      <SelectItem key={student.id} value={student.id}>
-                        {student.fullName} • {student.nis} • {student.grade}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-zinc-500">
-                  {loadingStudentOptions
-                    ? "Memuat opsi siswa..."
-                    : "Filter ini khusus admin/super admin."}
-                </p>
-              </div>
-            ) : null}
-
-            <Select
-              value={historyStatus}
-              onValueChange={(value) =>
-                setHistoryStatus(value as HistoryFilterStatus)
-              }
-            >
-              <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="present">Hadir</SelectItem>
-                <SelectItem value="late">Terlambat</SelectItem>
-                <SelectItem value="sick">Sakit</SelectItem>
-                <SelectItem value="permission">Izin</SelectItem>
-                <SelectItem value="alpha">Alpha</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={historySource}
-              onValueChange={(value) =>
-                setHistorySource(value as HistorySourceFilter)
-              }
-            >
-              <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                <SelectItem value="all">Semua Sumber</SelectItem>
-                <SelectItem value="qr">QR</SelectItem>
-                <SelectItem value="manual">Manual</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={historyGroupBy}
-              onValueChange={(value) =>
-                setHistoryGroupBy(value as HistoryGroupBy)
-              }
-            >
-              <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                <SelectItem value="none">Tanpa Grouping</SelectItem>
-                <SelectItem value="date">Group per Tanggal</SelectItem>
-                <SelectItem value="class">Group per Kelas</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={historySort} onValueChange={setHistorySort}>
-              <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                <CalendarRange className="h-4 w-4 mr-2 text-zinc-500" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                <SelectItem value="latest">Terbaru</SelectItem>
-                <SelectItem value="earliest">Terlama</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              type="date"
-              value={historyStartDate}
-              onChange={(event) => setHistoryStartDate(event.target.value)}
-              className="border-zinc-800 bg-zinc-950 text-zinc-200"
-            />
-
-            <Input
-              type="date"
-              value={historyEndDate}
-              onChange={(event) => setHistoryEndDate(event.target.value)}
-              className="border-zinc-800 bg-zinc-950 text-zinc-200"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => applyQuickRange("today")}
-              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-            >
-              <span className="!text-zinc-100">Hari Ini</span>
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => applyQuickRange("7d")}
-              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-            >
-              <span className="!text-zinc-100">7 Hari</span>
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => applyQuickRange("30d")}
-              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-            >
-              <span className="!text-zinc-100">30 Hari</span>
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => applyQuickRange("month")}
-              className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-            >
-              <span className="!text-zinc-100">Bulan Ini</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => applyQuickRange("all")}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-            >
-              Semua
-            </Button>
-          </div>
+          <HistoryFiltersPanel
+            isStudentView={isStudentView}
+            isAdminView={isAdminView}
+            activeHistoryFilterCount={activeHistoryFilterCount}
+            hasHistoryFiltersActive={hasHistoryFiltersActive}
+            historyDensity={historyDensity}
+            showHistoryAdvancedFilters={showHistoryAdvancedFilters}
+            historySearch={historySearch}
+            historyStudentSearch={historyStudentSearch}
+            historyStudentOptions={historyStudentOptions}
+            selectedHistoryStudentId={selectedHistoryStudentId}
+            loadingStudentOptions={loadingStudentOptions}
+            historyStatus={historyStatus}
+            historySource={historySource}
+            historyGroupBy={historyGroupBy}
+            historySort={historySort}
+            historyStartDate={historyStartDate}
+            historyEndDate={historyEndDate}
+            error={error}
+            dateRangeInvalid={dateRangeInvalid}
+            onHistoryDensityChange={setHistoryDensity}
+            onToggleAdvancedFilters={() =>
+              setShowHistoryAdvancedFilters((current) => !current)
+            }
+            onResetAllFilters={() => resetHistoryFilters()}
+            onHistorySearchChange={setHistorySearch}
+            onHistoryStudentSearchChange={setHistoryStudentSearch}
+            onSelectedHistoryStudentIdChange={setSelectedHistoryStudentId}
+            onHistoryStatusChange={setHistoryStatus}
+            onHistorySourceChange={setHistorySource}
+            onHistoryGroupByChange={setHistoryGroupBy}
+            onHistorySortChange={setHistorySort}
+            onHistoryStartDateChange={handleHistoryStartDateChange}
+            onHistoryEndDateChange={handleHistoryEndDateChange}
+            onApplyQuickRange={applyQuickRange}
+            isQuickRangeActive={isQuickRangeActive}
+            onResetInvalidFilterState={() =>
+              resetHistoryFilters({ clearOffset: true, clearError: true })
+            }
+          />
 
           {historySummary ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1645,1055 +1600,174 @@ export function DailyLogView({
             </div>
           ) : null}
 
-          {isAdminView && historyClassSummary.length > 0 ? (
-            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/30 p-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                  Filter Analitik per Kelas
-                </p>
-                <p className="text-xs text-zinc-500">
-                  Mempengaruhi tren, rekap siswa, dan ranking alpha/terlambat
-                </p>
-              </div>
-              <div className="w-full sm:w-72">
-                <Select
-                  value={analyticsClassFilter}
-                  onValueChange={setAnalyticsClassFilter}
-                >
-                  <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                    <SelectValue placeholder="Semua kelas" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    <SelectItem value="all">Semua Kelas</SelectItem>
-                    {historyClassSummary.map((item) => (
-                      <SelectItem key={item.className} value={item.className}>
-                        {item.className}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          ) : null}
+          <HistoryAnalyticsPanel
+            isAdminView={isAdminView}
+            selectedHistoryStudentId={selectedHistoryStudentId}
+            historyClassSummary={historyClassSummary}
+            analyticsClassFilter={analyticsClassFilter}
+            compareClassA={compareClassA}
+            compareClassB={compareClassB}
+            compareItemA={compareItemA}
+            compareItemB={compareItemB}
+            historyTrend={historyTrend}
+            maxTrendTotal={maxTrendTotal}
+            historyHeatmap={historyHeatmap}
+            heatmapMonthLabel={heatmapMonthLabel}
+            bestClass={bestClass}
+            lowestClass={lowestClass}
+            classSummaryLabel={classSummaryLabel}
+            exportingClassSummary={exportingClassSummary}
+            exportingAnalyticsReport={exportingAnalyticsReport}
+            exportingCompareReport={exportingCompareReport}
+            onAnalyticsClassFilterChange={setAnalyticsClassFilter}
+            onCompareClassAChange={setCompareClassA}
+            onCompareClassBChange={setCompareClassB}
+            onExportClassSummary={() => {
+              void handleExportClassSummary();
+            }}
+            onExportAnalyticsReport={() => {
+              void handleExportAnalyticsReport();
+            }}
+            onExportCompareReport={() => {
+              void handleExportCompareReport();
+            }}
+            onDrillDownToDate={drillDownToDate}
+          />
 
-          {isAdminView && historyClassSummary.length > 1 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Compare Mode Antar Kelas
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Bandingkan performa dua kelas pada filter aktif
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <Select value={compareClassA} onValueChange={setCompareClassA}>
-                  <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                    <SelectValue placeholder="Pilih kelas A" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    <SelectItem value="none">Pilih Kelas A</SelectItem>
-                    {historyClassSummary.map((item) => (
-                      <SelectItem
-                        key={`a-${item.className}`}
-                        value={item.className}
-                      >
-                        {item.className}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={compareClassB} onValueChange={setCompareClassB}>
-                  <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                    <SelectValue placeholder="Pilih kelas B" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    <SelectItem value="none">Pilih Kelas B</SelectItem>
-                    {historyClassSummary.map((item) => (
-                      <SelectItem
-                        key={`b-${item.className}`}
-                        value={item.className}
-                      >
-                        {item.className}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <HistoryRiskPanel
+            historyStudentSummaryLength={historyStudentSummary.length}
+            atRiskStudents={atRiskStudents}
+            riskAlphaThreshold={riskAlphaThreshold}
+            riskLateThreshold={riskLateThreshold}
+            riskRateThreshold={riskRateThreshold}
+            savingRiskSettings={savingRiskSettings}
+            followUpNote={followUpNote}
+            followUpDeadline={followUpDeadline}
+            creatingFollowUpId={creatingFollowUpId}
+            onRiskAlphaThresholdChange={setRiskAlphaThreshold}
+            onRiskLateThresholdChange={setRiskLateThreshold}
+            onRiskRateThresholdChange={setRiskRateThreshold}
+            onSaveRiskSettings={() => {
+              void handleSaveRiskSettings();
+            }}
+            onFollowUpNoteChange={setFollowUpNote}
+            onFollowUpDeadlineChange={setFollowUpDeadline}
+            onDrillDownToStudent={drillDownToStudent}
+            onCreateFollowUp={(student) => {
+              void handleCreateFollowUp(student);
+            }}
+          />
 
-              {compareItemA && compareItemB ? (
-                <div className="mt-4">
-                  <div className="mb-4 flex justify-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={exportingCompareReport}
-                      onClick={() => {
-                        void handleExportCompareReport();
-                      }}
-                      className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
-                    >
-                      {exportingCompareReport ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="mr-2 h-4 w-4" />
-                      )}
-                      Export Compare
-                    </Button>
-                  </div>
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {[compareItemA, compareItemB].map((item) => (
-                      <div
-                        key={item.className}
-                        className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
-                      >
-                        <p className="text-sm font-semibold text-zinc-100">
-                          {item.className}
-                        </p>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-zinc-300">
-                            Total {item.total}
-                          </div>
-                          <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-zinc-100">
-                            Rate {item.attendanceRate}%
-                          </div>
-                          <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-emerald-300">
-                            Hadir {item.present}
-                          </div>
-                          <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-amber-300">
-                            Terlambat {item.late}
-                          </div>
-                          <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-sky-300">
-                            Izin {item.excused}
-                          </div>
-                          <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-red-300">
-                            Alpha {item.absent}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <HistoryInsightsPanel
+            selectedHistoryStudentId={selectedHistoryStudentId}
+            followUpHistory={followUpHistory}
+            historySummary={historySummary}
+            historyClassSummaryLength={historyClassSummary.length}
+            atRiskStudentsLength={atRiskStudents.length}
+            internalNotifications={internalNotifications}
+            historyStudentSummaryLength={historyStudentSummary.length}
+            topStudentSummary={topStudentSummary}
+            topLateStudents={topLateStudents}
+            topAbsentStudents={topAbsentStudents}
+            exportingStudentSummary={exportingStudentSummary}
+            exportingRiskRanking={exportingRiskRanking}
+            onExportStudentSummary={() => {
+              void handleExportStudentSummary();
+            }}
+            onExportRiskRanking={() => {
+              void handleExportRiskRanking();
+            }}
+            onDrillDownToStudent={drillDownToStudent}
+          />
 
-          {historyTrend.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Tren Attendance
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Grafik{" "}
-                    {historyTrend.some((item) => item.period.length === 7)
-                      ? "bulanan"
-                      : "harian"}{" "}
-                    sesuai filter aktif
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={exportingAnalyticsReport}
-                  onClick={() => {
-                    void handleExportAnalyticsReport();
-                  }}
-                  className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
-                >
-                  {exportingAnalyticsReport ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export Trend/Heatmap
-                </Button>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {historyTrend.map((item) => (
-                  <div
-                    key={item.period}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3"
-                  >
-                    <div className="flex items-center justify-between text-xs text-zinc-500">
-                      <span>{item.label}</span>
-                      <span>{item.attendanceRate}%</span>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
-                      <div
-                        className="h-full rounded-full bg-emerald-400 transition-all"
-                        style={{
-                          width: `${Math.max(
-                            8,
-                            (item.total / maxTrendTotal) * 100,
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-lg bg-zinc-950/60 px-2 py-1 text-zinc-300">
-                        Total {item.total}
-                      </div>
-                      <div className="rounded-lg bg-zinc-950/60 px-2 py-1 text-emerald-300">
-                        Hadir {item.present + item.late}
-                      </div>
-                      <div className="rounded-lg bg-zinc-950/60 px-2 py-1 text-sky-300">
-                        Izin {item.excused}
-                      </div>
-                      <div className="rounded-lg bg-zinc-950/60 px-2 py-1 text-red-300">
-                        Alpha {item.absent}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {historyHeatmap.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Heatmap Kehadiran
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Visual audit harian untuk{" "}
-                    {heatmapMonthLabel || "rentang aktif"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-7 lg:grid-cols-10 xl:grid-cols-12">
-                {historyHeatmap.map((item) => {
-                  const bgClass =
-                    item.attendanceRate >= 90
-                      ? "bg-emerald-500/20 border-emerald-500/40"
-                      : item.attendanceRate >= 75
-                        ? "bg-amber-500/20 border-amber-500/40"
-                        : "bg-red-500/20 border-red-500/40";
-
-                  return (
-                    <button
-                      type="button"
-                      key={item.date}
-                      onClick={() => drillDownToDate(item.date)}
-                      className={`rounded-xl border p-3 text-left transition-colors hover:bg-zinc-900/80 ${bgClass}`}
-                      title={`${item.date} | Hadir ${item.present + item.late}/${item.total} | Alpha ${item.absent}`}
-                    >
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {item.dayLabel}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-300">
-                        {item.attendanceRate}%
-                      </p>
-                      <p className="mt-2 text-[11px] text-zinc-400">
-                        T {item.total}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          {historyClassSummary.length > 1 ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {bestClass ? (
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                  <p className="text-xs uppercase tracking-wide text-emerald-300">
-                    Kelas Terbaik
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-zinc-100">
-                    {bestClass.className}
-                  </p>
-                  <p className="mt-1 text-sm text-zinc-300">
-                    Tingkat hadir {bestClass.attendanceRate}% dari{" "}
-                    {bestClass.total} record
-                  </p>
-                </div>
-              ) : null}
-              {lowestClass ? (
-                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-                  <p className="text-xs uppercase tracking-wide text-red-300">
-                    Kelas Perlu Perhatian
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-zinc-100">
-                    {lowestClass.className}
-                  </p>
-                  <p className="mt-1 text-sm text-zinc-300">
-                    Tingkat hadir {lowestClass.attendanceRate}% dengan{" "}
-                    {lowestClass.absent} alpha
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {isAdminView &&
-          selectedHistoryStudentId === "all" &&
-          historyClassSummary.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Rekap Kelas
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Ringkasan kehadiran per kelas untuk {classSummaryLabel}
-                  </p>
-                </div>
-                <p className="text-xs text-zinc-500">
-                  {historyClassSummary.length} kelas terdeteksi
-                </p>
-              </div>
-
-              <div className="mt-3 flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={exportingClassSummary}
-                  onClick={() => {
-                    void handleExportClassSummary();
-                  }}
-                  className="border-emerald-700 text-emerald-300 hover:bg-emerald-950/50"
-                >
-                  {exportingClassSummary ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export Rekap Kelas
-                </Button>
-              </div>
-
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left text-zinc-500">
-                    <tr className="border-b border-zinc-800">
-                      <th className="pb-2 pr-4 font-medium">Kelas</th>
-                      <th className="pb-2 pr-4 font-medium">Total</th>
-                      <th className="pb-2 pr-4 font-medium">Hadir</th>
-                      <th className="pb-2 pr-4 font-medium">Terlambat</th>
-                      <th className="pb-2 pr-4 font-medium">Izin/Sakit</th>
-                      <th className="pb-2 pr-4 font-medium">Alpha</th>
-                      <th className="pb-2 pr-4 font-medium">QR</th>
-                      <th className="pb-2 pr-4 font-medium">Manual</th>
-                      <th className="pb-2 font-medium">Tingkat Hadir</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyClassSummary.map((item) => (
-                      <tr
-                        key={item.className}
-                        className="border-b border-zinc-900/80 text-zinc-200"
-                      >
-                        <td className="py-3 pr-4 font-medium">
-                          {item.className}
-                        </td>
-                        <td className="py-3 pr-4">{item.total}</td>
-                        <td className="py-3 pr-4 text-emerald-300">
-                          {item.present}
-                        </td>
-                        <td className="py-3 pr-4 text-amber-300">
-                          {item.late}
-                        </td>
-                        <td className="py-3 pr-4 text-sky-300">
-                          {item.excused}
-                        </td>
-                        <td className="py-3 pr-4 text-red-300">
-                          {item.absent}
-                        </td>
-                        <td className="py-3 pr-4 text-violet-300">{item.qr}</td>
-                        <td className="py-3 pr-4 text-orange-300">
-                          {item.manual}
-                        </td>
-                        <td className="py-3 font-semibold text-zinc-100">
-                          {item.attendanceRate}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          {historyStudentSummary.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Alert Risiko Attendance
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Threshold alert bisa diatur langsung oleh admin
-                  </p>
-                </div>
-                <p className="text-xs text-zinc-500">
-                  {atRiskStudents.length} siswa terdeteksi
-                </p>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <Input
-                  type="number"
-                  min="0"
-                  value={riskAlphaThreshold}
-                  onChange={(event) =>
-                    setRiskAlphaThreshold(event.target.value)
-                  }
-                  placeholder="Alpha threshold"
-                  className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-red-500/25 focus-visible:ring-red-500/25"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  value={riskLateThreshold}
-                  onChange={(event) => setRiskLateThreshold(event.target.value)}
-                  placeholder="Terlambat threshold"
-                  className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-amber-500/25 focus-visible:ring-amber-500/25"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={riskRateThreshold}
-                  onChange={(event) => setRiskRateThreshold(event.target.value)}
-                  placeholder="Rate threshold"
-                  className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-sky-500/25 focus-visible:ring-sky-500/25"
-                />
-              </div>
-              <div className="mt-3 flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={savingRiskSettings}
-                  onClick={() => {
-                    void handleSaveRiskSettings();
-                  }}
-                  className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
-                >
-                  {savingRiskSettings ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Simpan Threshold
-                </Button>
-              </div>
-              <div className="mt-4 space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-100">
-                      Catatan Tindak Lanjut
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      Catatan ini akan ikut masuk ke notifikasi internal saat
-                      tombol follow-up ditekan.
-                    </p>
-                  </div>
-                  <span className="text-xs text-zinc-500">
-                    {followUpNote.trim().length}/300
-                  </span>
-                </div>
-                <Input
-                  value={followUpNote}
-                  maxLength={300}
-                  onChange={(event) => setFollowUpNote(event.target.value)}
-                  placeholder="Contoh: hubungi wali kelas, cek alasan alpha, jadwalkan konseling."
-                  className="border-zinc-800 bg-zinc-950 text-zinc-200"
-                />
-                <div className="grid gap-2 md:grid-cols-[1fr_180px]">
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">
-                      Info
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      Deadline akan ikut tampil di dashboard follow-up guru atau
-                      wali kelas.
-                    </p>
-                  </div>
-                  <Input
-                    type="date"
-                    value={followUpDeadline}
-                    onChange={(event) =>
-                      setFollowUpDeadline(event.target.value)
-                    }
-                    className="border-zinc-800 bg-zinc-950 text-zinc-200"
-                  />
-                </div>
-              </div>
-              {atRiskStudents.length > 0 ? (
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                  {atRiskStudents.map((item) => (
-                    <div
-                      key={`risk-${item.studentId}`}
-                      className="rounded-2xl border border-red-500/20 bg-linear-to-br from-red-500/10 to-red-500/4 px-4 py-3 shadow-sm shadow-red-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-950/20"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => drillDownToStudent(item)}
-                            className="text-left text-sm font-medium text-zinc-100 underline-offset-4 hover:underline"
-                          >
-                            {item.studentName}
-                          </button>
-                          <p className="text-xs text-zinc-400">
-                            {item.nis} • {item.className}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={creatingFollowUpId === item.studentId}
-                          onClick={() => {
-                            void handleCreateFollowUp(item);
-                          }}
-                          className="border-red-700 text-red-300 hover:bg-red-950/50"
-                        >
-                          {creatingFollowUpId === item.studentId ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : null}
-                          Buat Tindak Lanjut
-                        </Button>
-                      </div>
-                      <div className="mt-3 text-right text-xs">
-                        <p className="text-red-300">Alpha {item.absent}</p>
-                        <p className="text-amber-300">Terlambat {item.late}</p>
-                        <p className="text-zinc-300">
-                          Rate {item.attendanceRate}%
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-zinc-500">
-                  Tidak ada siswa berisiko pada filter aktif.
-                </p>
-              )}
-            </div>
-          ) : null}
-
-          {selectedHistoryStudentId !== "all" && followUpHistory.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Riwayat Tindakan Attendance
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Riwayat follow-up untuk siswa yang sedang dipilih
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {followUpHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3"
-                  >
-                    <p className="text-sm font-medium text-zinc-100">
-                      {item.judul}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">{item.pesan}</p>
-                    <p className="mt-2 text-[11px] text-zinc-500">
-                      Status: {item.isRead ? "Selesai" : "Aktif"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {historySummary ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Dashboard Attendance
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Ringkasan cepat untuk admin/kepala sekolah
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/60 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Attendance Rate
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-zinc-100">
-                    {historySummary.total === 0
-                      ? 0
-                      : Number(
-                          (
-                            ((historySummary.present + historySummary.late) /
-                              historySummary.total) *
-                            100
-                          ).toFixed(1),
-                        )}
-                    %
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/60 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Kelas Aktif
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-zinc-100">
-                    {historyClassSummary.length}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/60 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Siswa Berisiko
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-red-300">
-                    {atRiskStudents.length}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Sumber Dominan
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-zinc-100">
-                    {historySummary.qr >= historySummary.manual
-                      ? "QR"
-                      : "Manual"}
-                  </p>
-                </div>
-              </div>
-              {internalNotifications.length > 0 ? (
-                <div className="mt-4 rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 p-4 shadow-sm shadow-black/10">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Notifikasi Internal
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    {internalNotifications.map((message) => (
-                      <div
-                        key={message}
-                        className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-300 shadow-sm shadow-black/10"
-                      >
-                        {message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {historyStudentSummary.length > 0 ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                    Rekap Siswa
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Peringkat siswa berdasarkan total record dan tingkat hadir
-                  </p>
-                </div>
-                <p className="text-xs text-zinc-500">
-                  Menampilkan {topStudentSummary.length} dari{" "}
-                  {historyStudentSummary.length} siswa
-                </p>
-              </div>
-
-              <div className="mt-3 flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={exportingStudentSummary}
-                  onClick={() => {
-                    void handleExportStudentSummary();
-                  }}
-                  className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
-                >
-                  {exportingStudentSummary ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export Rekap Siswa
-                </Button>
-              </div>
-
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left text-zinc-500">
-                    <tr className="border-b border-zinc-800">
-                      <th className="pb-2 pr-4 font-medium">Siswa</th>
-                      <th className="pb-2 pr-4 font-medium">NIS</th>
-                      <th className="pb-2 pr-4 font-medium">Kelas</th>
-                      <th className="pb-2 pr-4 font-medium">Total</th>
-                      <th className="pb-2 pr-4 font-medium">Hadir</th>
-                      <th className="pb-2 pr-4 font-medium">Terlambat</th>
-                      <th className="pb-2 pr-4 font-medium">Alpha</th>
-                      <th className="pb-2 font-medium">Tingkat Hadir</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topStudentSummary.map((item) => (
-                      <tr
-                        key={item.studentId}
-                        className="border-b border-zinc-900/80 text-zinc-200"
-                      >
-                        <td className="py-3 pr-4 font-medium">
-                          <button
-                            type="button"
-                            onClick={() => drillDownToStudent(item)}
-                            className="text-left text-zinc-100 underline-offset-4 hover:underline"
-                          >
-                            {item.studentName}
-                          </button>
-                        </td>
-                        <td className="py-3 pr-4">{item.nis}</td>
-                        <td className="py-3 pr-4">{item.className}</td>
-                        <td className="py-3 pr-4">{item.total}</td>
-                        <td className="py-3 pr-4 text-emerald-300">
-                          {item.present}
-                        </td>
-                        <td className="py-3 pr-4 text-amber-300">
-                          {item.late}
-                        </td>
-                        <td className="py-3 pr-4 text-red-300">
-                          {item.absent}
-                        </td>
-                        <td className="py-3 font-semibold text-zinc-100">
-                          {item.attendanceRate}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          {historyStudentSummary.length > 0 ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-                <div className="flex items-end justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                      Ranking Terlambat
-                    </h3>
-                    <p className="text-xs text-zinc-500">
-                      Siswa dengan frekuensi terlambat tertinggi
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {topLateStudents.map((item, index) => (
-                    <button
-                      type="button"
-                      onClick={() => drillDownToStudent(item)}
-                      key={`late-${item.studentId}`}
-                      className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 px-3 py-3 text-left shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-zinc-100">
-                          {index + 1}. {item.studentName}
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          {item.nis} • {item.className}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-amber-300">
-                          {item.late} kali
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          Alpha {item.absent}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-                <div className="flex items-end justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                      Ranking Alpha
-                    </h3>
-                    <p className="text-xs text-zinc-500">
-                      Siswa dengan frekuensi alpha tertinggi
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={exportingRiskRanking}
-                    onClick={() => {
-                      void handleExportRiskRanking();
-                    }}
-                    className="border-red-700 text-red-300 hover:bg-red-950/50"
-                  >
-                    {exportingRiskRanking ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="mr-2 h-4 w-4" />
-                    )}
-                    Export Ranking
-                  </Button>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {topAbsentStudents.map((item, index) => (
-                    <button
-                      type="button"
-                      key={`absent-${item.studentId}`}
-                      onClick={() => drillDownToStudent(item)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 px-3 py-3 text-left shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-zinc-100">
-                          {index + 1}. {item.studentName}
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          {item.nis} • {item.className}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-red-300">
-                          {item.absent} kali
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          Terlambat {item.late}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex flex-col gap-2 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-            <span className="rounded-full border border-zinc-800 bg-zinc-950/60 px-4 py-2 text-sm text-zinc-400 shadow-sm shadow-black/10">
-              Menampilkan {historyLogs.length} dari {historyTotal} record
-              {historyStartDate || historyEndDate
-                ? " sesuai rentang tanggal"
-                : " dari seluruh riwayat"}
-            </span>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="default"
-                disabled={
-                  exportingHistory || loadingHistory || historyTotal === 0
-                }
-                onClick={() => {
-                  void handleExportHistory();
-                }}
-                className="h-11 rounded-xl border border-emerald-400/45 !bg-linear-to-br !from-emerald-500 !to-emerald-600 !text-white shadow-sm shadow-emerald-950/25 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300/70 hover:!from-emerald-400 hover:!to-emerald-500 hover:!text-white"
-              >
-                {exportingHistory ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                <span className="!text-white">Export History</span>
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                disabled={exportingPdf || loadingHistory || historyTotal === 0}
-                onClick={() => {
-                  void handleExportHistoryPdf();
-                }}
-                className="h-11 rounded-xl border border-sky-400/45 !bg-linear-to-br !from-sky-500 !to-cyan-500 !text-white shadow-sm shadow-sky-950/25 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/70 hover:!from-sky-400 hover:!to-cyan-400 hover:!text-white"
-              >
-                {exportingPdf ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                <span className="!text-white">Export PDF</span>
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                disabled={
-                  printingReport || loadingHistory || historyTotal === 0
-                }
-                onClick={() => {
-                  void handlePrintHistoryReport();
-                }}
-                className="h-11 rounded-xl border border-violet-400/45 !bg-linear-to-br !from-violet-500 !to-fuchsia-500 !text-white shadow-sm shadow-violet-950/25 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-300/70 hover:!from-violet-400 hover:!to-fuchsia-400 hover:!text-white"
-              >
-                {printingReport ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Printer className="mr-2 h-4 w-4" />
-                )}
-                <span className="!text-white">Print Report</span>
-              </Button>
-              {(historyStartDate || historyEndDate) && (
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={() => {
-                    setHistoryStartDate("");
-                    setHistoryEndDate("");
-                  }}
-                  className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-                >
-                  <span className="!text-zinc-100">Reset Tanggal</span>
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="default"
-                disabled={historyPage <= 1 || loadingHistory}
-                onClick={() =>
-                  setHistoryOffset((current) =>
-                    Math.max(0, current - historyLimit),
-                  )
-                }
-                className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-              >
-                <span className="!text-zinc-100">Prev</span>
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                disabled={
-                  historyPage >= totalHistoryPages ||
-                  loadingHistory ||
-                  historyTotal === 0
-                }
-                onClick={() =>
-                  setHistoryOffset((current) =>
-                    Math.min(
-                      Math.max(0, (totalHistoryPages - 1) * historyLimit),
-                      current + historyLimit,
-                    ),
-                  )
-                }
-                className="rounded-xl border border-zinc-700 !bg-zinc-900/90 !text-zinc-100 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:!bg-zinc-800 hover:!text-white"
-              >
-                <span className="!text-zinc-100">Next</span>
-              </Button>
-            </div>
-          </div>
+          <HistoryExportToolbar
+            historyLogsLength={historyLogs.length}
+            historyTotal={historyTotal}
+            historyStartDate={historyStartDate}
+            historyEndDate={historyEndDate}
+            historyStatus={historyStatus}
+            historySource={historySource}
+            historyGroupBy={historyGroupBy}
+            exportingHistory={exportingHistory}
+            exportingPdf={exportingPdf}
+            printingReport={printingReport}
+            loadingHistory={loadingHistory}
+            canGoPrev={historyPage > 1 && !loadingHistory}
+            canGoNext={
+              historyPage < totalHistoryPages &&
+              !loadingHistory &&
+              historyTotal > 0
+            }
+            onExportHistory={() => {
+              void handleExportHistory();
+            }}
+            onExportPdf={() => {
+              void handleExportHistoryPdf();
+            }}
+            onPrintReport={() => {
+              void handlePrintHistoryReport();
+            }}
+            onResetDate={() => {
+              setHistoryQuickRange("all");
+              setHistoryStartDate("");
+              setHistoryEndDate("");
+            }}
+            onPrevPage={() =>
+              setHistoryOffset((current) => Math.max(0, current - historyLimit))
+            }
+            onNextPage={() =>
+              setHistoryOffset((current) =>
+                Math.min(
+                  Math.max(0, (totalHistoryPages - 1) * historyLimit),
+                  current + historyLimit,
+                ),
+              )
+            }
+          />
 
           {loadingHistory ? (
-            <div className="flex justify-center py-10 text-zinc-500">
-              <Loader2 className="h-6 w-6 animate-spin" />
+            <div
+              className="rounded-3xl border border-dashed border-zinc-800/80 bg-zinc-950/35 p-3 sm:p-4"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <HistoryLoadingSkeleton
+                density={historyDensity}
+                grouped={historyGroupBy !== "none"}
+              />
             </div>
           ) : historyLogs.length > 0 ? (
             historyGroupBy === "none" ? (
-              <div className="space-y-3">
-                {historyLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-4 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-medium text-zinc-100">
-                          {log.snapshotStudentName || "Siswa"}
-                        </p>
-                        <p className="text-sm text-zinc-400">
-                          {log.snapshotStudentNis || "-"} • {log.date} •{" "}
-                          {log.source === "qr" ? "QR" : "MANUAL"} •{" "}
-                          {log.className || "-"}
-                        </p>
-                      </div>
-                      <div className="text-sm text-zinc-300 sm:text-right">
-                        <p>{formatStatusLabel(log.status)}</p>
-                        <p className="text-zinc-500">
-                          In {formatTime(log.checkInTime)} • Out{" "}
-                          {formatTime(log.checkOutTime)}
-                        </p>
-                        {log.lateDuration ? (
-                          <p className="text-zinc-500">
-                            Terlambat {log.lateDuration} menit
-                          </p>
-                        ) : null}
-                        {log.notes ? (
-                          <p className="text-zinc-500">Catatan: {log.notes}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <HistoryLogList
+                logs={historyLogs}
+                density={historyDensity}
+                formatStatusLabel={formatStatusLabel}
+                formatTime={formatTime}
+              />
             ) : (
-              <div className="space-y-4">
-                {groupedHistoryLogs.map((group) => (
-                  <div
-                    key={group.title}
-                    className="rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/35 to-zinc-950/45 p-4 shadow-sm shadow-black/10"
-                  >
-                    <div className="sticky top-2 z-10 mb-3 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/95 px-3 py-2 backdrop-blur-sm">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-200">
-                        {historyGroupBy === "date"
-                          ? `Tanggal ${group.title}`
-                          : `Kelas ${group.title}`}
-                      </h3>
-                      <span className="text-xs text-zinc-500">
-                        {group.items.length} record
-                      </span>
-                    </div>
-                    <div className="space-y-3">
-                      {group.items.map((log) => (
-                        <div
-                          key={log.id}
-                          className="rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-4 shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-md hover:shadow-black/20"
-                        >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <p className="font-medium text-zinc-100">
-                                {log.snapshotStudentName || "Siswa"}
-                              </p>
-                              <p className="text-sm text-zinc-400">
-                                {log.snapshotStudentNis || "-"} • {log.date} •{" "}
-                                {log.source === "qr" ? "QR" : "MANUAL"} •{" "}
-                                {log.className || "-"}
-                              </p>
-                            </div>
-                            <div className="text-sm text-zinc-300 sm:text-right">
-                              <p>{formatStatusLabel(log.status)}</p>
-                              <p className="text-zinc-500">
-                                In {formatTime(log.checkInTime)} • Out{" "}
-                                {formatTime(log.checkOutTime)}
-                              </p>
-                              {log.lateDuration ? (
-                                <p className="text-zinc-500">
-                                  Terlambat {log.lateDuration} menit
-                                </p>
-                              ) : null}
-                              {log.notes ? (
-                                <p className="text-zinc-500">
-                                  Catatan: {log.notes}
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <HistoryGroupedLogList
+                groups={groupedHistoryLogs}
+                groupBy={historyGroupBy}
+                density={historyDensity}
+                formatStatusLabel={formatStatusLabel}
+                formatTime={formatTime}
+              />
             )
           ) : (
             <InlineState
               title="Riwayat belum tersedia"
-              description="Belum ada riwayat absensi yang cocok dengan filter saat ini."
+              description={
+                hasHistoryFiltersActive
+                  ? "Belum ada riwayat absensi yang cocok dengan filter aktif. Coba reset filter untuk melihat seluruh data."
+                  : "Belum ada riwayat absensi pada periode ini."
+              }
               variant="info"
+              actionLabel={hasHistoryFiltersActive ? "Reset Filter" : undefined}
+              onAction={
+                hasHistoryFiltersActive
+                  ? () => resetHistoryFilters()
+                  : undefined
+              }
             />
           )}
 
