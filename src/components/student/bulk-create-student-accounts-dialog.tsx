@@ -34,6 +34,9 @@ import {
 } from "@/components/ui/select";
 import type { StudentListItem } from "@/hooks/use-student-list";
 import { apiPost } from "@/lib/api/request";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
+
+const bulkCreateAccountOutlineButtonClass = outlineButtonStyles.emerald;
 
 const bulkAccountSchema = z
   .object({
@@ -63,9 +66,6 @@ interface BulkCreateStudentAccountsDialogProps {
   visibleStudents: StudentListItem[];
   onSuccess: () => void;
 }
-
-const bulkCreateAccountOutlineButtonClass =
-  "rounded-2xl border-emerald-700/70 bg-emerald-950/40 text-emerald-100 hover:border-emerald-500 hover:bg-emerald-900/60 hover:text-white";
 
 export function BulkCreateStudentAccountsDialog({
   students,

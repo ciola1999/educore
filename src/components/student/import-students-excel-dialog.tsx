@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getApiErrorMessage, readApiResponse } from "@/lib/api/client";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 type ImportResult = {
   totalRows: number;
@@ -36,10 +37,8 @@ type ImportStudentsExcelDialogProps = {
   onSuccess: () => void;
 };
 
-const importStudentsSkyOutlineButtonClass =
-  "rounded-2xl border-sky-700/70 bg-sky-950/40 text-sky-100 hover:border-sky-500 hover:bg-sky-900/60 hover:text-white";
-const importStudentsNeutralOutlineButtonClass =
-  "rounded-2xl border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+const importStudentsSkyOutlineButtonClass = outlineButtonStyles.sky;
+const importStudentsNeutralOutlineButtonClass = outlineButtonStyles.neutral;
 
 const templateColumns = [
   "NIS",

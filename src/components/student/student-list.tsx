@@ -42,6 +42,7 @@ import type {
 import { useStudentList } from "@/hooks/use-student-list";
 import { apiGet } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 import { InlineState } from "../common/inline-state";
 import { AddStudentDialog } from "./add-student-dialog";
 import { BulkCreateStudentAccountsDialog } from "./bulk-create-student-accounts-dialog";
@@ -115,18 +116,12 @@ const cardSkeletonKeys = [
   "card-skeleton-5",
   "card-skeleton-6",
 ];
-const studentOutlineButtonClass =
-  "rounded-2xl border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
-const studentSkyOutlineButtonClass =
-  "rounded-2xl border-sky-700/70 bg-sky-950/40 text-sky-100 hover:border-sky-500 hover:bg-sky-900/60 hover:text-white";
-const studentEmeraldOutlineButtonClass =
-  "rounded-2xl border-emerald-700/70 bg-emerald-950/40 text-emerald-100 hover:border-emerald-500 hover:bg-emerald-900/60 hover:text-white";
-const studentAmberOutlineButtonClass =
-  "rounded-2xl border-amber-700/70 bg-amber-950/40 text-amber-100 hover:border-amber-500 hover:bg-amber-900/60 hover:text-white";
-const studentBlueOutlineButtonClass =
-  "rounded-2xl border-blue-700/70 bg-blue-950/40 text-blue-100 hover:border-blue-500 hover:bg-blue-900/60 hover:text-white";
-const studentRedOutlineButtonClass =
-  "rounded-2xl border-red-700/70 bg-red-950/40 text-red-100 hover:border-red-500 hover:bg-red-900/60 hover:text-white";
+const studentOutlineButtonClass = outlineButtonStyles.neutral;
+const studentSkyOutlineButtonClass = outlineButtonStyles.sky;
+const studentEmeraldOutlineButtonClass = outlineButtonStyles.emerald;
+const studentAmberOutlineButtonClass = outlineButtonStyles.amber;
+const studentBlueOutlineButtonClass = outlineButtonStyles.blue;
+const studentRedOutlineButtonClass = outlineButtonStyles.red;
 
 type StudentListResponse = {
   data: StudentListItem[];

@@ -94,6 +94,10 @@ export function DashboardSidebar() {
   const [signingOut, setSigningOut] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const sidebarIconButtonClass =
+    "h-10 w-10 rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+  const sidebarMobileButtonClass =
+    "fixed left-4 top-4 z-50 h-11 w-11 rounded-2xl border border-zinc-700 bg-zinc-900/95 text-zinc-100 shadow-lg shadow-black/30 backdrop-blur-sm hover:border-zinc-600 hover:bg-zinc-800 md:hidden";
   const currentRole = (user?.role as AuthRole | undefined) ?? null;
   const routeKey = `${pathname ?? ""}?${searchParams?.toString() ?? ""}`;
   const visibleMenuItems = menuItems.filter((item) =>
@@ -165,7 +169,7 @@ export function DashboardSidebar() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 rounded-xl border border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                  className={sidebarIconButtonClass}
                   onClick={() => setIsMobileOpen(false)}
                 >
                   <PanelLeftClose className="h-4 w-4" />
@@ -175,7 +179,7 @@ export function DashboardSidebar() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="hidden h-10 w-10 rounded-xl border border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:bg-zinc-800 hover:text-white md:inline-flex"
+                  className={`hidden md:inline-flex ${sidebarIconButtonClass}`}
                   onClick={() => setIsCollapsed((value) => !value)}
                 >
                   {collapsed ? (
@@ -285,7 +289,7 @@ export function DashboardSidebar() {
         type="button"
         variant="ghost"
         size="icon"
-        className="fixed left-4 top-4 z-50 h-11 w-11 rounded-2xl border border-zinc-800 bg-zinc-900/95 text-zinc-100 shadow-lg shadow-black/30 backdrop-blur-sm hover:bg-zinc-800 md:hidden"
+        className={sidebarMobileButtonClass}
         onClick={() => setIsMobileOpen(true)}
       >
         <Menu className="h-5 w-5" />

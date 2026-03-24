@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPatch } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 type RiskNotification = {
   id: string;
@@ -152,16 +153,11 @@ const dashboardInsetCardClass =
   "rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3";
 const dashboardToolbarPanelClass =
   "rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3";
-const dashboardOutlineButtonClass =
-  "border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
-const dashboardSkyOutlineButtonClass =
-  "border-sky-700 bg-sky-950/40 text-sky-100 hover:border-sky-500 hover:bg-sky-900/60 hover:text-white";
-const dashboardEmeraldOutlineButtonClass =
-  "border-emerald-700 bg-emerald-950/40 text-emerald-100 hover:border-emerald-500 hover:bg-emerald-900/60 hover:text-white";
-const dashboardVioletOutlineButtonClass =
-  "border-violet-700 bg-violet-950/40 text-violet-100 hover:border-violet-500 hover:bg-violet-900/60 hover:text-white";
-const dashboardAmberOutlineButtonClass =
-  "border-amber-700 bg-amber-950/40 text-amber-100 hover:border-amber-500 hover:bg-amber-900/60 hover:text-white";
+const dashboardOutlineButtonClass = outlineButtonStyles.neutral;
+const dashboardSkyOutlineButtonClass = outlineButtonStyles.sky;
+const dashboardEmeraldOutlineButtonClass = outlineButtonStyles.emerald;
+const dashboardVioletOutlineButtonClass = outlineButtonStyles.violet;
+const dashboardAmberOutlineButtonClass = outlineButtonStyles.amber;
 
 export function AttendanceRiskInsights() {
   const { user } = useAuth();
@@ -2081,7 +2077,7 @@ export function AttendanceRiskInsights() {
                     variant="outline"
                     size="sm"
                     onClick={() => setAgingFilter("all")}
-                    className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    className={`w-full ${dashboardOutlineButtonClass}`}
                   >
                     Reset Aging Filter
                   </Button>
@@ -2747,7 +2743,7 @@ export function AttendanceRiskInsights() {
                   size="sm"
                   variant="outline"
                   onClick={handleDismissOverdueBanner}
-                  className="border-red-400/40 text-red-100 hover:bg-red-500/10"
+                  className="border-red-400/50 bg-red-950/30 text-red-100 hover:border-red-300/60 hover:bg-red-500/15"
                 >
                   Tutup
                 </Button>
@@ -2797,7 +2793,7 @@ export function AttendanceRiskInsights() {
                 className={
                   notificationFilter === value
                     ? "min-h-9 border-sky-500 bg-sky-500/10 text-sky-200"
-                    : "min-h-9 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    : `min-h-9 ${dashboardOutlineButtonClass}`
                 }
               >
                 {label}

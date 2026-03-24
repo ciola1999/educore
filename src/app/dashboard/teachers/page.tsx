@@ -16,8 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 function TeachersContent() {
+  const teacherOutlineButtonClass = `inline-flex h-11 items-center gap-1 rounded-xl px-3 text-sm transition ${outlineButtonStyles.neutral}`;
   const { user } = useAuth();
   const [refreshToken, setRefreshToken] = useState(0);
   const [search, setSearch] = useQueryState(
@@ -116,7 +118,7 @@ function TeachersContent() {
                   setSearch("");
                   setRoleFilter(null);
                 }}
-                className="inline-flex h-11 items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-900/60 px-3 text-sm text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+                className={teacherOutlineButtonClass}
               >
                 <X className="h-4 w-4" />
                 Reset

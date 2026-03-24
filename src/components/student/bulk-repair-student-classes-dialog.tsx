@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { StudentListItem } from "@/hooks/use-student-list";
 import { apiGet, apiPost } from "@/lib/api/request";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 import { isUuidLikeClassValue } from "@/lib/utils/class-name";
 import { Button } from "../ui/button";
 import {
@@ -57,8 +58,7 @@ type Props = {
   onSuccess: () => void;
 };
 
-const bulkRepairOutlineButtonClass =
-  "rounded-2xl border-orange-700/70 bg-orange-950/40 text-orange-100 hover:border-orange-500 hover:bg-orange-900/60 hover:text-white disabled:opacity-50";
+const bulkRepairOutlineButtonClass = `${outlineButtonStyles.orange} disabled:opacity-50`;
 
 export function BulkRepairStudentClassesDialog({ students, onSuccess }: Props) {
   const [open, setOpen] = useState(false);

@@ -34,6 +34,9 @@ import {
 } from "@/components/ui/select";
 import type { StudentListItem } from "@/hooks/use-student-list";
 import { apiPost } from "@/lib/api/request";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
+
+const bulkResetPasswordOutlineButtonClass = outlineButtonStyles.amber;
 
 const bulkResetPasswordSchema = z
   .object({
@@ -55,9 +58,6 @@ interface BulkResetStudentPasswordDialogProps {
   visibleStudents: StudentListItem[];
   onSuccess: () => void;
 }
-
-const bulkResetPasswordOutlineButtonClass =
-  "rounded-2xl border-amber-700/70 bg-amber-950/40 text-amber-100 hover:border-amber-500 hover:bg-amber-900/60 hover:text-white";
 
 export function BulkResetStudentPasswordDialog({
   students,

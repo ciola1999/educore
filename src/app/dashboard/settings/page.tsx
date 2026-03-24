@@ -34,14 +34,14 @@ import {
   readDesktopSyncStorageConfig,
   writeDesktopSyncStorageConfig,
 } from "@/lib/sync/storage";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 type DesktopSyncConfig = {
   url: string;
   authToken: string;
 };
 
-const dashboardOutlineButtonClass =
-  "border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+const dashboardOutlineButtonClass = outlineButtonStyles.neutral;
 
 export default function SettingsPage() {
   const { user } = useAuth();
