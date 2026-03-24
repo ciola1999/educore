@@ -19,6 +19,38 @@ vi.mock("@/core/services/attendance-service", () => ({
 import { POST } from "./route";
 
 describe("POST /api/attendance/bulk", () => {
+  it("rejects request when session user id is missing", async () => {
+    authMock.mockResolvedValue({
+      user: { role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          classId: "class-xa",
+          date: "2026-03-19",
+          records: [
+            {
+              studentId: "student-1",
+              status: "present",
+              notes: "",
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    const payload = (await response.json()) as {
+      success: boolean;
+      error?: string;
+    };
+    expect(payload.success).toBe(false);
+    expect(recordBulkAttendanceMock).not.toHaveBeenCalled();
+  });
+
   it("rejects classId=all for manual bulk submit", async () => {
     authMock.mockResolvedValue({
       user: { id: "user-1", role: "teacher" },

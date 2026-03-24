@@ -62,10 +62,12 @@ export function HistoryRiskPanel({
     <div className={historyPanelClass}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className={historySectionEyebrowClass}>Risk Control</p>
-          <h3 className={historySectionTitleClass}>Alert Risiko Attendance</h3>
+          <p className={historySectionEyebrowClass}>Kontrol Risiko</p>
+          <h3 className={historySectionTitleClass}>
+            Peringatan Risiko Attendance
+          </h3>
           <p className={historySectionCopyClass}>
-            Threshold alert bisa diatur langsung oleh admin
+            Ambang peringatan bisa diatur langsung oleh admin
           </p>
         </div>
         <p className="text-xs text-zinc-500">
@@ -78,7 +80,7 @@ export function HistoryRiskPanel({
           min="0"
           value={riskAlphaThreshold}
           onChange={(event) => onRiskAlphaThresholdChange(event.target.value)}
-          placeholder="Alpha threshold"
+          placeholder="Batas alpha"
           aria-label="Threshold alpha"
           className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-red-500/25 focus-visible:ring-red-500/25"
         />
@@ -87,7 +89,7 @@ export function HistoryRiskPanel({
           min="0"
           value={riskLateThreshold}
           onChange={(event) => onRiskLateThresholdChange(event.target.value)}
-          placeholder="Terlambat threshold"
+          placeholder="Batas terlambat"
           aria-label="Threshold terlambat"
           className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-amber-500/25 focus-visible:ring-amber-500/25"
         />
@@ -97,8 +99,8 @@ export function HistoryRiskPanel({
           max="100"
           value={riskRateThreshold}
           onChange={(event) => onRiskRateThresholdChange(event.target.value)}
-          placeholder="Rate threshold"
-          aria-label="Threshold attendance rate"
+          placeholder="Batas tingkat hadir"
+          aria-label="Threshold tingkat hadir"
           className="rounded-2xl border-zinc-800 bg-zinc-950/90 text-zinc-100 shadow-sm shadow-black/10 hover:border-sky-500/25 focus-visible:ring-sky-500/25"
         />
       </div>
@@ -109,7 +111,7 @@ export function HistoryRiskPanel({
           size="sm"
           disabled={savingRiskSettings}
           onClick={onSaveRiskSettings}
-          className={historyOutlineButtonClass("sky")}
+          className={`w-full sm:w-auto ${historyOutlineButtonClass("sky")}`}
         >
           {savingRiskSettings ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -125,7 +127,7 @@ export function HistoryRiskPanel({
             </p>
             <p className="text-xs text-zinc-500">
               Catatan ini akan ikut masuk ke notifikasi internal saat tombol
-              follow-up ditekan.
+              tindak lanjut ditekan.
             </p>
           </div>
           <span className="text-xs text-zinc-500">
@@ -146,8 +148,8 @@ export function HistoryRiskPanel({
               Info
             </p>
             <p className="mt-1 text-xs text-zinc-400">
-              Deadline akan ikut tampil di dashboard follow-up guru atau wali
-              kelas.
+              Deadline akan ikut tampil di dashboard tindak lanjut guru atau
+              wali kelas.
             </p>
           </div>
           <Input
@@ -166,7 +168,7 @@ export function HistoryRiskPanel({
               key={`risk-${item.studentId}`}
               className={`${historyMetricCardClass} border-red-500/20 from-red-500/10 to-red-500/4 shadow-red-950/10 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-950/20`}
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <button
                     type="button"
@@ -185,7 +187,7 @@ export function HistoryRiskPanel({
                   size="sm"
                   disabled={creatingFollowUpId === item.studentId}
                   onClick={() => onCreateFollowUp(item)}
-                  className={historyOutlineButtonClass("red")}
+                  className={`w-full sm:w-auto ${historyOutlineButtonClass("red")}`}
                 >
                   {creatingFollowUpId === item.studentId ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -196,7 +198,7 @@ export function HistoryRiskPanel({
               <div className="mt-3 text-right text-xs">
                 <p className="text-red-300">Alpha {item.absent}</p>
                 <p className="text-amber-300">Terlambat {item.late}</p>
-                <p className="text-zinc-300">Rate {item.attendanceRate}%</p>
+                <p className="text-zinc-300">Hadir {item.attendanceRate}%</p>
               </div>
             </div>
           ))}

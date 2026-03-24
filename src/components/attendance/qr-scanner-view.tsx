@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   Camera,
   CameraOff,
   Check,
@@ -17,6 +18,7 @@ import { InlineState } from "@/components/common/inline-state";
 import { Button } from "@/components/ui/button";
 import { isTauri } from "@/core/env";
 import { useQrAttendance } from "@/hooks/use-attendance";
+import { cn } from "@/lib/utils";
 
 function formatTime(value: string | Date | null) {
   if (!value) {
@@ -46,13 +48,13 @@ function getResultBadge(
 
   if (result.type === "CHECK_OUT") {
     return {
-      label: "Check-out",
+      label: "Pulang",
       className: "border-blue-500/30 bg-blue-500/10 text-blue-200",
     };
   }
 
   return {
-    label: "Check-in",
+    label: "Masuk",
     className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
   };
 }
@@ -94,9 +96,110 @@ function getSyncStatusLabel(status: "synced" | "pending" | "error") {
   }
 }
 
+function getCameraErrorMeta(message: string, isDesktopRuntime: boolean) {
+  if (/notallowed|permission|denied|izin/iu.test(message)) {
+    return {
+      title: "Izin kamera ditolak",
+      description:
+        "Izinkan akses kamera untuk browser atau runtime desktop, lalu coba mulai ulang scanner.",
+      tips: [
+        "Periksa permission kamera di browser atau OS.",
+        "Tutup aplikasi lain yang sedang memakai kamera.",
+        "Jika tetap gagal, gunakan fallback input QR sementara.",
+      ],
+    };
+  }
+
+  if (/notfound|device|camera.*found|kamera.*tidak/iu.test(message)) {
+    return {
+      title: "Perangkat kamera tidak ditemukan",
+      description:
+        "Device ini tidak melaporkan kamera yang bisa dipakai untuk scan QR.",
+      tips: [
+        "Pastikan webcam atau kamera belakang tersedia dan terhubung.",
+        "Reload halaman atau buka ulang app desktop setelah kamera aktif.",
+        "Gunakan scanner eksternal atau input QR manual sebagai fallback.",
+      ],
+    };
+  }
+
+  if (/secure|https|context/iu.test(message) && !isDesktopRuntime) {
+    return {
+      title: "Kamera butuh secure context",
+      description:
+        "Di web, akses kamera hanya stabil pada HTTPS atau localhost yang valid.",
+      tips: [
+        "Uji di localhost atau deployment HTTPS.",
+        "Hindari membuka aplikasi dari origin yang tidak aman.",
+        "Gunakan fallback manual jika sedang debugging environment.",
+      ],
+    };
+  }
+
+  return {
+    title: "Kamera tidak tersedia",
+    description: message,
+    tips: [
+      "Coba start ulang scanner setelah beberapa detik.",
+      "Pastikan tidak ada aplikasi lain yang sedang mengunci kamera.",
+      isDesktopRuntime
+        ? "Jika kamera tetap gagal, lanjutkan dengan scanner eksternal atau input manual di desktop."
+        : "Jika kamera tetap gagal, gunakan fallback manual sampai izin kamera kembali normal.",
+    ],
+  };
+}
+
+function getScanSourceLabel(source: "camera" | "manual" | null) {
+  if (source === "camera") {
+    return "Kamera";
+  }
+
+  if (source === "manual") {
+    return "Input Manual";
+  }
+
+  return "Belum ada";
+}
+
+function QrLogSkeleton() {
+  const skeletonItems = ["alpha", "beta", "gamma", "delta"] as const;
+
+  return (
+    <div className="space-y-3" aria-hidden="true">
+      {skeletonItems.map((item) => (
+        <div
+          key={`qr-log-skeleton-${item}`}
+          className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/75 to-zinc-900/70 p-3 shadow-sm shadow-black/10"
+        >
+          <div className="animate-pulse space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <div className="h-4 w-32 rounded-full bg-zinc-800/90" />
+                <div className="h-3 w-20 rounded-full bg-zinc-900" />
+              </div>
+              <div className="h-6 w-20 rounded-full bg-zinc-800/90" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <div className="h-3 w-16 rounded-full bg-zinc-900" />
+                <div className="h-3 w-12 rounded-full bg-zinc-800/90" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 w-16 rounded-full bg-zinc-900" />
+                <div className="h-3 w-12 rounded-full bg-zinc-800/90" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function QRScannerView() {
   const isDesktopRuntime = isTauri();
   const scannerElementId = useId().replace(/:/g, "-");
+  const manualInputRef = useRef<HTMLTextAreaElement | null>(null);
   const scannerRef = useRef<{
     stop: () => Promise<void>;
     clear: () => void | Promise<void>;
@@ -110,6 +213,10 @@ export function QRScannerView() {
   const [scanningStatus, setScanningStatus] = useState<"idle" | "scanned">(
     "idle",
   );
+  const [lastScanSource, setLastScanSource] = useState<
+    "camera" | "manual" | null
+  >(null);
+  const [lastScanAttemptAt, setLastScanAttemptAt] = useState<Date | null>(null);
   const {
     submitting,
     loadingLogs,
@@ -185,18 +292,35 @@ export function QRScannerView() {
     }
   }, []);
 
-  async function handleScan(decodedText: string) {
-    const normalized = decodedText.trim();
-    if (!normalized || lockRef.current) {
+  async function processQrPayload(
+    rawQrValue: string,
+    source: "camera" | "manual",
+  ) {
+    const normalized = rawQrValue.trim();
+    if (!normalized) {
+      if (source === "manual") {
+        toast.error("Isi data QR terlebih dahulu");
+      }
+      return;
+    }
+
+    if (source === "camera" && lockRef.current) {
       return;
     }
 
     lockRef.current = true;
-    setScanningStatus("scanned");
+    setLastScanSource(source);
+    setLastScanAttemptAt(new Date());
+    if (source === "camera") {
+      setScanningStatus("scanned");
+    }
     try {
       const result = await submitQrScan(normalized);
       if (result.success) {
         toast.success(result.message);
+        if (source === "manual") {
+          setManualInput("");
+        }
       } else {
         toast.error(result.message);
       }
@@ -207,9 +331,15 @@ export function QRScannerView() {
     } finally {
       window.setTimeout(() => {
         lockRef.current = false;
-        setScanningStatus("idle");
+        if (source === "camera") {
+          setScanningStatus("idle");
+        }
       }, 1200);
     }
+  }
+
+  async function handleScan(decodedText: string) {
+    await processQrPayload(decodedText, "camera");
   }
 
   async function startScanner() {
@@ -269,25 +399,7 @@ export function QRScannerView() {
   }
 
   async function submitManualQr() {
-    const normalized = manualInput.trim();
-    if (!normalized) {
-      toast.error("Isi data QR terlebih dahulu");
-      return;
-    }
-
-    try {
-      const result = await submitQrScan(normalized);
-      if (result.success) {
-        toast.success(result.message);
-        setManualInput("");
-      } else {
-        toast.error(result.message);
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Gagal memproses QR scan",
-      );
-    }
+    await processQrPayload(manualInput, "manual");
   }
 
   useEffect(() => {
@@ -321,29 +433,36 @@ export function QRScannerView() {
       ? "border-emerald-500/20 bg-linear-to-br from-emerald-500/8 to-emerald-500/4 shadow-emerald-950/20"
       : "border-red-500/20 bg-linear-to-br from-red-500/8 to-red-500/4 shadow-red-950/20"
     : "";
+  const cameraErrorMeta = cameraError
+    ? getCameraErrorMeta(cameraError, isDesktopRuntime)
+    : null;
+  const lastScanMetaLabel =
+    lastScanAttemptAt instanceof Date
+      ? formatTime(lastScanAttemptAt)
+      : formatTime(new Date());
 
   return (
     <div className="space-y-5">
       <InlineState
-        title="QR attendance aktif dengan boundary baru"
-        description="Flow QR sekarang memakai route handler backend yang tervalidasi. Kamera bisa dipakai langsung, dan fallback input manual tetap tersedia untuk desktop testing atau scanner eksternal."
+        title="QR Attendance aktif dengan alur baru"
+        description="Alur QR sekarang memakai route handler backend yang tervalidasi. Kamera bisa dipakai langsung, dan input manual tetap tersedia untuk desktop testing atau scanner eksternal."
         variant="info"
       />
 
       <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-5 rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-5 shadow-sm shadow-black/10">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="flex items-center gap-2 text-lg font-semibold text-zinc-100">
                 <QrCode className="h-5 w-5 text-emerald-400" />
-                QR Scanner
+                Scanner QR
               </h3>
               <p className="text-sm text-zinc-400">
                 {scannerRuntimeDescription}
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex w-full sm:w-auto items-center gap-2">
               {cameraActive ? (
                 <Button
                   type="button"
@@ -351,10 +470,10 @@ export function QRScannerView() {
                   onClick={() => {
                     void stopScanner();
                   }}
-                  className="h-11 rounded-xl border border-red-500/35 bg-linear-to-br from-red-500/22 to-red-600/14 px-4 !text-white shadow-sm shadow-red-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-red-400/60 hover:from-red-500/28 hover:to-red-600/18 hover:!text-white hover:shadow-md hover:shadow-red-950/40"
+                  className="h-11 w-full sm:w-auto rounded-xl border border-red-500/35 bg-linear-to-br from-red-500/22 to-red-600/14 px-4 !text-white shadow-sm shadow-red-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-red-400/60 hover:from-red-500/28 hover:to-red-600/18 hover:!text-white hover:shadow-md hover:shadow-red-950/40"
                 >
                   <CameraOff className="mr-2 h-4 w-4 !text-red-100" />
-                  <span className="!text-white">Stop Camera</span>
+                  <span className="!text-white">Matikan Kamera</span>
                 </Button>
               ) : (
                 <Button
@@ -363,20 +482,20 @@ export function QRScannerView() {
                     void startScanner();
                   }}
                   disabled={startingCamera || submitting}
-                  className="h-11 rounded-xl border border-emerald-500/35 bg-linear-to-br from-emerald-500 to-emerald-600 px-4 !text-white shadow-sm shadow-emerald-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-emerald-500 hover:shadow-md hover:shadow-emerald-950/40"
+                  className="h-11 w-full sm:w-auto rounded-xl border border-emerald-500/35 bg-linear-to-br from-emerald-500 to-emerald-600 px-4 !text-white shadow-sm shadow-emerald-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-emerald-500 hover:shadow-md hover:shadow-emerald-950/40"
                 >
                   {startingCamera ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Camera className="mr-2 h-4 w-4" />
                   )}
-                  <span className="!text-white">Start Camera</span>
+                  <span className="!text-white">Nyalakan Kamera</span>
                 </Button>
               )}
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
             <span className="inline-flex rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
               {scannerRuntimeLabel}
             </span>
@@ -386,16 +505,60 @@ export function QRScannerView() {
               {cameraStatus.label}
             </span>
             <span className="inline-flex rounded-full border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-200">
-              Fallback manual siap
+              Input manual siap
             </span>
           </div>
 
-          {cameraError ? (
-            <InlineState
-              title="Kamera tidak tersedia"
-              description={cameraError}
-              variant="warning"
-            />
+          {cameraErrorMeta ? (
+            <div className="space-y-3">
+              <InlineState
+                title={cameraErrorMeta.title}
+                description={cameraErrorMeta.description}
+                variant="warning"
+                actionLabel="Coba Lagi Kamera"
+                onAction={() => {
+                  void startScanner();
+                }}
+              />
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                  <div className="space-y-2">
+                    <p className="font-medium text-amber-100">
+                      Langkah recovery cepat
+                    </p>
+                    <ul className="space-y-1 text-xs leading-5 text-amber-100/80">
+                      {cameraErrorMeta.tips.map((tip) => (
+                        <li key={tip}>• {tip}</li>
+                      ))}
+                    </ul>
+                    <div className="grid gap-2 pt-1 sm:flex sm:flex-wrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => manualInputRef.current?.focus()}
+                        className="w-full sm:w-auto border-amber-400/30 bg-transparent text-amber-100 hover:bg-amber-500/10"
+                      >
+                        Fokus ke Input Manual
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setCameraError(null);
+                          void stopScanner();
+                        }}
+                        className="w-full sm:w-auto border-amber-400/20 bg-transparent text-amber-100/90 hover:bg-amber-500/10"
+                      >
+                        Tutup Pesan Error
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           <div className="relative rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/80 p-3 shadow-inner shadow-black/20">
@@ -422,7 +585,10 @@ export function QRScannerView() {
               </>
             ) : null}
             {scanningStatus === "scanned" && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+              <div
+                className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
+                aria-live="polite"
+              >
                 <div className="rounded-3xl border border-white/20 bg-zinc-900/90 p-8 text-center shadow-2xl">
                   <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border-4 border-emerald-500 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.25)]">
                     <Check className="h-10 w-10 text-emerald-400" />
@@ -459,23 +625,36 @@ export function QRScannerView() {
               htmlFor="manual-qr-input"
               className="text-sm font-medium text-zinc-200"
             >
-              Fallback input QR
+              Input QR manual
             </label>
             <textarea
               id="manual-qr-input"
+              ref={manualInputRef}
               value={manualInput}
               onChange={(event) => setManualInput(event.target.value)}
               placeholder='Contoh: {"nis":"2324.10.001"} atau token kartu'
               className="min-h-24 w-full rounded-2xl border border-zinc-800 bg-zinc-950/90 px-4 py-3 text-sm text-zinc-100 outline-none transition-all duration-200 placeholder:text-zinc-600 hover:border-emerald-500/30 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             />
-            <div className="flex justify-end">
+            <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setManualInput("");
+                  manualInputRef.current?.focus();
+                }}
+                disabled={submitting || manualInput.length === 0}
+                className="h-11 w-full sm:w-auto rounded-xl border-zinc-700 bg-zinc-900/80 text-zinc-100 hover:bg-zinc-800"
+              >
+                Reset Input
+              </Button>
               <Button
                 type="button"
                 onClick={() => {
                   void submitManualQr();
                 }}
                 disabled={submitting}
-                className="h-11 rounded-xl border border-blue-400/35 bg-linear-to-br from-blue-500 to-cyan-500 px-4 !text-white shadow-sm shadow-blue-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-400 hover:to-cyan-400 hover:shadow-md hover:shadow-blue-950/40"
+                className="h-11 w-full sm:w-auto rounded-xl border border-blue-400/35 bg-linear-to-br from-blue-500 to-cyan-500 px-4 !text-white shadow-sm shadow-blue-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-400 hover:to-cyan-400 hover:shadow-md hover:shadow-blue-950/40"
               >
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -490,7 +669,7 @@ export function QRScannerView() {
 
         <div className="space-y-5">
           <div className="space-y-4 rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-5 shadow-sm shadow-black/10">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="flex items-center gap-2 text-lg font-semibold text-zinc-100">
                 <CheckCircle2 className="h-5 w-5 text-blue-400" />
                 Hasil Scan Terakhir
@@ -500,8 +679,9 @@ export function QRScannerView() {
             {lastResult ? (
               <div
                 className={`rounded-3xl border p-4 shadow-sm ${scanResultTone}`}
+                aria-live="polite"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
@@ -523,12 +703,39 @@ export function QRScannerView() {
                       {lastResult.message}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/40 px-3 py-2 text-right text-xs text-zinc-400">
+                  <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/40 px-3 py-2 text-left text-xs text-zinc-400 sm:text-right">
                     <p className="uppercase tracking-[0.16em] text-zinc-500">
-                      Update
+                      Pembaruan
                     </p>
                     <p className="mt-1 text-sm font-semibold text-zinc-100">
-                      {lastResult.data?.time || formatTime(new Date())}
+                      {lastResult.data?.time || lastScanMetaLabel}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/35 px-3 py-2 text-xs text-zinc-400">
+                    <p className="uppercase tracking-[0.16em] text-zinc-500">
+                      Sumber Scan
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-zinc-100">
+                      {getScanSourceLabel(lastScanSource)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/35 px-3 py-2 text-xs text-zinc-400">
+                    <p className="uppercase tracking-[0.16em] text-zinc-500">
+                      Status Flow
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 text-sm font-semibold",
+                        lastResult.success
+                          ? "text-emerald-200"
+                          : "text-red-200",
+                      )}
+                    >
+                      {lastResult.success
+                        ? "Tersimpan dan log diperbarui"
+                        : "Ditolak sebelum menulis attendance"}
                     </p>
                   </div>
                 </div>
@@ -537,7 +744,7 @@ export function QRScannerView() {
                     <div className="space-y-3 rounded-2xl border border-zinc-800/80 bg-zinc-950/35 p-3 text-sm text-zinc-300">
                       <div>
                         <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">
-                          Siswa
+                          Data Siswa
                         </p>
                         <p className="mt-1 font-medium text-zinc-100">
                           {lastResult.data.fullName}
@@ -561,14 +768,12 @@ export function QRScannerView() {
                     <div className="space-y-3 rounded-2xl border border-zinc-800/80 bg-zinc-950/35 p-3 text-sm text-zinc-300">
                       <div className="grid gap-2 text-xs text-zinc-400">
                         <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">
-                          Detail Scan
+                          Detail Pemindaian
                         </p>
                         <p>
                           Jenis:{" "}
                           <span className="font-medium text-zinc-100">
-                            {lastResult.data.type === "in"
-                              ? "Check-in"
-                              : "Check-out"}
+                            {lastResult.data.type === "in" ? "Masuk" : "Pulang"}
                           </span>
                         </p>
                         <p>
@@ -605,7 +810,7 @@ export function QRScannerView() {
           </div>
 
           <div className="space-y-4 rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/75 p-5 shadow-sm shadow-black/10">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold text-zinc-100">
                 Log Hari Ini
               </h3>
@@ -615,16 +820,16 @@ export function QRScannerView() {
                 onClick={() => {
                   void loadTodayLogs();
                 }}
-                className="h-11 rounded-xl border border-sky-500/35 bg-linear-to-br from-sky-500/22 to-sky-600/14 px-4 !text-white shadow-sm shadow-sky-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/60 hover:from-sky-500/28 hover:to-sky-600/18 hover:!text-white hover:shadow-md hover:shadow-sky-950/40"
+                className="h-11 w-full sm:w-auto rounded-xl border border-sky-500/35 bg-linear-to-br from-sky-500/22 to-sky-600/14 px-4 !text-white shadow-sm shadow-sky-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/60 hover:from-sky-500/28 hover:to-sky-600/18 hover:!text-white hover:shadow-md hover:shadow-sky-950/40"
               >
                 <RefreshCw className="mr-2 h-4 w-4 !text-sky-100" />
-                <span className="!text-white">Refresh</span>
+                <span className="!text-white">Muat Ulang</span>
               </Button>
             </div>
 
             {loadingLogs ? (
-              <div className="flex items-center justify-center py-10 text-zinc-500">
-                <Loader2 className="h-6 w-6 animate-spin" />
+              <div className="rounded-3xl border border-dashed border-zinc-800/80 bg-zinc-950/35 p-3">
+                <QrLogSkeleton />
               </div>
             ) : logs.length > 0 ? (
               <div className="space-y-3">
@@ -650,25 +855,25 @@ export function QRScannerView() {
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-zinc-400">
                       <div>
-                        <p className="text-zinc-500">Check-in</p>
+                        <p className="text-zinc-500">Masuk</p>
                         <p className="mt-1 font-medium text-zinc-200">
                           {formatTime(log.checkInTime)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-zinc-500">Check-out</p>
+                        <p className="text-zinc-500">Pulang</p>
                         <p className="mt-1 font-medium text-zinc-200">
                           {formatTime(log.checkOutTime)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-zinc-500">Late Duration</p>
+                        <p className="text-zinc-500">Durasi Terlambat</p>
                         <p className="mt-1 font-medium text-zinc-200">
                           {log.lateDuration ? `${log.lateDuration} menit` : "-"}
                         </p>
                       </div>
                       <div>
-                        <p className="text-zinc-500">Sync</p>
+                        <p className="text-zinc-500">Sinkronisasi</p>
                         <p className="mt-1 font-medium text-zinc-200">
                           {getSyncStatusLabel(log.syncStatus)}
                         </p>

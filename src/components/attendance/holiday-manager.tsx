@@ -104,7 +104,8 @@ export function HolidayManager({
             Kalender Hari Libur
           </h3>
           <p className="text-sm text-zinc-400">
-            Hari libur akan memblokir absensi QR otomatis pada tanggal terkait.
+            Hari libur akan memblokir QR Attendance otomatis pada tanggal
+            terkait.
           </p>
         </div>
 
@@ -220,7 +221,7 @@ export function HolidayManager({
       ) : (
         <InlineState
           title="Belum ada hari libur"
-          description="Tambahkan tanggal penting sekolah atau hari libur nasional agar scanner QR menghormati kalender akademik."
+          description="Tambahkan tanggal penting sekolah atau hari libur nasional agar QR Attendance menghormati kalender akademik."
           variant="info"
         />
       )}

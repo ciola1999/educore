@@ -704,7 +704,7 @@ export function DailyLogView({
     try {
       const rows = [
         ...historyTrend.map((item) => ({
-          Bagian: "Trend",
+          Bagian: "Tren",
           Label: item.label,
           Periode: item.period,
           Total: item.total,
@@ -715,7 +715,7 @@ export function DailyLogView({
           "Tingkat Hadir (%)": item.attendanceRate,
         })),
         ...historyHeatmap.map((item) => ({
-          Bagian: "Heatmap",
+          Bagian: "Peta Panas",
           Label: item.dayLabel,
           Periode: item.date,
           Total: item.total,
@@ -1450,7 +1450,7 @@ export function DailyLogView({
               className="h-11 w-full rounded-xl border border-sky-400/60 !bg-linear-to-br !from-sky-700 !to-cyan-600 px-4 !text-white shadow-sm shadow-sky-950/35 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/80 hover:!from-sky-600 hover:!to-cyan-500 hover:!text-white hover:shadow-md hover:shadow-sky-950/45 disabled:border-zinc-700 disabled:!from-zinc-800 disabled:!to-zinc-800 disabled:!text-zinc-300 sm:w-auto"
             >
               <RefreshCw className="mr-2 h-4 w-4 text-sky-100" />
-              <span className="!text-white">Refresh</span>
+              <span className="!text-white">Muat Ulang</span>
             </Button>
           </div>
 
@@ -1476,11 +1476,11 @@ export function DailyLogView({
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-sm text-zinc-300 sm:text-right">
                       <div>
-                        <p className="text-zinc-500">Check-in</p>
+                        <p className="text-zinc-500">Masuk</p>
                         <p>{formatTime(log.checkInTime)}</p>
                       </div>
                       <div>
-                        <p className="text-zinc-500">Check-out</p>
+                        <p className="text-zinc-500">Pulang</p>
                         <p>{formatTime(log.checkOutTime)}</p>
                       </div>
                     </div>
@@ -1491,7 +1491,7 @@ export function DailyLogView({
           ) : (
             <InlineState
               title="Belum ada log hari ini"
-              description="Check-in dan check-out QR yang berhasil akan muncul di panel ini."
+              description="Log masuk dan pulang QR yang berhasil akan muncul di panel ini."
               variant="info"
             />
           )}

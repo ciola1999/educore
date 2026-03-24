@@ -132,7 +132,7 @@ export function HistoryFiltersPanel({
                     : "!text-zinc-300"
                 }
               >
-                Comfort
+                Nyaman
               </span>
             </Button>
             <Button
@@ -153,7 +153,7 @@ export function HistoryFiltersPanel({
                     : "!text-zinc-300"
                 }
               >
-                Compact
+                Ringkas
               </span>
             </Button>
           </div>

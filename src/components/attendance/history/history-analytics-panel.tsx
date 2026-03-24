@@ -88,7 +88,7 @@ export function HistoryAnalyticsPanel({
           className={`flex flex-col gap-3 ${historyPanelClass} sm:flex-row sm:items-end sm:justify-between`}
         >
           <div>
-            <p className={historySectionEyebrowClass}>Scope</p>
+            <p className={historySectionEyebrowClass}>Cakupan</p>
             <p className={historySectionTitleClass}>
               Filter Analitik per Kelas
             </p>
@@ -124,9 +124,9 @@ export function HistoryAnalyticsPanel({
         <div className={historyPanelClass}>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className={historySectionEyebrowClass}>Compare</p>
+              <p className={historySectionEyebrowClass}>Banding</p>
               <h3 className={historySectionTitleClass}>
-                Compare Mode Antar Kelas
+                Mode Banding Antar Kelas
               </h3>
               <p className={historySectionCopyClass}>
                 Bandingkan performa dua kelas pada filter aktif
@@ -183,39 +183,46 @@ export function HistoryAnalyticsPanel({
                   size="sm"
                   disabled={exportingCompareReport}
                   onClick={onExportCompareReport}
-                  className={historyOutlineButtonClass("sky")}
+                  className={`w-full sm:w-auto ${historyOutlineButtonClass("sky")}`}
                 >
                   {exportingCompareReport ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
-                  Export Compare
+                  Ekspor Perbandingan
                 </Button>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 {[compareItemA, compareItemB].map((item) => (
                   <div key={item.className} className={historySoftPanelClass}>
-                    <p className="text-sm font-semibold text-zinc-100">
-                      {item.className}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-zinc-300">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {item.className}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Ringkasan performa untuk filter aktif
+                        </p>
+                      </div>
+                      <span className="inline-flex rounded-full border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
+                        Hadir {item.attendanceRate}%
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                      <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-zinc-300">
                         Total {item.total}
                       </div>
-                      <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-zinc-100">
-                        Rate {item.attendanceRate}%
-                      </div>
-                      <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-emerald-300">
+                      <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-emerald-300">
                         Hadir {item.present}
                       </div>
-                      <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-amber-300">
+                      <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-amber-300">
                         Terlambat {item.late}
                       </div>
-                      <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-sky-300">
+                      <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-sky-300">
                         Izin {item.excused}
                       </div>
-                      <div className="rounded-lg bg-zinc-950/70 px-3 py-2 text-red-300">
+                      <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-red-300">
                         Alpha {item.absent}
                       </div>
                     </div>
@@ -231,7 +238,7 @@ export function HistoryAnalyticsPanel({
         <div className={historyPanelClass}>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className={historySectionEyebrowClass}>Trend</p>
+              <p className={historySectionEyebrowClass}>Tren</p>
               <h3 className={historySectionTitleClass}>Tren Attendance</h3>
               <p className={historySectionCopyClass}>
                 Grafik{" "}
@@ -247,17 +254,17 @@ export function HistoryAnalyticsPanel({
               size="sm"
               disabled={exportingAnalyticsReport}
               onClick={onExportAnalyticsReport}
-              className={`h-10 ${historyGradientButtonClass("sky")}`}
+              className={`h-10 w-full sm:w-auto ${historyGradientButtonClass("sky")}`}
             >
               {exportingAnalyticsReport ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              <span className="!text-white">Export Trend/Heatmap</span>
+              <span className="!text-white">Ekspor Tren/Heatmap</span>
             </Button>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {historyTrend.map((item) => (
               <div
                 key={item.period}
@@ -321,7 +328,7 @@ export function HistoryAnalyticsPanel({
                   key={item.date}
                   onClick={() => onDrillDownToDate(item.date)}
                   aria-label={`Lihat detail tanggal ${item.date}, attendance rate ${item.attendanceRate} persen, total ${item.total}, alpha ${item.absent}`}
-                  className={`rounded-2xl border p-3 text-left shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:bg-zinc-900/80 hover:shadow-md hover:shadow-black/20 ${historyFocusRingClass} ${bgClass}`}
+                  className={`rounded-2xl border p-2.5 text-left shadow-sm shadow-black/10 transition-all duration-200 hover:-translate-y-0.5 hover:bg-zinc-900/80 hover:shadow-md hover:shadow-black/20 sm:p-3 ${historyFocusRingClass} ${bgClass}`}
                   title={`${item.date} | Hadir ${item.present + item.late}/${item.total} | Alpha ${item.absent}`}
                 >
                   <p className="text-sm font-semibold text-zinc-100">
@@ -343,7 +350,7 @@ export function HistoryAnalyticsPanel({
       {historyClassSummary.length > 1 ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {bestClass ? (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-sm shadow-emerald-950/10">
               <p className="text-xs uppercase tracking-wide text-emerald-300">
                 Kelas Terbaik
               </p>
@@ -352,12 +359,12 @@ export function HistoryAnalyticsPanel({
               </p>
               <p className="mt-1 text-sm text-zinc-300">
                 Tingkat hadir {bestClass.attendanceRate}% dari {bestClass.total}{" "}
-                record
+                data
               </p>
             </div>
           ) : null}
           {lowestClass ? (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 shadow-sm shadow-red-950/10">
               <p className="text-xs uppercase tracking-wide text-red-300">
                 Kelas Perlu Perhatian
               </p>
@@ -398,14 +405,14 @@ export function HistoryAnalyticsPanel({
               size="sm"
               disabled={exportingClassSummary}
               onClick={onExportClassSummary}
-              className={`h-10 ${historyGradientButtonClass("emerald")}`}
+              className={`h-10 w-full sm:w-auto ${historyGradientButtonClass("emerald")}`}
             >
               {exportingClassSummary ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              <span className="!text-white">Export Rekap Kelas</span>
+              <span className="!text-white">Ekspor Rekap Kelas</span>
             </Button>
           </div>
 
@@ -413,7 +420,52 @@ export function HistoryAnalyticsPanel({
             className="mt-4 overflow-x-auto"
             aria-label="Tabel rekap attendance per kelas"
           >
-            <table className="min-w-full text-sm">
+            <div className="grid gap-3 lg:hidden">
+              {historyClassSummary.map((item) => (
+                <div
+                  key={`class-card-${item.className}`}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/55 to-zinc-950/70 p-4 shadow-sm shadow-black/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {item.className}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Rekap kelas untuk filter aktif
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-zinc-800 bg-zinc-950/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-200">
+                      {item.attendanceRate}%
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-zinc-300">
+                      Total {item.total}
+                    </div>
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-emerald-300">
+                      Hadir {item.present}
+                    </div>
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-amber-300">
+                      Terlambat {item.late}
+                    </div>
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-sky-300">
+                      Izin {item.excused}
+                    </div>
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-red-300">
+                      Alpha {item.absent}
+                    </div>
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-violet-300">
+                      QR {item.qr}
+                    </div>
+                    <div className="rounded-xl bg-zinc-950/70 px-3 py-2 text-orange-300">
+                      Manual {item.manual}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <table className="hidden min-w-full text-sm lg:table">
               <thead className="text-left text-zinc-500">
                 <tr className="border-b border-zinc-800">
                   <th className="pb-2 pr-4 font-medium">Kelas</th>

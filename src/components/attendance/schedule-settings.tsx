@@ -146,7 +146,7 @@ export function ScheduleSettings({
             Jadwal Batas Absensi
           </h3>
           <p className="text-sm text-zinc-400">
-            Atur jam masuk, batas terlambat, dan hari aktif untuk scanner QR.
+            Atur jam masuk, batas terlambat, dan hari aktif untuk QR Attendance.
           </p>
         </div>
 
@@ -263,8 +263,8 @@ export function ScheduleSettings({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                      <SelectItem value="student">Student</SelectItem>
-                      <SelectItem value="employee">Employee</SelectItem>
+                      <SelectItem value="student">Siswa</SelectItem>
+                      <SelectItem value="employee">Pegawai</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -306,8 +306,8 @@ export function ScheduleSettings({
               <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
                 <Clock3 className="h-4 w-4" />
                 {setting.isActive
-                  ? "Aktif untuk perhitungan QR attendance."
-                  : "Nonaktif dan tidak dipakai untuk validasi QR."}
+                  ? "Aktif untuk perhitungan QR Attendance."
+                  : "Nonaktif dan tidak dipakai untuk validasi QR Attendance."}
               </div>
             </div>
           ))}
@@ -315,7 +315,7 @@ export function ScheduleSettings({
       ) : (
         <InlineState
           title="Belum ada jadwal absensi"
-          description="Tambahkan minimal satu jadwal aktif agar scanner QR memiliki batas waktu yang jelas."
+          description="Tambahkan minimal satu jadwal aktif agar QR Attendance memiliki batas waktu yang jelas."
           variant="info"
         />
       )}

@@ -19,6 +19,32 @@ vi.mock("@/core/services/attendance-service", () => ({
 import { POST } from "./route";
 
 describe("POST /api/attendance/scan", () => {
+  it("returns validation error when qr payload is invalid", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/scan", {
+        method: "POST",
+        body: JSON.stringify({
+          qrData: "",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as {
+      success: boolean;
+      code?: string;
+      error?: string;
+    };
+    expect(payload.success).toBe(false);
+    expect(payload.code).toBe("VALIDATION_ERROR");
+    expect(processQRScanMock).not.toHaveBeenCalled();
+  });
+
   it("returns wrapped scan result from backend service", async () => {
     authMock.mockResolvedValue({
       user: { id: "user-1", role: "teacher" },

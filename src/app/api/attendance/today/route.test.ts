@@ -19,6 +19,40 @@ vi.mock("@/core/services/attendance-service", () => ({
 import { GET } from "./route";
 
 describe("GET /api/attendance/today", () => {
+  it("returns all today logs for non-student roles", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    getTodayAttendanceRecordsMock.mockResolvedValue([
+      {
+        id: "log-1",
+        studentId: "student-1",
+        snapshotStudentName: "Aditya",
+      },
+      {
+        id: "log-2",
+        studentId: "student-2",
+        snapshotStudentName: "Budi",
+      },
+    ]);
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+
+    const payload = (await response.json()) as {
+      success: boolean;
+      data: Array<{ studentId: string }>;
+    };
+
+    expect(payload.success).toBe(true);
+    expect(payload.data).toHaveLength(2);
+    expect(payload.data.map((item) => item.studentId)).toEqual([
+      "student-1",
+      "student-2",
+    ]);
+  });
+
   it("filters today logs to the logged-in student for student role", async () => {
     authMock.mockResolvedValue({
       user: { id: "student-1", role: "student" },
