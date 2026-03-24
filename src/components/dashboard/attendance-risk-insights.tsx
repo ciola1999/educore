@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPatch } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 
@@ -96,6 +97,43 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
+function createPrintTarget() {
+  const popup = window.open("", "_blank", "noopener,noreferrer");
+  if (popup) {
+    return {
+      document: popup.document,
+      printWindow: popup,
+      cleanup: () => {},
+    };
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const printWindow = iframe.contentWindow;
+  if (!printWindow) {
+    iframe.remove();
+    return null;
+  }
+
+  return {
+    document: printWindow.document,
+    printWindow,
+    cleanup: () => {
+      window.setTimeout(() => {
+        iframe.remove();
+      }, 1500);
+    },
+  };
+}
+
 function getPeriodLabel(period: "7d" | "30d" | "month") {
   if (period === "7d") {
     return "7 Hari";
@@ -108,9 +146,29 @@ function getPeriodLabel(period: "7d" | "30d" | "month") {
   return "Bulan Ini";
 }
 
+const dashboardPanelClass =
+  "overflow-hidden border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]";
+const dashboardInsetCardClass =
+  "rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3";
+const dashboardToolbarPanelClass =
+  "rounded-2xl border border-zinc-800 bg-zinc-950/50 p-3";
+const dashboardOutlineButtonClass =
+  "border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+const dashboardSkyOutlineButtonClass =
+  "border-sky-700 bg-sky-950/40 text-sky-100 hover:border-sky-500 hover:bg-sky-900/60 hover:text-white";
+const dashboardEmeraldOutlineButtonClass =
+  "border-emerald-700 bg-emerald-950/40 text-emerald-100 hover:border-emerald-500 hover:bg-emerald-900/60 hover:text-white";
+const dashboardVioletOutlineButtonClass =
+  "border-violet-700 bg-violet-950/40 text-violet-100 hover:border-violet-500 hover:bg-violet-900/60 hover:text-white";
+const dashboardAmberOutlineButtonClass =
+  "border-amber-700 bg-amber-950/40 text-amber-100 hover:border-amber-500 hover:bg-amber-900/60 hover:text-white";
+
 export function AttendanceRiskInsights() {
-  const dashboardFilterStorageKey = "attendance-risk-dashboard-filters";
-  const dashboardUiStateStorageKey = "attendance-risk-dashboard-ui";
+  const { user } = useAuth();
+  const storageScope = user?.id?.trim() || "anonymous";
+  const dashboardFilterStorageKey = `attendance-risk-dashboard-filters:${storageScope}`;
+  const dashboardUiStateStorageKey = `attendance-risk-dashboard-ui:${storageScope}`;
+  const overdueBannerStorageKey = `attendance-risk-last-overdue-count:${storageScope}`;
   const [data, setData] = useState<RiskInsightsResponse | null>(null);
   const [classOptions, setClassOptions] = useState<ClassOption[]>([]);
   const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([]);
@@ -225,7 +283,7 @@ export function AttendanceRiskInsights() {
     } catch {
       // Ignore invalid persisted filters.
     }
-  }, []);
+  }, [dashboardFilterStorageKey]);
 
   useEffect(() => {
     try {
@@ -257,8 +315,7 @@ export function AttendanceRiskInsights() {
 
       const dismissedOverdueCount = parsed.dismissOverdueBannerForCount ?? -1;
       const currentOverdueCount = Number(
-        window.localStorage.getItem("attendance-risk-last-overdue-count") ||
-          "0",
+        window.localStorage.getItem(overdueBannerStorageKey) || "0",
       );
       if (
         dismissedOverdueCount >= 0 &&
@@ -269,7 +326,7 @@ export function AttendanceRiskInsights() {
     } catch {
       // Ignore invalid persisted UI state.
     }
-  }, []);
+  }, [dashboardUiStateStorageKey, overdueBannerStorageKey]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -291,6 +348,7 @@ export function AttendanceRiskInsights() {
     classFilter,
     compareAssigneeA,
     compareAssigneeB,
+    dashboardFilterStorageKey,
     notificationFilter,
     periodFilter,
     sortBy,
@@ -326,7 +384,12 @@ export function AttendanceRiskInsights() {
         }),
       );
     }
-  }, [hideReminderCards, searchQuery, visibleCount]);
+  }, [
+    dashboardUiStateStorageKey,
+    hideReminderCards,
+    searchQuery,
+    visibleCount,
+  ]);
 
   useEffect(() => {
     if (data?.assignmentSummary.length === 0) {
@@ -355,13 +418,14 @@ export function AttendanceRiskInsights() {
         (notification.deadline ?? "") < today,
     ).length;
 
-    const storageKey = "attendance-risk-last-overdue-count";
-    const previous = Number(window.localStorage.getItem(storageKey) || "0");
+    const previous = Number(
+      window.localStorage.getItem(overdueBannerStorageKey) || "0",
+    );
     if (overdueCount > previous && overdueCount > 0) {
       setShowOverdueBanner(true);
     }
-    window.localStorage.setItem(storageKey, String(overdueCount));
-  }, [data]);
+    window.localStorage.setItem(overdueBannerStorageKey, String(overdueCount));
+  }, [data, overdueBannerStorageKey]);
 
   if (loading) {
     return (
@@ -369,8 +433,25 @@ export function AttendanceRiskInsights() {
         {[1, 2].map((item) => (
           <div
             key={item}
-            className="h-56 rounded-xl border border-zinc-800 bg-zinc-900 animate-pulse"
-          />
+            className="overflow-hidden rounded-[1.75rem] border border-zinc-800 bg-zinc-900 p-5 shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]"
+          >
+            <div className="h-3 w-24 animate-pulse rounded-full bg-zinc-800" />
+            <div className="mt-4 h-7 w-48 animate-pulse rounded bg-zinc-800/90" />
+            <div className="mt-3 h-3 w-full animate-pulse rounded bg-zinc-800/70" />
+            <div className="mt-2 h-3 w-4/5 animate-pulse rounded bg-zinc-800/70" />
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {[1, 2, 3, 4].map((skeleton) => (
+                <div
+                  key={`${item}-${skeleton}`}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4"
+                >
+                  <div className="h-3 w-20 animate-pulse rounded bg-zinc-800" />
+                  <div className="mt-4 h-6 w-16 animate-pulse rounded bg-zinc-800/90" />
+                  <div className="mt-3 h-3 w-full animate-pulse rounded bg-zinc-800/70" />
+                </div>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -764,7 +845,8 @@ export function AttendanceRiskInsights() {
       ? `Ada ${visibleNotificationSummary.pending} follow-up pending pada filter aktif.`
       : null,
   ].filter(Boolean) as string[];
-  const canManageAssignees = data.assignmentSummary.length > 0;
+  const canManageAssignees =
+    user?.role === "admin" || user?.role === "super_admin";
   const executiveSnapshot = {
     totalFollowUps: allNotifications.length,
     completionRate:
@@ -1177,8 +1259,8 @@ export function AttendanceRiskInsights() {
   async function handlePrintDashboardReport() {
     setPrintingDashboard(true);
     try {
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
-      if (!printWindow) {
+      const printTarget = createPrintTarget();
+      if (!printTarget) {
         return;
       }
 
@@ -1263,7 +1345,8 @@ export function AttendanceRiskInsights() {
         )
         .join("");
 
-      printWindow.document.write(`
+      printTarget.document.open();
+      printTarget.document.write(`
         <html>
           <head>
             <title>EduCore Attendance Dashboard Report</title>
@@ -1345,9 +1428,10 @@ export function AttendanceRiskInsights() {
           </body>
         </html>
       `);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      printTarget.document.close();
+      printTarget.printWindow.focus();
+      printTarget.printWindow.print();
+      printTarget.cleanup();
     } finally {
       setPrintingDashboard(false);
     }
@@ -1390,7 +1474,17 @@ export function AttendanceRiskInsights() {
     setShowOverdueBanner(false);
     setSearchQuery("");
     setVisibleCount(10);
+    setClassFilter("all");
+    setAssigneeFilter("all");
+    setAgingFilter("all");
+    setPeriodFilter("30d");
+    setNotificationFilter("all");
+    setSortBy("latest");
+    setCompareAssigneeA("none");
+    setCompareAssigneeB("none");
+    window.localStorage.removeItem(dashboardFilterStorageKey);
     window.localStorage.removeItem(dashboardUiStateStorageKey);
+    window.localStorage.removeItem(overdueBannerStorageKey);
   }
 
   async function handleExportClassLeaderboard() {
@@ -1525,110 +1619,163 @@ export function AttendanceRiskInsights() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.05fr_1.2fr]">
-      <Card className="bg-zinc-900 border-zinc-800 text-white">
-        <CardHeader>
+      <Card className={dashboardPanelClass}>
+        <CardHeader className="space-y-3">
           <CardTitle className="flex items-center gap-2 text-zinc-100">
             <AlertTriangle className="h-4 w-4 text-red-400" />
             Attendance Risk
           </CardTitle>
-          <p className="text-xs text-zinc-500">
-            Periode {data.period.startDate} s/d {data.period.endDate}
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 font-semibold uppercase tracking-[0.16em] text-red-200">
+              Period Active
+            </span>
+            <span className="rounded-full border border-zinc-700 bg-zinc-950/70 px-2.5 py-1 text-zinc-400">
+              {data.period.startDate} s/d {data.period.endDate}
+            </span>
+          </div>
+          <p className="text-sm leading-6 text-zinc-400">
+            Prioritas siswa berisiko yang perlu ditindaklanjuti berdasarkan
+            kelas dan assignee aktif.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Select
-            value={classFilter}
-            onValueChange={(value) => {
-              setClassFilter(value);
-              setVisibleCount(10);
-            }}
-          >
-            <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-              <SelectValue placeholder="Semua kelas" />
-            </SelectTrigger>
-            <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-              <SelectItem value="all">Semua Kelas</SelectItem>
-              {classOptions.map((item) => (
-                <SelectItem key={item.id} value={item.name}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className={dashboardToolbarPanelClass}>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                Filter Kelas
+              </p>
+              <Select
+                value={classFilter}
+                onValueChange={(value) => {
+                  setClassFilter(value);
+                  setVisibleCount(10);
+                }}
+              >
+                <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
+                  <SelectValue placeholder="Semua kelas" />
+                </SelectTrigger>
+                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                  <SelectItem value="all">Semua Kelas</SelectItem>
+                  {classOptions.map((item) => (
+                    <SelectItem key={item.id} value={item.name}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <Select
-            value={assigneeFilter}
-            onValueChange={(value) => {
-              setAssigneeFilter(value);
-              setVisibleCount(10);
-            }}
-          >
-            <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-              <SelectValue placeholder="Semua assignee" />
-            </SelectTrigger>
-            <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-              <SelectItem value="all">Semua Assignee</SelectItem>
-              {data.assignmentSummary.map((item) => (
-                <SelectItem key={item.userId} value={item.userId}>
-                  {item.assigneeName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <div className={dashboardToolbarPanelClass}>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                Filter Assignee
+              </p>
+              <Select
+                value={assigneeFilter}
+                onValueChange={(value) => {
+                  setAssigneeFilter(value);
+                  setVisibleCount(10);
+                }}
+              >
+                <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
+                  <SelectValue placeholder="Semua assignee" />
+                </SelectTrigger>
+                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                  <SelectItem value="all">Semua Assignee</SelectItem>
+                  {data.assignmentSummary.map((item) => (
+                    <SelectItem key={item.userId} value={item.userId}>
+                      {item.assigneeName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           {data.students.length > 0 ? (
-            data.students.map((student) => (
-              <div
-                key={student.studentId}
-                className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3"
-              >
-                <p className="text-sm font-medium text-zinc-100">
-                  {student.studentName}
-                </p>
-                <p className="text-xs text-zinc-500">
-                  {student.nis} • {student.className}
-                </p>
-                <p className="mt-2 text-xs text-zinc-300">
-                  {student.riskFlags.join(" | ")}
-                </p>
-              </div>
-            ))
+            <div className="grid gap-3">
+              {data.students.map((student) => (
+                <div
+                  key={student.studentId}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-3"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {student.studentName}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {student.nis} • {student.className}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                        Rate {student.attendanceRate}%
+                      </span>
+                      <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-200">
+                        {student.absent} alpha
+                      </span>
+                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-200">
+                        {student.late} terlambat
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {student.riskFlags.map((flag) => (
+                      <span
+                        key={`${student.studentId}-${flag}`}
+                        className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-100"
+                      >
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <p className="text-sm text-zinc-500">
-              Tidak ada siswa berisiko pada periode aktif.
-            </p>
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-5">
+              <p className="text-sm font-medium text-zinc-300">
+                Tidak ada siswa berisiko pada periode aktif.
+              </p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Filter aktif tidak menemukan prioritas attendance risk baru.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-900 border-zinc-800 text-white">
-        <CardHeader>
+      <Card className={dashboardPanelClass}>
+        <CardHeader className="space-y-3">
           <CardTitle className="flex items-center gap-2 text-zinc-100">
             <BellRing className="h-4 w-4 text-sky-400" />
             Internal Notifications
           </CardTitle>
-          <p className="text-xs text-zinc-500">Follow-up attendance terbaru</p>
+          <p className="text-sm leading-6 text-zinc-400">
+            Follow-up attendance terbaru, KPI penyelesaian, reminder, dan aksi
+            operasional dalam satu workspace.
+          </p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Total
               </p>
               <p className="mt-1 text-xl font-semibold text-zinc-100">
                 {visibleNotificationSummary.total}
               </p>
             </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-amber-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Pending
               </p>
               <p className="mt-1 text-xl font-semibold text-amber-300">
                 {visibleNotificationSummary.pending}
               </p>
             </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-emerald-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Selesai
               </p>
               <p className="mt-1 text-xl font-semibold text-emerald-300">
@@ -1638,8 +1785,8 @@ export function AttendanceRiskInsights() {
           </div>
 
           <div className="grid gap-3 xl:grid-cols-4">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-emerald-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 KPI 7 Hari
               </p>
               <p className="mt-2 text-lg font-semibold text-zinc-100">
@@ -1649,8 +1796,8 @@ export function AttendanceRiskInsights() {
                 Completion rate {weeklyCompletionRate}%
               </p>
             </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-emerald-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 KPI Bulan Ini
               </p>
               <p className="mt-2 text-lg font-semibold text-zinc-100">
@@ -1660,8 +1807,8 @@ export function AttendanceRiskInsights() {
                 Completion rate {monthlyCompletionRate}%
               </p>
             </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Completed Today
               </p>
               <p className="mt-2 text-lg font-semibold text-zinc-100">
@@ -1671,8 +1818,8 @@ export function AttendanceRiskInsights() {
                 Follow-up selesai hari ini
               </p>
             </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className={`${dashboardInsetCardClass} border-red-500/20`}>
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 SLA Breach
               </p>
               <p className="mt-2 text-lg font-semibold text-red-300">
@@ -1683,7 +1830,7 @@ export function AttendanceRiskInsights() {
           </div>
 
           <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-sky-200">
+            <p className="text-xs uppercase tracking-[0.18em] text-sky-200">
               Snapshot Kepala Sekolah
             </p>
             <div className="mt-3 grid gap-3 md:grid-cols-4">
@@ -1726,23 +1873,30 @@ export function AttendanceRiskInsights() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Select
-              value={periodFilter}
-              onValueChange={(value) =>
-                setPeriodFilter(value as "7d" | "30d" | "month")
-              }
+          <div className="sticky top-2 z-10 grid gap-3 rounded-[1.5rem] border border-zinc-800/80 bg-zinc-900/85 p-2.5 backdrop-blur md:top-4 md:rounded-[1.75rem] md:p-3 xl:grid-cols-[minmax(0,220px)_1fr]">
+            <div className={dashboardToolbarPanelClass}>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                Periode Dashboard
+              </p>
+              <Select
+                value={periodFilter}
+                onValueChange={(value) =>
+                  setPeriodFilter(value as "7d" | "30d" | "month")
+                }
+              >
+                <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
+                  <SelectValue placeholder="Periode dashboard" />
+                </SelectTrigger>
+                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                  <SelectItem value="7d">7 Hari</SelectItem>
+                  <SelectItem value="30d">30 Hari</SelectItem>
+                  <SelectItem value="month">Bulan Ini</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div
+              className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
             >
-              <SelectTrigger className="w-full min-w-[180px] border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
-                <SelectValue placeholder="Periode dashboard" />
-              </SelectTrigger>
-              <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                <SelectItem value="7d">7 Hari</SelectItem>
-                <SelectItem value="30d">30 Hari</SelectItem>
-                <SelectItem value="month">Bulan Ini</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -1751,7 +1905,7 @@ export function AttendanceRiskInsights() {
                 onClick={() => {
                   void handlePrintDashboardReport();
                 }}
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className={dashboardOutlineButtonClass}
               >
                 {printingDashboard ? "Memproses..." : "Print Dashboard"}
               </Button>
@@ -1760,7 +1914,7 @@ export function AttendanceRiskInsights() {
                 size="sm"
                 variant="outline"
                 onClick={handleToggleReminderCards}
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className={dashboardOutlineButtonClass}
               >
                 {hideReminderCards
                   ? "Tampilkan Reminder"
@@ -1771,7 +1925,7 @@ export function AttendanceRiskInsights() {
                 size="sm"
                 variant="outline"
                 onClick={handleResetDashboardUiState}
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className={dashboardOutlineButtonClass}
               >
                 Reset Tampilan
               </Button>
@@ -1783,7 +1937,7 @@ export function AttendanceRiskInsights() {
                 onClick={() => {
                   void handleExportDashboardPack();
                 }}
-                className="border-emerald-700 text-emerald-300 hover:bg-emerald-950/50"
+                className={dashboardEmeraldOutlineButtonClass}
               >
                 {exportingDashboardPack
                   ? "Memproses..."
@@ -1797,7 +1951,7 @@ export function AttendanceRiskInsights() {
                 onClick={() => {
                   void handleExportAnalytics();
                 }}
-                className="border-violet-700 text-violet-300 hover:bg-violet-950/50"
+                className={dashboardVioletOutlineButtonClass}
               >
                 {exportingAnalytics ? "Memproses..." : "Export Analytics"}
               </Button>
@@ -1809,18 +1963,22 @@ export function AttendanceRiskInsights() {
                 onClick={() => {
                   void handleExportKpiDashboard();
                 }}
-                className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+                className={dashboardSkyOutlineButtonClass}
               >
                 {exportingKpi ? "Memproses..." : "Export KPI"}
               </Button>
+              <div className="hidden min-w-[11rem] items-center rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[11px] leading-5 text-zinc-500 lg:ml-auto lg:flex">
+                Toolbar tetap terlihat saat scroll supaya filter dan export
+                lebih cepat diakses.
+              </div>
             </div>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                     Tren Completion 7 Hari
                   </p>
                   <p className="mt-1 text-sm text-zinc-400">
@@ -1832,7 +1990,7 @@ export function AttendanceRiskInsights() {
                 {trendBuckets.map((item) => (
                   <div
                     key={item.date}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2"
+                    className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 p-2 shadow-[0_16px_40px_-32px_rgba(59,130,246,0.6)]"
                   >
                     <p className="text-[11px] text-zinc-500">{item.label}</p>
                     <div className="mt-2 flex h-28 items-end gap-1">
@@ -1870,8 +2028,8 @@ export function AttendanceRiskInsights() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Aging Bucket
               </p>
               <p className="mt-1 text-sm text-zinc-400">
@@ -1884,7 +2042,7 @@ export function AttendanceRiskInsights() {
                     setAgingFilter("0-3");
                     setVisibleCount(10);
                   }}
-                  className="block w-full rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left"
+                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
                 >
                   <p className="text-sm text-zinc-100">0-3 Hari</p>
                   <p className="mt-1 text-lg font-semibold text-zinc-100">
@@ -1897,7 +2055,7 @@ export function AttendanceRiskInsights() {
                     setAgingFilter("4-7");
                     setVisibleCount(10);
                   }}
-                  className="block w-full rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left"
+                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
                 >
                   <p className="text-sm text-zinc-100">4-7 Hari</p>
                   <p className="mt-1 text-lg font-semibold text-amber-300">
@@ -1910,7 +2068,7 @@ export function AttendanceRiskInsights() {
                     setAgingFilter("8+");
                     setVisibleCount(10);
                   }}
-                  className="block w-full rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left"
+                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
                 >
                   <p className="text-sm text-zinc-100">&gt; 7 Hari</p>
                   <p className="mt-1 text-lg font-semibold text-red-300">
@@ -1933,8 +2091,8 @@ export function AttendanceRiskInsights() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Heatmap Overdue
               </p>
               <p className="mt-1 text-sm text-zinc-400">
@@ -1955,7 +2113,7 @@ export function AttendanceRiskInsights() {
                         setNotificationFilter("overdue");
                         setVisibleCount(10);
                       }}
-                      className="rounded-lg border border-zinc-800 px-2 py-3 text-center"
+                      className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 px-2 py-3 text-center transition hover:scale-[1.02] hover:border-red-500/25"
                       style={{
                         backgroundColor: `rgba(239, 68, 68, ${intensity})`,
                       }}
@@ -1970,27 +2128,27 @@ export function AttendanceRiskInsights() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                 Scheduled Reminder Summary
               </p>
               <p className="mt-1 text-sm text-zinc-400">
                 Ringkasan reminder tindak lanjut
               </p>
               <div className="mt-4 space-y-3">
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3">
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-3">
                   <p className="text-sm text-zinc-100">Due Today</p>
                   <p className="mt-1 text-lg font-semibold text-sky-300">
                     {scheduledReminderSummary.dueToday}
                   </p>
                 </div>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3">
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3">
                   <p className="text-sm text-zinc-100">Due Tomorrow</p>
                   <p className="mt-1 text-lg font-semibold text-amber-300">
                     {scheduledReminderSummary.dueTomorrow}
                   </p>
                 </div>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3">
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3">
                   <p className="text-sm text-zinc-100">Overdue</p>
                   <p className="mt-1 text-lg font-semibold text-red-300">
                     {scheduledReminderSummary.overdue}
@@ -2000,18 +2158,77 @@ export function AttendanceRiskInsights() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex items-end justify-between">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                   Top Assignee Performance
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
                   Ranking berdasarkan completion rate follow-up
                 </p>
               </div>
+              <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+                {topAssigneePerformance.length} assignee aktif
+              </div>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 grid gap-3 md:hidden">
+              {classSummaryRows.map((item) => (
+                <button
+                  key={`class-summary-mobile-${item.className}`}
+                  type="button"
+                  onClick={() => {
+                    setClassFilter(item.className);
+                    setVisibleCount(10);
+                  }}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {item.className}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Ringkasan follow-up per kelas
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                      Total {item.total}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                        Done
+                      </p>
+                      <p className="mt-1 font-semibold text-emerald-100">
+                        {item.done}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                        Pending
+                      </p>
+                      <p className="mt-1 font-semibold text-amber-100">
+                        {item.pending}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                        Overdue
+                      </p>
+                      <p className="mt-1 font-semibold text-red-100">
+                        {item.overdue}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-zinc-500 md:hidden">
+              Geser tabel ke samping untuk melihat semua kolom.
+            </p>
+            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-zinc-500">
                   <tr className="border-b border-zinc-800">
@@ -2026,7 +2243,7 @@ export function AttendanceRiskInsights() {
                   {topAssigneePerformance.map((item) => (
                     <tr
                       key={`performance-${item.userId}`}
-                      className="border-b border-zinc-900/80 text-zinc-200"
+                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
                     >
                       <td className="py-3 pr-4 font-medium text-zinc-100">
                         {item.assigneeName}
@@ -2048,10 +2265,10 @@ export function AttendanceRiskInsights() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
             <div className="flex items-end justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                   Dashboard Summary per Kelas
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
@@ -2066,14 +2283,65 @@ export function AttendanceRiskInsights() {
                 onClick={() => {
                   void handleExportClassSummary();
                 }}
-                className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+                className={dashboardSkyOutlineButtonClass}
               >
                 {exportingClassSummary
                   ? "Memproses..."
                   : "Export Summary Kelas"}
               </Button>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 grid gap-3 md:hidden">
+              {classRecoveryLeaderboard.map((item) => (
+                <div
+                  key={`class-recovery-mobile-${item.className}`}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {item.className}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Recovery leaderboard kelas
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-200">
+                      {item.recoveryRate}%
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                        Done
+                      </p>
+                      <p className="mt-1 font-semibold text-emerald-100">
+                        {item.done}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                        Pending
+                      </p>
+                      <p className="mt-1 font-semibold text-amber-100">
+                        {item.pending}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                        Overdue
+                      </p>
+                      <p className="mt-1 font-semibold text-red-100">
+                        {item.overdue}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-zinc-500 md:hidden">
+              Geser tabel ke samping untuk melihat semua kolom.
+            </p>
+            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-zinc-500">
                   <tr className="border-b border-zinc-800">
@@ -2088,7 +2356,7 @@ export function AttendanceRiskInsights() {
                   {classSummaryRows.map((item) => (
                     <tr
                       key={`class-summary-${item.className}`}
-                      className="border-b border-zinc-900/80 text-zinc-200"
+                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
                     >
                       <td className="py-3 pr-4 font-medium text-zinc-100">
                         <button
@@ -2117,10 +2385,10 @@ export function AttendanceRiskInsights() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex items-end justify-between">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                   Leaderboard Recovery per Kelas
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
@@ -2135,14 +2403,73 @@ export function AttendanceRiskInsights() {
                 onClick={() => {
                   void handleExportClassLeaderboard();
                 }}
-                className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+                className={dashboardSkyOutlineButtonClass}
               >
                 {exportingClassLeaderboard
                   ? "Memproses..."
                   : "Export Leaderboard"}
               </Button>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <p className="mt-4 text-xs text-zinc-500 md:hidden">
+              Geser tabel ke samping untuk melihat semua kolom.
+            </p>
+            <div className="mt-4 grid gap-3 md:hidden">
+              {topAssigneePerformance.map((item) => (
+                <button
+                  key={`performance-mobile-${item.userId}`}
+                  type="button"
+                  onClick={() => {
+                    setAssigneeFilter(item.userId);
+                    setVisibleCount(10);
+                  }}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {item.assigneeName}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Ranking completion rate follow-up
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-200">
+                      {item.completionRate}%
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                    <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                        Total
+                      </p>
+                      <p className="mt-1 font-semibold text-zinc-100">
+                        {item.total}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                        Done
+                      </p>
+                      <p className="mt-1 font-semibold text-emerald-100">
+                        {item.done}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                        Pending
+                      </p>
+                      <p className="mt-1 font-semibold text-amber-100">
+                        {item.pending}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-zinc-500 md:hidden">
+              Geser tabel ke samping untuk melihat semua kolom.
+            </p>
+            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-zinc-500">
                   <tr className="border-b border-zinc-800">
@@ -2157,7 +2484,7 @@ export function AttendanceRiskInsights() {
                   {classRecoveryLeaderboard.map((item) => (
                     <tr
                       key={`class-recovery-${item.className}`}
-                      className="border-b border-zinc-900/80 text-zinc-200"
+                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
                     >
                       <td className="py-3 pr-4 font-medium text-zinc-100">
                         {item.className}
@@ -2179,18 +2506,69 @@ export function AttendanceRiskInsights() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex items-end justify-between">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                   Leaderboard Recovery Rate
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
                   Ranking assignee yang paling baik menyelesaikan follow-up
                 </p>
               </div>
+              <div className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
+                Fokus recovery rate
+              </div>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 grid gap-3 md:hidden">
+              {recoveryLeaderboard.map((item) => (
+                <button
+                  key={`recovery-mobile-${item.userId}`}
+                  type="button"
+                  onClick={() => {
+                    setAssigneeFilter(item.userId);
+                    setVisibleCount(10);
+                  }}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {item.assigneeName}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Ranking recovery rate follow-up
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-200">
+                      {item.recoveryRate}%
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                        Done
+                      </p>
+                      <p className="mt-1 font-semibold text-emerald-100">
+                        {item.done}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                        Overdue
+                      </p>
+                      <p className="mt-1 font-semibold text-red-100">
+                        {item.overdue}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-zinc-500 md:hidden">
+              Geser tabel ke samping untuk melihat semua kolom.
+            </p>
+            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-zinc-500">
                   <tr className="border-b border-zinc-800">
@@ -2204,7 +2582,7 @@ export function AttendanceRiskInsights() {
                   {recoveryLeaderboard.map((item) => (
                     <tr
                       key={`recovery-${item.userId}`}
-                      className="border-b border-zinc-900/80 text-zinc-200"
+                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
                     >
                       <td className="py-3 pr-4 font-medium text-zinc-100">
                         {item.assigneeName}
@@ -2223,10 +2601,10 @@ export function AttendanceRiskInsights() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                   Compare Assignee
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
@@ -2234,44 +2612,54 @@ export function AttendanceRiskInsights() {
                 </p>
               </div>
               <div className="grid gap-2 md:grid-cols-2">
-                <Select
-                  value={compareAssigneeA}
-                  onValueChange={setCompareAssigneeA}
-                >
-                  <SelectTrigger className="w-full min-w-[220px] border-zinc-800 bg-zinc-900 text-zinc-200">
-                    <SelectValue placeholder="Assignee A" />
-                  </SelectTrigger>
-                  <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                    <SelectItem value="none">Pilih Assignee A</SelectItem>
-                    {data.assignmentSummary.map((item) => (
-                      <SelectItem
-                        key={`compare-a-${item.userId}`}
-                        value={item.userId}
-                      >
-                        {item.assigneeName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={compareAssigneeB}
-                  onValueChange={setCompareAssigneeB}
-                >
-                  <SelectTrigger className="w-full min-w-[220px] border-zinc-800 bg-zinc-900 text-zinc-200">
-                    <SelectValue placeholder="Assignee B" />
-                  </SelectTrigger>
-                  <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                    <SelectItem value="none">Pilih Assignee B</SelectItem>
-                    {data.assignmentSummary.map((item) => (
-                      <SelectItem
-                        key={`compare-b-${item.userId}`}
-                        value={item.userId}
-                      >
-                        {item.assigneeName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className={dashboardToolbarPanelClass}>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                    Assignee A
+                  </p>
+                  <Select
+                    value={compareAssigneeA}
+                    onValueChange={setCompareAssigneeA}
+                  >
+                    <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-900 text-zinc-200">
+                      <SelectValue placeholder="Assignee A" />
+                    </SelectTrigger>
+                    <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                      <SelectItem value="none">Pilih Assignee A</SelectItem>
+                      {data.assignmentSummary.map((item) => (
+                        <SelectItem
+                          key={`compare-a-${item.userId}`}
+                          value={item.userId}
+                        >
+                          {item.assigneeName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className={dashboardToolbarPanelClass}>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                    Assignee B
+                  </p>
+                  <Select
+                    value={compareAssigneeB}
+                    onValueChange={setCompareAssigneeB}
+                  >
+                    <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-900 text-zinc-200">
+                      <SelectValue placeholder="Assignee B" />
+                    </SelectTrigger>
+                    <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                      <SelectItem value="none">Pilih Assignee B</SelectItem>
+                      {data.assignmentSummary.map((item) => (
+                        <SelectItem
+                          key={`compare-b-${item.userId}`}
+                          value={item.userId}
+                        >
+                          {item.assigneeName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -2286,7 +2674,7 @@ export function AttendanceRiskInsights() {
                     onClick={() => {
                       void handleExportCompareAssignee();
                     }}
-                    className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+                    className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
                   >
                     {exportingCompare ? "Memproses..." : "Export Compare"}
                   </Button>
@@ -2295,11 +2683,16 @@ export function AttendanceRiskInsights() {
                   {[compareAssigneeItemA, compareAssigneeItemB].map((item) => (
                     <div
                       key={`compare-card-${item.userId}`}
-                      className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-4"
+                      className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 via-zinc-900/75 to-sky-950/20 px-4 py-4 shadow-[0_22px_60px_-44px_rgba(14,165,233,0.7)]"
                     >
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {item.assigneeName}
-                      </p>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {item.assigneeName}
+                        </p>
+                        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200">
+                          {item.completionRate}% complete
+                        </span>
+                      </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <p className="text-zinc-500">Total</p>
@@ -2331,7 +2724,7 @@ export function AttendanceRiskInsights() {
                 </div>
               </div>
             ) : (
-              <p className="mt-4 text-sm text-zinc-500">
+              <p className="mt-4 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-4 text-sm text-zinc-500">
                 Pilih dua assignee untuk membandingkan performanya.
               </p>
             )}
@@ -2375,7 +2768,9 @@ export function AttendanceRiskInsights() {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+          >
             {[
               ["all", "Semua"],
               ["pending", "Pending"],
@@ -2401,8 +2796,8 @@ export function AttendanceRiskInsights() {
                 }}
                 className={
                   notificationFilter === value
-                    ? "border-sky-500 bg-sky-500/10 text-sky-200"
-                    : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    ? "min-h-9 border-sky-500 bg-sky-500/10 text-sky-200"
+                    : "min-h-9 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                 }
               >
                 {label}
@@ -2410,7 +2805,9 @@ export function AttendanceRiskInsights() {
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+          >
             <Select
               value={sortBy}
               onValueChange={(value) => {
@@ -2418,7 +2815,7 @@ export function AttendanceRiskInsights() {
                 setVisibleCount(10);
               }}
             >
-              <SelectTrigger className="w-full min-w-[220px] border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
+              <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
                 <SelectValue placeholder="Urutkan notifikasi" />
               </SelectTrigger>
               <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
@@ -2438,12 +2835,14 @@ export function AttendanceRiskInsights() {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+          >
             <Input
               type="date"
               value={bulkDeadline}
               onChange={(event) => setBulkDeadline(event.target.value)}
-              className="w-full min-w-[220px] border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs"
+              className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs"
             />
             <Button
               type="button"
@@ -2459,7 +2858,7 @@ export function AttendanceRiskInsights() {
               onClick={() => {
                 void handleBulkUpdateDeadline();
               }}
-              className="border-amber-700 text-amber-300 hover:bg-amber-950/50"
+              className={`min-h-9 ${dashboardAmberOutlineButtonClass}`}
             >
               {bulkSavingDeadline ? "Memproses..." : "Bulk Set Deadline"}
             </Button>
@@ -2469,7 +2868,7 @@ export function AttendanceRiskInsights() {
                   value={bulkAssigneeId}
                   onValueChange={setBulkAssigneeId}
                 >
-                  <SelectTrigger className="w-full min-w-[220px] border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
+                  <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
                     <SelectValue placeholder="Bulk reassign assignee" />
                   </SelectTrigger>
                   <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
@@ -2495,7 +2894,7 @@ export function AttendanceRiskInsights() {
                   onClick={() => {
                     void handleBulkReassign();
                   }}
-                  className="border-violet-700 text-violet-300 hover:bg-violet-950/50"
+                  className={`min-h-9 ${dashboardVioletOutlineButtonClass}`}
                 >
                   {bulkReassigning ? "Memproses..." : "Bulk Reassign"}
                 </Button>
@@ -2514,7 +2913,7 @@ export function AttendanceRiskInsights() {
               onClick={() => {
                 void handleBulkMarkDone();
               }}
-              className="border-emerald-700 text-emerald-300 hover:bg-emerald-950/50"
+              className={`min-h-9 ${dashboardEmeraldOutlineButtonClass}`}
             >
               {bulkMarkingDone ? "Memproses..." : "Bulk Tandai Selesai"}
             </Button>
@@ -2526,7 +2925,7 @@ export function AttendanceRiskInsights() {
               onClick={() => {
                 void handleExportFollowUpReport();
               }}
-              className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+              className={`min-h-9 ${dashboardSkyOutlineButtonClass}`}
             >
               {exportingReport ? "Memproses..." : "Export Follow-up"}
             </Button>
@@ -2536,11 +2935,11 @@ export function AttendanceRiskInsights() {
             visibleNotifications.map((notification) => (
               <div
                 key={notification.id}
-                className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-3"
+                className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-4"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div>
-                    <p className="text-sm font-medium text-zinc-100">
+                    <p className="text-sm font-semibold text-zinc-100">
                       {notification.judul}
                     </p>
                     <p className="mt-1 text-xs text-zinc-500">
@@ -2556,11 +2955,24 @@ export function AttendanceRiskInsights() {
                         Overdue
                       </p>
                     ) : null}
-                    <p className="mt-1 text-xs text-zinc-400">
+                    <p className="mt-2 text-sm leading-6 text-zinc-400">
                       {notification.pesan}
                     </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                        {notification.isRead ? "Selesai" : "Pending"}
+                      </span>
+                      {notification.riskFlags.map((flag) => (
+                        <span
+                          key={`${notification.id}-${flag}`}
+                          className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-100"
+                        >
+                          {flag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2 xl:w-[12rem] xl:flex-col">
                     <Button
                       type="button"
                       variant="outline"
@@ -2571,7 +2983,7 @@ export function AttendanceRiskInsights() {
                         setEditingDeadline(notification.deadline || "");
                         setEditingAssigneeId("keep");
                       }}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      className={dashboardOutlineButtonClass}
                     >
                       Edit
                     </Button>
@@ -2582,7 +2994,7 @@ export function AttendanceRiskInsights() {
                       onClick={() => {
                         void handleToggleAudit(notification.id);
                       }}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      className={dashboardOutlineButtonClass}
                     >
                       Riwayat
                     </Button>
@@ -2596,7 +3008,7 @@ export function AttendanceRiskInsights() {
                       onClick={() => {
                         void handleMarkDone(notification.id);
                       }}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      className={dashboardOutlineButtonClass}
                     >
                       {notification.isRead ? "Selesai" : "Tandai Selesai"}
                     </Button>
@@ -2661,7 +3073,7 @@ export function AttendanceRiskInsights() {
                         setEditingDeadline("");
                         setEditingAssigneeId("keep");
                       }}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      className={dashboardOutlineButtonClass}
                     >
                       Batal
                     </Button>
@@ -2670,11 +3082,15 @@ export function AttendanceRiskInsights() {
 
                 {auditOpenId === notification.id ? (
                   <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">
+                    <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
                       Riwayat Perubahan
                     </p>
                     {auditLoadingId === notification.id ? (
-                      <p className="mt-2 text-sm text-zinc-400">Memuat...</p>
+                      <div className="mt-3 space-y-2">
+                        <div className="h-3 w-28 animate-pulse rounded bg-zinc-800" />
+                        <div className="h-3 w-full animate-pulse rounded bg-zinc-800/80" />
+                        <div className="h-3 w-4/5 animate-pulse rounded bg-zinc-800/70" />
+                      </div>
                     ) : auditTrail[notification.id]?.length ? (
                       <div className="mt-3 space-y-2">
                         <div className="flex justify-end">
@@ -2688,7 +3104,7 @@ export function AttendanceRiskInsights() {
                                 auditTrail[notification.id],
                               );
                             }}
-                            className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+                            className={dashboardSkyOutlineButtonClass}
                           >
                             Export Audit Trail
                           </Button>
@@ -2717,9 +3133,15 @@ export function AttendanceRiskInsights() {
               </div>
             ))
           ) : (
-            <p className="text-sm text-zinc-500">
-              Belum ada notifikasi internal attendance.
-            </p>
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-5">
+              <p className="text-sm font-medium text-zinc-300">
+                Belum ada notifikasi internal attendance.
+              </p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Coba ubah filter periode, status, atau pencarian untuk melihat
+                follow-up lain.
+              </p>
+            </div>
           )}
 
           {hasMoreNotifications ? (
@@ -2728,17 +3150,17 @@ export function AttendanceRiskInsights() {
                 type="button"
                 variant="outline"
                 onClick={() => setVisibleCount((current) => current + 10)}
-                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                className={dashboardOutlineButtonClass}
               >
-                Load More
+                Load More Follow-up
               </Button>
             </div>
           ) : null}
         </CardContent>
       </Card>
 
-      <Card className="border-zinc-800 bg-zinc-900 text-white xl:col-span-2">
-        <CardHeader>
+      <Card className={`${dashboardPanelClass} xl:col-span-2`}>
+        <CardHeader className="space-y-2">
           <CardTitle className="text-zinc-100">
             Follow-up per Wali Kelas / Guru
           </CardTitle>
@@ -2759,7 +3181,7 @@ export function AttendanceRiskInsights() {
               onClick={() => {
                 void handleExportAssignmentSummary();
               }}
-              className="border-sky-700 text-sky-300 hover:bg-sky-950/50"
+              className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
             >
               {exportingAssignmentSummary
                 ? "Memproses..."
@@ -2767,46 +3189,106 @@ export function AttendanceRiskInsights() {
             </Button>
           </div>
           {data.assignmentSummary.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-zinc-500">
-                  <tr className="border-b border-zinc-800">
-                    <th className="pb-2 pr-4 font-medium">Assignee</th>
-                    <th className="pb-2 pr-4 font-medium">Total</th>
-                    <th className="pb-2 pr-4 font-medium">Pending</th>
-                    <th className="pb-2 pr-4 font-medium">Overdue</th>
-                    <th className="pb-2 font-medium">Selesai</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.assignmentSummary.map((item) => (
-                    <tr
-                      key={item.userId}
-                      className="border-b border-zinc-900/80 text-zinc-200"
-                    >
-                      <td className="py-3 pr-4 font-medium text-zinc-100">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAssigneeFilter(item.userId);
-                            setVisibleCount(10);
-                          }}
-                          className="text-left underline-offset-4 hover:underline"
-                        >
+            <>
+              <div className="mb-3 grid gap-3 md:hidden">
+                {data.assignmentSummary.map((item) => (
+                  <button
+                    key={`assignment-mobile-${item.userId}`}
+                    type="button"
+                    onClick={() => {
+                      setAssigneeFilter(item.userId);
+                      setVisibleCount(10);
+                    }}
+                    className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">
                           {item.assigneeName}
-                        </button>
-                      </td>
-                      <td className="py-3 pr-4">{item.total}</td>
-                      <td className="py-3 pr-4 text-amber-300">
-                        {item.pending}
-                      </td>
-                      <td className="py-3 pr-4 text-red-300">{item.overdue}</td>
-                      <td className="py-3 text-emerald-300">{item.done}</td>
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Rekap assignment follow-up
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                        Total {item.total}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                          Pending
+                        </p>
+                        <p className="mt-1 font-semibold text-amber-100">
+                          {item.pending}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                          Overdue
+                        </p>
+                        <p className="mt-1 font-semibold text-red-100">
+                          {item.overdue}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                          Done
+                        </p>
+                        <p className="mt-1 font-semibold text-emerald-100">
+                          {item.done}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="mb-2 text-xs text-zinc-500 md:hidden">
+                Geser tabel ke samping untuk melihat semua kolom.
+              </p>
+              <div className="hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-zinc-500">
+                    <tr className="border-b border-zinc-800">
+                      <th className="pb-2 pr-4 font-medium">Assignee</th>
+                      <th className="pb-2 pr-4 font-medium">Total</th>
+                      <th className="pb-2 pr-4 font-medium">Pending</th>
+                      <th className="pb-2 pr-4 font-medium">Overdue</th>
+                      <th className="pb-2 font-medium">Selesai</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {data.assignmentSummary.map((item) => (
+                      <tr
+                        key={item.userId}
+                        className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
+                      >
+                        <td className="py-3 pr-4 font-medium text-zinc-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAssigneeFilter(item.userId);
+                              setVisibleCount(10);
+                            }}
+                            className="text-left underline-offset-4 hover:underline"
+                          >
+                            {item.assigneeName}
+                          </button>
+                        </td>
+                        <td className="py-3 pr-4">{item.total}</td>
+                        <td className="py-3 pr-4 text-amber-300">
+                          {item.pending}
+                        </td>
+                        <td className="py-3 pr-4 text-red-300">
+                          {item.overdue}
+                        </td>
+                        <td className="py-3 text-emerald-300">{item.done}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <p className="text-sm text-zinc-500">
               Belum ada assignment follow-up attendance.

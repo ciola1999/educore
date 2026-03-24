@@ -5,7 +5,7 @@ import {
   getAttendanceRiskSettings,
   getAttendanceRiskStudents,
 } from "@/core/services/attendance-service";
-import { requirePermission } from "@/lib/api/authz";
+import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 
@@ -26,7 +26,12 @@ function getCurrentMonthRange() {
 
 export async function GET(request: Request) {
   const session = await auth();
-  const guard = requirePermission(session, "attendance:read");
+  const guard = requireRole(session, [
+    "admin",
+    "super_admin",
+    "teacher",
+    "staff",
+  ]);
   if (guard) {
     return guard;
   }

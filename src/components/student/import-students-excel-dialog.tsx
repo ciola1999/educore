@@ -36,6 +36,11 @@ type ImportStudentsExcelDialogProps = {
   onSuccess: () => void;
 };
 
+const importStudentsSkyOutlineButtonClass =
+  "rounded-2xl border-sky-700/70 bg-sky-950/40 text-sky-100 hover:border-sky-500 hover:bg-sky-900/60 hover:text-white";
+const importStudentsNeutralOutlineButtonClass =
+  "rounded-2xl border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+
 const templateColumns = [
   "NIS",
   "NISN",
@@ -173,7 +178,7 @@ export function ImportStudentsExcelDialog({
         <Button
           type="button"
           variant="outline"
-          className="border-sky-700/60 text-sky-300 hover:bg-sky-900/20"
+          className={importStudentsSkyOutlineButtonClass}
         >
           <FileSpreadsheet className="mr-2 h-4 w-4" />
           Import Excel
@@ -263,7 +268,7 @@ export function ImportStudentsExcelDialog({
           <Button
             type="button"
             variant="outline"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            className={importStudentsNeutralOutlineButtonClass}
             onClick={() => {
               void handleDownloadTemplate();
             }}

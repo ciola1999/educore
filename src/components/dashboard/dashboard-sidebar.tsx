@@ -75,6 +75,17 @@ const menuItems: DashboardMenuItem[] = [
   },
 ];
 
+function formatRoleLabel(role: AuthRole | null) {
+  if (!role) {
+    return "Guest";
+  }
+
+  return role
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -134,7 +145,7 @@ export function DashboardSidebar() {
                 >
                   EC
                 </div>
-                {collapsed && !mobile ? null : <span>Educore</span>}
+                {collapsed && !mobile ? null : <span>EduCore</span>}
               </div>
               {collapsed && !mobile ? null : (
                 <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 shadow-sm shadow-black/10">
@@ -142,11 +153,7 @@ export function DashboardSidebar() {
                     Role Aktif
                   </p>
                   <p className="mt-1 text-sm font-semibold text-zinc-100">
-                    {isLoading
-                      ? "loading..."
-                      : currentRole
-                        ? currentRole.replace("_", " ")
-                        : "guest"}
+                    {isLoading ? "loading..." : formatRoleLabel(currentRole)}
                   </p>
                 </div>
               )}
@@ -238,6 +245,17 @@ export function DashboardSidebar() {
         </div>
 
         <div className="border-t border-zinc-800/50 p-4">
+          {collapsed && !mobile ? null : (
+            <div className="mb-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2.5">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Workspace
+              </p>
+              <p className="mt-1 text-sm font-medium text-zinc-200">
+                {visibleMenuItems.length} menu aktif untuk{" "}
+                {formatRoleLabel(currentRole)}
+              </p>
+            </div>
+          )}
           <Button
             variant="ghost"
             disabled={signingOut}

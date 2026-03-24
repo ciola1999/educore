@@ -64,6 +64,9 @@ interface BulkCreateStudentAccountsDialogProps {
   onSuccess: () => void;
 }
 
+const bulkCreateAccountOutlineButtonClass =
+  "rounded-2xl border-emerald-700/70 bg-emerald-950/40 text-emerald-100 hover:border-emerald-500 hover:bg-emerald-900/60 hover:text-white";
+
 export function BulkCreateStudentAccountsDialog({
   students,
   visibleStudents,
@@ -144,7 +147,7 @@ export function BulkCreateStudentAccountsDialog({
         <Button
           type="button"
           variant="outline"
-          className="border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20"
+          className={bulkCreateAccountOutlineButtonClass}
         >
           <UsersRound className="mr-2 h-4 w-4" />
           Buat Akun Massal

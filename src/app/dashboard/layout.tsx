@@ -8,7 +8,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="h-screen w-full flex bg-zinc-950 text-white overflow-hidden font-sans">
+    <div className="flex h-screen w-full overflow-hidden bg-zinc-950 font-sans text-white">
       <Suspense
         fallback={
           <aside className="hidden w-64 border-r border-zinc-800 bg-zinc-900 md:flex" />
@@ -17,9 +17,12 @@ export default function DashboardLayout({
         <DashboardSidebar />
       </Suspense>
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="relative flex-1 overflow-y-auto">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.08),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.08),transparent_26%)]" />
         <DashboardAccessGate>
-          <div className="mx-auto max-w-7xl p-4 pt-20 md:p-8">{children}</div>
+          <div className="relative mx-auto max-w-[90rem] px-4 pb-10 pt-20 sm:px-5 md:px-8 md:pb-12">
+            {children}
+          </div>
         </DashboardAccessGate>
       </main>
     </div>

@@ -56,6 +56,9 @@ interface BulkResetStudentPasswordDialogProps {
   onSuccess: () => void;
 }
 
+const bulkResetPasswordOutlineButtonClass =
+  "rounded-2xl border-amber-700/70 bg-amber-950/40 text-amber-100 hover:border-amber-500 hover:bg-amber-900/60 hover:text-white";
+
 export function BulkResetStudentPasswordDialog({
   students,
   visibleStudents,
@@ -130,7 +133,7 @@ export function BulkResetStudentPasswordDialog({
         <Button
           type="button"
           variant="outline"
-          className="border-amber-700/60 text-amber-300 hover:bg-amber-900/20"
+          className={bulkResetPasswordOutlineButtonClass}
         >
           <KeyRound className="mr-2 h-4 w-4" />
           Reset Password Massal

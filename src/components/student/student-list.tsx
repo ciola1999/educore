@@ -115,6 +115,18 @@ const cardSkeletonKeys = [
   "card-skeleton-5",
   "card-skeleton-6",
 ];
+const studentOutlineButtonClass =
+  "rounded-2xl border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+const studentSkyOutlineButtonClass =
+  "rounded-2xl border-sky-700/70 bg-sky-950/40 text-sky-100 hover:border-sky-500 hover:bg-sky-900/60 hover:text-white";
+const studentEmeraldOutlineButtonClass =
+  "rounded-2xl border-emerald-700/70 bg-emerald-950/40 text-emerald-100 hover:border-emerald-500 hover:bg-emerald-900/60 hover:text-white";
+const studentAmberOutlineButtonClass =
+  "rounded-2xl border-amber-700/70 bg-amber-950/40 text-amber-100 hover:border-amber-500 hover:bg-amber-900/60 hover:text-white";
+const studentBlueOutlineButtonClass =
+  "rounded-2xl border-blue-700/70 bg-blue-950/40 text-blue-100 hover:border-blue-500 hover:bg-blue-900/60 hover:text-white";
+const studentRedOutlineButtonClass =
+  "rounded-2xl border-red-700/70 bg-red-950/40 text-red-100 hover:border-red-500 hover:bg-red-900/60 hover:text-white";
 
 type StudentListResponse = {
   data: StudentListItem[];
@@ -376,104 +388,111 @@ export function StudentList() {
         <div className="flex flex-col gap-6">
           {!isStudentView ? (
             <div className="space-y-3">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-                <div className="space-y-4">
-                  <div className="relative w-full xl:max-w-xl">
-                    <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(event) => {
-                        setSearchQuery(event.target.value);
-                        setCurrentPage(1);
-                      }}
-                      placeholder="Cari nama, NIS, kelas..."
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-all shadow-inner focus:ring-2 focus:ring-sky-500/20"
-                    />
+              <div className="rounded-[1.75rem] border border-zinc-800/80 bg-zinc-950/50 p-4 md:p-5">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                        Filter & Navigasi
+                      </p>
+                      <h3 className="text-lg font-semibold text-zinc-100">
+                        Workspace roster aktif
+                      </h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1">
+                        Total list: {totalCount}
+                      </span>
+                      <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1">
+                        Halaman {currentPage}/{totalPages}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Select
-                      value={accountFilter}
-                      onValueChange={(value) =>
-                        setAccountFilter(
-                          value as "all" | "with_account" | "without_account",
-                        )
-                      }
-                    >
-                      <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                        <SelectItem value="all">Semua Akun</SelectItem>
-                        <SelectItem value="with_account">
-                          Sudah Punya Akun
-                        </SelectItem>
-                        <SelectItem value="without_account">
-                          Belum Punya Akun
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+                    <div className="space-y-4">
+                      <div className="relative w-full xl:max-w-xl">
+                        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(event) => {
+                            setSearchQuery(event.target.value);
+                            setCurrentPage(1);
+                          }}
+                          placeholder="Cari nama, NIS, kelas..."
+                          className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-all shadow-inner focus:ring-2 focus:ring-sky-500/20"
+                        />
+                      </div>
 
-                    <Select
-                      value={sortBy}
-                      onValueChange={(value) => {
-                        setSortBy(value);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
-                        <ArrowDownAZ className="mr-2 h-4 w-4 text-zinc-500" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                        <SelectItem value="createdAt">Terbaru</SelectItem>
-                        <SelectItem value="fullName">Nama</SelectItem>
-                        <SelectItem value="nis">NIS</SelectItem>
-                        <SelectItem value="grade">Kelas</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-between">
+                        <Select
+                          value={accountFilter}
+                          onValueChange={(value) =>
+                            setAccountFilter(
+                              value as
+                                | "all"
+                                | "with_account"
+                                | "without_account",
+                            )
+                          }
+                        >
+                          <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                            <SelectItem value="all">Semua Akun</SelectItem>
+                            <SelectItem value="with_account">
+                              Sudah Punya Akun
+                            </SelectItem>
+                            <SelectItem value="without_account">
+                              Belum Punya Akun
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
 
-                    <Select
-                      value={sortDir}
-                      onValueChange={(value) => {
-                        setSortDir(value as "asc" | "desc");
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                        <SelectItem value="desc">Desc</SelectItem>
-                        <SelectItem value="asc">Asc</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                        <Select
+                          value={sortBy}
+                          onValueChange={(value) => {
+                            setSortBy(value);
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:flex-1">
+                            <ArrowDownAZ className="mr-2 h-4 w-4 text-zinc-500" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                            <SelectItem value="createdAt">Terbaru</SelectItem>
+                            <SelectItem value="fullName">Nama</SelectItem>
+                            <SelectItem value="nis">NIS</SelectItem>
+                            <SelectItem value="grade">Kelas</SelectItem>
+                          </SelectContent>
+                        </Select>
 
-                <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto xl:justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      void fetchStats();
-                      void fetchStudents(
-                        currentPage,
-                        searchQuery,
-                        sortBy,
-                        sortDir,
-                      );
-                    }}
-                    className="flex-1 sm:flex-none border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
-                  {canManageStudents ? (
-                    <div className="flex-1 sm:flex-none">
-                      <AddStudentDialog
-                        onSuccess={() => {
+                        <Select
+                          value={sortDir}
+                          onValueChange={(value) => {
+                            setSortDir(value as "asc" | "desc");
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                            <SelectItem value="desc">Desc</SelectItem>
+                            <SelectItem value="asc">Asc</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto xl:justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
                           void fetchStats();
                           void fetchStudents(
                             currentPage,
@@ -482,54 +501,75 @@ export function StudentList() {
                             sortDir,
                           );
                         }}
-                      />
+                        className={`flex-1 transition-colors sm:flex-none ${studentOutlineButtonClass}`}
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Refresh
+                      </Button>
+                      {canManageStudents ? (
+                        <div className="flex-1 sm:flex-none">
+                          <AddStudentDialog
+                            onSuccess={() => {
+                              void fetchStats();
+                              void fetchStudents(
+                                currentPage,
+                                searchQuery,
+                                sortBy,
+                                sortDir,
+                              );
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                      {canManageStudents ? (
+                        <div className="flex-1 sm:flex-none">
+                          <ImportStudentsExcelDialog
+                            onSuccess={() => {
+                              void fetchStats();
+                              void fetchStudents(
+                                currentPage,
+                                searchQuery,
+                                sortBy,
+                                sortDir,
+                              );
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                      {!isStudentView ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setExportDialogOpen(true);
+                          }}
+                          className={`flex-1 sm:flex-none ${studentEmeraldOutlineButtonClass}`}
+                        >
+                          <FileSpreadsheet className="mr-2 h-4 w-4" />
+                          Export Excel
+                        </Button>
+                      ) : null}
+                      {canManageStudents ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setBulkActionsOpen((open) => !open)}
+                          className={`flex-1 transition-colors sm:flex-none ${studentOutlineButtonClass}`}
+                        >
+                          <Layers3 className="mr-2 h-4 w-4" />
+                          {bulkActionsOpen
+                            ? "Tutup Aksi Massal"
+                            : "Aksi Massal"}
+                        </Button>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {canManageStudents ? (
-                    <div className="flex-1 sm:flex-none">
-                      <ImportStudentsExcelDialog
-                        onSuccess={() => {
-                          void fetchStats();
-                          void fetchStudents(
-                            currentPage,
-                            searchQuery,
-                            sortBy,
-                            sortDir,
-                          );
-                        }}
-                      />
-                    </div>
-                  ) : null}
-                  {!isStudentView ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setExportDialogOpen(true);
-                      }}
-                      className="flex-1 border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20 sm:flex-none"
-                    >
-                      <FileSpreadsheet className="mr-2 h-4 w-4" />
-                      Export Excel
-                    </Button>
-                  ) : null}
-                  {canManageStudents ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setBulkActionsOpen((open) => !open)}
-                      className="flex-1 border-zinc-800 bg-zinc-950 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white sm:flex-none"
-                    >
-                      <Layers3 className="mr-2 h-4 w-4" />
-                      {bulkActionsOpen ? "Tutup Aksi Massal" : "Aksi Massal"}
-                    </Button>
-                  ) : null}
+                  </div>
                 </div>
               </div>
 
               {canManageStudents && bulkActionsOpen ? (
                 <div className="border-t border-zinc-800 pt-4">
-                  <div className="mx-auto grid max-w-[660px] gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="mx-auto grid max-w-[660px] gap-3 rounded-[1.5rem] border border-zinc-800 bg-zinc-950/40 p-3 sm:grid-cols-2 xl:grid-cols-3">
                     <div className="w-full min-w-0 [&_button]:w-full">
                       <BulkCreateStudentAccountsDialog
                         students={students}
@@ -577,7 +617,7 @@ export function StudentList() {
               ) : null}
             </div>
           ) : (
-            <div className="flex justify-start">
+            <div className="rounded-[1.5rem] border border-zinc-800/80 bg-zinc-950/50 p-4">
               <Button
                 type="button"
                 variant="outline"
@@ -585,7 +625,7 @@ export function StudentList() {
                   void fetchStats();
                   void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
                 }}
-                className="border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                className={`transition-colors ${studentOutlineButtonClass}`}
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
@@ -594,7 +634,7 @@ export function StudentList() {
           )}
         </div>
 
-        <div className="flex items-center justify-between text-sm text-zinc-500">
+        <div className="flex flex-col gap-3 rounded-[1.5rem] border border-zinc-800/70 bg-zinc-950/40 p-4 text-sm text-zinc-500 md:flex-row md:items-center md:justify-between">
           <span className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             {totalCount} {isStudentView ? "profil" : "siswa"}
@@ -631,11 +671,11 @@ export function StudentList() {
           {visibleStudents.map((student) => (
             <article
               key={student.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 transition-colors hover:border-zinc-700 hover:bg-zinc-900/60"
+              className="group rounded-[1.75rem] border border-zinc-800 bg-linear-to-br from-zinc-900/60 via-zinc-900/40 to-zinc-950/70 p-5 transition-all hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-[0_25px_60px_-40px_rgba(14,165,233,0.45)]"
             >
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="font-mono text-xs font-semibold text-blue-400">
+                  <p className="font-mono text-xs font-semibold text-sky-300">
                     {student.nis}
                     {student.nisn ? ` • NISN ${student.nisn}` : ""}
                   </p>
@@ -676,7 +716,7 @@ export function StudentList() {
                   </div>
                 </div>
 
-                <dl className="space-y-2 text-sm">
+                <dl className="space-y-2 rounded-2xl border border-zinc-800/70 bg-zinc-950/40 p-3 text-sm">
                   <div className="flex justify-between gap-3">
                     <dt className="text-zinc-500">Gender</dt>
                     <dd className="text-zinc-200">
@@ -707,12 +747,12 @@ export function StudentList() {
                 </dl>
 
                 {student.alamat ? (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-400">
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-400">
                     {student.alamat}
                   </div>
                 ) : null}
 
-                <div className="pt-2">
+                <div className="border-t border-zinc-800/80 pt-3">
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -721,7 +761,7 @@ export function StudentList() {
                         setSelectedStudentForCard(student);
                         setIdCardOpen(true);
                       }}
-                      className="border-blue-700/60 text-blue-300 hover:bg-blue-900/20"
+                      className={studentBlueOutlineButtonClass}
                     >
                       <IdCard className="mr-2 h-4 w-4" />
                       Cetak Kartu
@@ -730,7 +770,7 @@ export function StudentList() {
                       type="button"
                       variant="outline"
                       onClick={() => setSelectedStudent(student)}
-                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                      className={studentOutlineButtonClass}
                     >
                       <Eye className="mr-2 h-4 w-4" />
                       Detail
@@ -739,7 +779,7 @@ export function StudentList() {
                       asChild
                       type="button"
                       variant="outline"
-                      className="border-sky-700/60 text-sky-300 hover:bg-sky-900/20"
+                      className={studentSkyOutlineButtonClass}
                     >
                       <Link
                         href={`/dashboard/attendance?tab=history&studentId=${encodeURIComponent(student.id)}&className=${encodeURIComponent(student.grade)}&startDate=${today}&endDate=${today}`}
@@ -751,7 +791,7 @@ export function StudentList() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-amber-700/60 text-amber-300 hover:bg-amber-900/20"
+                        className={studentAmberOutlineButtonClass}
                         onClick={() => {
                           setSelectedStudentForEdit(student);
                           setEditOpen(true);
@@ -765,7 +805,7 @@ export function StudentList() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20"
+                        className={studentEmeraldOutlineButtonClass}
                         onClick={() => {
                           setSelectedStudentForAccount(student);
                           setAccountOpen(true);
@@ -779,7 +819,7 @@ export function StudentList() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-red-700/60 text-red-300 hover:bg-red-900/20"
+                        className={studentRedOutlineButtonClass}
                         onClick={() => {
                           setSelectedStudentForDelete(student);
                           setDeleteOpen(true);
@@ -804,7 +844,7 @@ export function StudentList() {
       )}
 
       {!isStudentView && totalPages > 1 ? (
-        <div className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="flex flex-col gap-3 rounded-[1.5rem] border border-zinc-800 bg-zinc-900/40 p-4 md:flex-row md:items-center md:justify-between">
           <p className="text-sm text-zinc-500">
             Menampilkan halaman {currentPage} dari {totalPages}
           </p>
@@ -819,7 +859,7 @@ export function StudentList() {
                 setCurrentPage(nextPage);
                 void fetchStudents(nextPage, searchQuery, sortBy, sortDir);
               }}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className={studentOutlineButtonClass}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -833,7 +873,7 @@ export function StudentList() {
                 setCurrentPage(nextPage);
                 void fetchStudents(nextPage, searchQuery, sortBy, sortDir);
               }}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className={studentOutlineButtonClass}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -922,7 +962,7 @@ export function StudentList() {
                     setSelectedStudentForCard(selectedStudent);
                     setIdCardOpen(true);
                   }}
-                  className="border-blue-700/60 text-blue-300 hover:bg-blue-900/20"
+                  className={studentBlueOutlineButtonClass}
                 >
                   <IdCard className="mr-2 h-4 w-4" />
                   Cetak Kartu
@@ -977,7 +1017,7 @@ export function StudentList() {
               type="button"
               variant="outline"
               onClick={() => setExportDialogOpen(false)}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              className={studentOutlineButtonClass}
             >
               Batal
             </Button>
@@ -988,7 +1028,7 @@ export function StudentList() {
               onClick={() => {
                 void handleExportStudents("current_page");
               }}
-              className="border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/20"
+              className={studentEmeraldOutlineButtonClass}
             >
               {exporting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

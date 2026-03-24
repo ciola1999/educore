@@ -2,7 +2,8 @@
 
 import type { Session } from "next-auth";
 import { getSession, signIn, signOut, useSession } from "next-auth/react";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
+import { isTauri } from "@/core/env";
 import { type UserSession, useStore } from "@/lib/store/use-store";
 
 type SessionRole = UserSession["role"];
@@ -53,13 +54,11 @@ export function useAuth() {
   const user = useStore((state) => state.user);
   const setUser = useStore((state) => state.login);
   const clearUser = useStore((state) => state.logout);
-
-  const sessionUser = useMemo(
-    () => (session?.user ? buildUserSession(session.user) : null),
-    [session],
-  );
+  const sessionUser = session?.user ? buildUserSession(session.user) : null;
+  const desktopRuntime = isTauri();
   const isLoading = status === "loading";
-  const isAuthenticated = status === "authenticated" && sessionUser !== null;
+  const resolvedUser = sessionUser ?? user;
+  const isAuthenticated = resolvedUser !== null;
 
   useEffect(() => {
     if (status === "loading") {
@@ -85,10 +84,10 @@ export function useAuth() {
       return;
     }
 
-    if (user) {
+    if (user && !desktopRuntime) {
       clearUser();
     }
-  }, [status, sessionUser, user, setUser, clearUser]);
+  }, [status, sessionUser, user, setUser, clearUser, desktopRuntime]);
 
   /**
    * Login with email and password
@@ -142,7 +141,7 @@ export function useAuth() {
   }
 
   return {
-    user: sessionUser ?? user,
+    user: resolvedUser,
     isAuthenticated,
     isLoading,
     login,

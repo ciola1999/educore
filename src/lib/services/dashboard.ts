@@ -1,8 +1,11 @@
-// Project\educore\src\lib\services\dashboard.ts
-
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db";
-import { attendance, students, users } from "../db/schema";
+import {
+  attendance,
+  studentDailyAttendance,
+  students,
+  users,
+} from "../db/schema";
 
 export type DashboardStats = {
   totalStudents: number;
@@ -12,72 +15,167 @@ export type DashboardStats = {
     sick: number;
     permission: number;
     alpha: number;
+    late: number;
     totalRecorded: number;
   };
 };
 
+const emptyStats: DashboardStats = {
+  totalStudents: 0,
+  totalTeachers: 0,
+  attendanceToday: {
+    present: 0,
+    sick: 0,
+    permission: 0,
+    alpha: 0,
+    late: 0,
+    totalRecorded: 0,
+  },
+};
+
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeCount(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const db = await getDb();
-  const today = new Date().toISOString().split("T")[0];
+  const today = toIsoDate(new Date());
 
   try {
-    // 1. Total Students
-    const studentCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(students);
-    const totalStudents = studentCount[0]?.count || 0;
+    const [
+      projectionStudents,
+      accountStudents,
+      teachers,
+      manualAttendanceRows,
+      qrAttendanceRows,
+    ] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(students)
+        .where(isNull(students.deletedAt)),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(
+          and(
+            eq(users.role, "student"),
+            eq(users.isActive, true),
+            isNull(users.deletedAt),
+          ),
+        ),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(
+          and(
+            inArray(users.role, ["teacher", "staff"]),
+            eq(users.isActive, true),
+            isNull(users.deletedAt),
+          ),
+        ),
+      db
+        .select({
+          status: attendance.status,
+          count: sql<number>`count(*)`,
+        })
+        .from(attendance)
+        .where(and(eq(attendance.date, today), isNull(attendance.deletedAt)))
+        .groupBy(attendance.status),
+      db
+        .select({
+          status: studentDailyAttendance.status,
+          count: sql<number>`count(*)`,
+        })
+        .from(studentDailyAttendance)
+        .where(
+          and(
+            eq(studentDailyAttendance.date, today),
+            isNull(studentDailyAttendance.deletedAt),
+          ),
+        )
+        .groupBy(studentDailyAttendance.status),
+    ]);
 
-    // 2. Total Teachers (role = 'teacher' or 'staff')
-    const teacherCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(sql`role IN ('teacher', 'staff')`);
-    const totalTeachers = teacherCount[0]?.count || 0;
+    const attendanceToday = { ...emptyStats.attendanceToday };
 
-    // 3. Today's Attendance
-    const attendanceStats = await db
-      .select({
-        status: attendance.status,
-        count: sql<number>`count(*)`,
-      })
-      .from(attendance)
-      .where(eq(attendance.date, today))
-      .groupBy(attendance.status);
-
-    const stats = {
-      present: 0,
-      sick: 0,
-      permission: 0,
-      alpha: 0,
-      totalRecorded: 0,
-    };
-
-    for (const s of attendanceStats) {
-      if (s.status === "present") stats.present = s.count;
-      if (s.status === "sick") stats.sick = s.count;
-      if (s.status === "permission") stats.permission = s.count;
-      if (s.status === "alpha") stats.alpha = s.count;
+    for (const row of manualAttendanceRows) {
+      const count = normalizeCount(row.count);
+      switch ((row.status || "").toLowerCase()) {
+        case "present":
+          attendanceToday.present += count;
+          break;
+        case "late":
+          attendanceToday.late += count;
+          break;
+        case "sick":
+          attendanceToday.sick += count;
+          break;
+        case "permission":
+          attendanceToday.permission += count;
+          break;
+        case "alpha":
+          attendanceToday.alpha += count;
+          break;
+        default:
+          break;
+      }
     }
-    stats.totalRecorded =
-      stats.present + stats.sick + stats.permission + stats.alpha;
+
+    for (const row of qrAttendanceRows) {
+      const count = normalizeCount(row.count);
+      switch (row.status) {
+        case "PRESENT":
+          attendanceToday.present += count;
+          break;
+        case "LATE":
+          attendanceToday.late += count;
+          break;
+        case "EXCUSED":
+          attendanceToday.permission += count;
+          break;
+        case "ABSENT":
+          attendanceToday.alpha += count;
+          break;
+        default:
+          break;
+      }
+    }
+
+    attendanceToday.totalRecorded =
+      attendanceToday.present +
+      attendanceToday.late +
+      attendanceToday.sick +
+      attendanceToday.permission +
+      attendanceToday.alpha;
 
     return {
-      totalStudents,
-      totalTeachers,
-      attendanceToday: stats,
+      totalStudents: Math.max(
+        normalizeCount(projectionStudents[0]?.count),
+        normalizeCount(accountStudents[0]?.count),
+      ),
+      totalTeachers: normalizeCount(teachers[0]?.count),
+      attendanceToday,
     };
-  } catch (error) {
-    console.error("Error fetching dashboard stats:", error);
-    return {
-      totalStudents: 0,
-      totalTeachers: 0,
-      attendanceToday: {
-        present: 0,
-        sick: 0,
-        permission: 0,
-        alpha: 0,
-        totalRecorded: 0,
-      },
-    };
+  } catch {
+    return emptyStats;
   }
 }

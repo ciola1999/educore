@@ -30,7 +30,17 @@ export function DashboardAccessGate({
   }, []);
 
   if (!mounted || isLoading) {
-    return null;
+    return (
+      <div className="pt-8">
+        <div className="rounded-[1.75rem] border border-zinc-800 bg-zinc-900/80 p-5 shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
+          <div className="h-3 w-28 animate-pulse rounded-full bg-zinc-800" />
+          <div className="mt-4 h-7 w-64 animate-pulse rounded bg-zinc-800/90" />
+          <div className="mt-3 h-3 w-full animate-pulse rounded bg-zinc-800/70" />
+          <div className="mt-2 h-3 w-4/5 animate-pulse rounded bg-zinc-800/70" />
+          <div className="mt-5 h-10 w-48 animate-pulse rounded-2xl bg-zinc-800/80" />
+        </div>
+      </div>
+    );
   }
 
   const currentRole = toAuthRole(user?.role);

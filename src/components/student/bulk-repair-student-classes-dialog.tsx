@@ -57,6 +57,9 @@ type Props = {
   onSuccess: () => void;
 };
 
+const bulkRepairOutlineButtonClass =
+  "rounded-2xl border-orange-700/70 bg-orange-950/40 text-orange-100 hover:border-orange-500 hover:bg-orange-900/60 hover:text-white disabled:opacity-50";
+
 export function BulkRepairStudentClassesDialog({ students, onSuccess }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -159,7 +162,7 @@ export function BulkRepairStudentClassesDialog({ students, onSuccess }: Props) {
           type="button"
           variant="outline"
           disabled={legacyStudents.length === 0}
-          className="border-orange-700/60 bg-zinc-950 text-orange-300 hover:bg-orange-900/20 disabled:opacity-50"
+          className={bulkRepairOutlineButtonClass}
         >
           <Wrench className="mr-2 h-4 w-4" />
           Repair Kelas ({legacyStudents.length})

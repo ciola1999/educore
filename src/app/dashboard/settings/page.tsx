@@ -40,6 +40,9 @@ type DesktopSyncConfig = {
   authToken: string;
 };
 
+const dashboardOutlineButtonClass =
+  "border-zinc-700 bg-zinc-950/85 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const canManageSettings = checkPermission(user, "settings:manage");
@@ -292,7 +295,7 @@ export default function SettingsPage() {
                   onClick={() => void runSync("push")}
                   disabled={syncing || isWeb()}
                   variant="outline"
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
+                  className={`gap-2 ${dashboardOutlineButtonClass}`}
                 >
                   <CloudUpload className="h-4 w-4" />
                   Kirim ke Cloud
@@ -302,7 +305,7 @@ export default function SettingsPage() {
                   onClick={() => void runSync("pull")}
                   disabled={syncing || isWeb()}
                   variant="outline"
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
+                  className={`gap-2 ${dashboardOutlineButtonClass}`}
                 >
                   <CloudDownload className="h-4 w-4" />
                   Tarik dari Cloud
@@ -535,7 +538,7 @@ export default function SettingsPage() {
                   onClick={() => {
                     void loadSyncConfig();
                   }}
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  className={dashboardOutlineButtonClass}
                 >
                   {configLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
