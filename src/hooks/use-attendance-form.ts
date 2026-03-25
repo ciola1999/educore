@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiGet, apiPost } from "@/lib/api/request";
 import { useStore } from "@/lib/store/use-store";
@@ -35,6 +35,9 @@ type AttendanceFormInitialState = {
   initialClassName?: string;
   initialDate?: string;
 };
+
+const ATTENDANCE_PROJECTION_LAST_SYNC_KEY = "attendance_projection_last_sync";
+const ATTENDANCE_PROJECTION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
 
 function normalizeDateInput(value?: string): string | null {
   if (!value) return null;
@@ -72,6 +75,7 @@ export function useAttendanceForm(
   initialState: AttendanceFormInitialState = {},
 ) {
   const authUser = useStore((state) => state.user);
+  const projectionSyncAttemptedRef = useRef(false);
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -88,90 +92,76 @@ export function useAttendanceForm(
   const [itemsPerPage] = useState(25);
   const [searchQuery, setSearchQuery] = useState("");
 
-  async function loadClasses() {
-    const data = await apiGet<ClassOption[]>("/api/attendance/classes");
-    const options = [{ id: "all", name: "All Students" }, ...(data || [])];
-    setClassList(options);
-    const initialClassId = resolveInitialClassId(
-      options,
-      initialState.initialClassId,
-      initialState.initialClassName,
-    );
-    setSelectedClass(
-      (prev) => prev || initialClassId || data?.[0]?.id || "all",
-    );
-  }
+  const loadClasses = useCallback(async () => {
+    try {
+      setClassLoadError(null);
+      const data = await apiGet<ClassOption[]>("/api/attendance/classes");
+      const options = [{ id: "all", name: "All Students" }, ...(data || [])];
+      const initialClassId = resolveInitialClassId(
+        options,
+        initialState.initialClassId,
+        initialState.initialClassName,
+      );
+      setClassList(options);
+      setSelectedClass(
+        (prev) => prev || initialClassId || data?.[0]?.id || "all",
+      );
+    } catch (error) {
+      setClassList([]);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal memuat daftar kelas attendance";
+      setClassLoadError(message);
+      toast.error(message);
+    }
+  }, [initialState.initialClassId, initialState.initialClassName]);
 
   // 1. Initial Mount & Background Sync Guard
   useEffect(() => {
     setIsMounted(true);
 
-    // Check if we've already synced in this session to avoid reload loops
-    const lastSync = sessionStorage.getItem("attendance_projection_last_sync");
+    if (projectionSyncAttemptedRef.current) {
+      return;
+    }
+    projectionSyncAttemptedRef.current = true;
+
+    // Check if we've already synced in this session to avoid reload loops.
+    const lastSync = sessionStorage.getItem(
+      ATTENDANCE_PROJECTION_LAST_SYNC_KEY,
+    );
     const now = Date.now();
+    const lastSyncAt = Number(lastSync);
+    const hasRecentSync =
+      Number.isFinite(lastSyncAt) &&
+      now - lastSyncAt <= ATTENDANCE_PROJECTION_SYNC_COOLDOWN_MS;
 
     // Only sync once every 5 minutes in background
-    if (!lastSync || now - Number(lastSync) > 300000) {
+    if (!hasRecentSync) {
+      // Acquire optimistic sync lock early to prevent strict-mode duplicate calls.
+      sessionStorage.setItem(
+        ATTENDANCE_PROJECTION_LAST_SYNC_KEY,
+        now.toString(),
+      );
       void apiPost<{
         classCreated: number;
         studentUpserted: number;
         settingsSeeded: number;
-      }>("/api/attendance/projection-sync")
-        .then(() => {
-          sessionStorage.setItem(
-            "attendance_projection_last_sync",
-            now.toString(),
-          );
-        })
-        .catch((error) => {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Sinkronisasi proyeksi attendance gagal";
-          toast.warning(message);
-        });
+      }>("/api/attendance/projection-sync").catch((error) => {
+        sessionStorage.removeItem(ATTENDANCE_PROJECTION_LAST_SYNC_KEY);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Sinkronisasi proyeksi attendance gagal";
+        toast.warning(message);
+      });
     }
   }, []);
 
   // 2. Load Classes (Once)
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadAttendanceClasses() {
-      try {
-        setClassLoadError(null);
-        const data = await apiGet<ClassOption[]>("/api/attendance/classes");
-        if (cancelled) {
-          return;
-        }
-        const options = [{ id: "all", name: "All Students" }, ...(data || [])];
-        const initialClassId = resolveInitialClassId(
-          options,
-          initialState.initialClassId,
-          initialState.initialClassName,
-        );
-        setClassList(options);
-        setSelectedClass(
-          (prev) => prev || initialClassId || data?.[0]?.id || "all",
-        );
-      } catch (error) {
-        if (!cancelled) {
-          setClassList([]);
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Gagal memuat daftar kelas attendance";
-          setClassLoadError(message);
-          toast.error(message);
-        }
-      }
-    }
-
-    void loadAttendanceClasses();
-    return () => {
-      cancelled = true;
-    };
-  }, [initialState.initialClassId, initialState.initialClassName]);
+    void loadClasses();
+  }, [loadClasses]);
 
   // 3. Student Loader (Stabilized)
   const loadStudentsByClass = useCallback(
