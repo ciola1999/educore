@@ -2347,8 +2347,20 @@ export async function getAttendanceRiskAssignmentSummary() {
   );
 }
 
-export async function getAttendanceRiskFollowUpHistory(studentId: string) {
+export async function getAttendanceRiskFollowUpHistory(
+  studentId: string,
+  options: {
+    assigneeUserId: string;
+    allowAnyAssignee?: boolean;
+  },
+) {
   const db = await getDb();
+  const normalizedStudentId = studentId.trim();
+  const encodedStudentId = encodeURIComponent(normalizedStudentId);
+  const ownerCondition = options.allowAnyAssignee
+    ? sql`1 = 1`
+    : eq(notifikasi.userId, options.assigneeUserId);
+
   return db
     .select({
       id: notifikasi.id,
@@ -2361,8 +2373,12 @@ export async function getAttendanceRiskFollowUpHistory(studentId: string) {
     .from(notifikasi)
     .where(
       and(
+        ownerCondition,
         eq(notifikasi.tipe, "attendance-risk"),
-        like(notifikasi.link, `%studentId=${studentId}%`),
+        or(
+          like(notifikasi.link, `%studentId=${normalizedStudentId}%`),
+          like(notifikasi.link, `%studentId=${encodedStudentId}%`),
+        ),
         isNull(notifikasi.deletedAt),
       ),
     )
