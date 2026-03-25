@@ -29,11 +29,54 @@ type SettingsAuthTelemetryEnvelope = {
 const telemetryQueue: SettingsAuthTelemetryEnvelope[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushing = false;
+let lifecycleHandlersBound = false;
 
 const MAX_QUEUE = 20;
 const FLUSH_DELAY_MS = 1500;
+const FAST_FLUSH_DELAY_MS = 400;
+const RETRY_DELAY_MS = 2500;
 
-async function flushTelemetryQueue() {
+function trimQueue() {
+  if (telemetryQueue.length <= MAX_QUEUE) {
+    return;
+  }
+  telemetryQueue.splice(0, telemetryQueue.length - MAX_QUEUE);
+}
+
+function requeueBatch(batch: SettingsAuthTelemetryEnvelope[]) {
+  if (batch.length === 0) {
+    return;
+  }
+
+  telemetryQueue.unshift(...batch);
+  trimQueue();
+}
+
+function scheduleRetry() {
+  if (flushTimer) {
+    return;
+  }
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flushTelemetryQueue();
+  }, RETRY_DELAY_MS);
+}
+
+function postWithBeacon(batch: SettingsAuthTelemetryEnvelope[]): boolean {
+  if (typeof navigator === "undefined" || !navigator.sendBeacon) {
+    return false;
+  }
+
+  try {
+    const payload = JSON.stringify({ events: batch });
+    const blob = new Blob([payload], { type: "application/json" });
+    return navigator.sendBeacon("/api/telemetry/settings-auth", blob);
+  } catch {
+    return false;
+  }
+}
+
+async function flushTelemetryQueue(preferBeacon = false) {
   if (flushing || telemetryQueue.length === 0) {
     return;
   }
@@ -42,7 +85,11 @@ async function flushTelemetryQueue() {
   const batch = telemetryQueue.splice(0, telemetryQueue.length);
 
   try {
-    await fetch("/api/telemetry/settings-auth", {
+    if (preferBeacon && postWithBeacon(batch)) {
+      return;
+    }
+
+    const response = await fetch("/api/telemetry/settings-auth", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -50,11 +97,37 @@ async function flushTelemetryQueue() {
       keepalive: true,
       body: JSON.stringify({ events: batch }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Telemetry flush failed with status ${response.status}`);
+    }
   } catch {
-    // Ignore telemetry network failures to avoid user-facing regressions.
+    // Retry quietly and preserve queue to avoid telemetry event loss.
+    requeueBatch(batch);
+    scheduleRetry();
   } finally {
     flushing = false;
   }
+}
+
+function bindLifecycleFlushHandlers() {
+  if (lifecycleHandlersBound || typeof window === "undefined") {
+    return;
+  }
+
+  lifecycleHandlersBound = true;
+
+  const flushNow = () => {
+    void flushTelemetryQueue(true);
+  };
+
+  window.addEventListener("pagehide", flushNow);
+  window.addEventListener("beforeunload", flushNow);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushNow();
+    }
+  });
 }
 
 function scheduleFlush() {
@@ -62,10 +135,12 @@ function scheduleFlush() {
     return;
   }
 
+  const delay =
+    telemetryQueue.length >= 10 ? FAST_FLUSH_DELAY_MS : FLUSH_DELAY_MS;
   flushTimer = setTimeout(() => {
     flushTimer = null;
     void flushTelemetryQueue();
-  }, FLUSH_DELAY_MS);
+  }, delay);
 }
 
 export function sendSettingsAuthTelemetry(
@@ -74,6 +149,8 @@ export function sendSettingsAuthTelemetry(
   if (typeof window === "undefined") {
     return;
   }
+
+  bindLifecycleFlushHandlers();
 
   if (telemetryQueue.length >= MAX_QUEUE) {
     telemetryQueue.shift();

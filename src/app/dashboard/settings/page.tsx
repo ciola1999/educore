@@ -88,6 +88,7 @@ const dashboardOutlineButtonClass = outlineButtonStyles.neutral;
 const TRACE_STORAGE_KEY = "settings-auth-trace-v1";
 const TRACE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const TRACE_STORAGE_LIMIT = 100;
+const TRACE_RECENT_WINDOW_MS = 10 * 60 * 1000;
 const INCIDENT_ESCALATION_COOLDOWN_MS = 5 * 60 * 1000;
 const INCIDENT_ESCALATION_STORAGE_KEY = "settings-auth-incident-escalation-v1";
 
@@ -115,6 +116,47 @@ function pruneTraceEvents(events: SettingsTraceEvent[]): SettingsTraceEvent[] {
   });
 
   return retained.slice(0, TRACE_STORAGE_LIMIT);
+}
+
+function buildTraceInsights(
+  events: SettingsTraceEvent[],
+  showErrorOnly: boolean,
+): {
+  visibleTraceEvents: SettingsTraceEvent[];
+  recentErrorCount: number;
+  recentRecoveryErrorCount: number;
+} {
+  const visibleTraceEvents: SettingsTraceEvent[] = [];
+  const recentThreshold = Date.now() - TRACE_RECENT_WINDOW_MS;
+  let recentErrorCount = 0;
+  let recentRecoveryErrorCount = 0;
+
+  for (const event of events) {
+    const isError = event.status === "error";
+    if (!showErrorOnly || isError) {
+      visibleTraceEvents.push(event);
+    }
+
+    if (!isError) {
+      continue;
+    }
+
+    const eventAt = new Date(event.at).getTime();
+    if (!Number.isFinite(eventAt) || eventAt < recentThreshold) {
+      continue;
+    }
+
+    recentErrorCount += 1;
+    if (event.action === "session-refresh" || event.action === "logout") {
+      recentRecoveryErrorCount += 1;
+    }
+  }
+
+  return {
+    visibleTraceEvents,
+    recentErrorCount,
+    recentRecoveryErrorCount,
+  };
 }
 
 export default function SettingsPage() {
@@ -193,29 +235,9 @@ export default function SettingsPage() {
   const formattedLastSessionRefreshAt = lastSessionRefreshAt
     ? lastSessionRefreshAt.toLocaleString()
     : "-";
-  const visibleTraceEvents = showErrorTraceOnly
-    ? traceEvents.filter((event) => event.status === "error")
-    : traceEvents;
-  const recentErrorCount = traceEvents.filter((event) => {
-    if (event.status !== "error") {
-      return false;
-    }
-    const eventAt = new Date(event.at).getTime();
-    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-    return eventAt >= tenMinutesAgo;
-  }).length;
+  const { visibleTraceEvents, recentErrorCount, recentRecoveryErrorCount } =
+    buildTraceInsights(traceEvents, showErrorTraceOnly);
   const hasRecentErrorBurst = recentErrorCount >= 3;
-  const recentRecoveryErrorCount = traceEvents.filter((event) => {
-    if (event.status !== "error") {
-      return false;
-    }
-    if (event.action !== "session-refresh" && event.action !== "logout") {
-      return false;
-    }
-    const eventAt = new Date(event.at).getTime();
-    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-    return eventAt >= tenMinutesAgo;
-  }).length;
   const hasRecoveryRisk = recentRecoveryErrorCount >= 2;
   const incidentLevel = hasRecentErrorBurst
     ? "critical"
