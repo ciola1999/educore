@@ -7,6 +7,7 @@ import { isTauri } from "@/core/env";
 import { type UserSession, useStore } from "@/lib/store/use-store";
 
 type SessionRole = UserSession["role"];
+type AuthSource = "next-auth" | "desktop-store" | "none";
 
 function buildUserSession(
   sessionUser: NonNullable<Session["user"]>,
@@ -59,6 +60,11 @@ export function useAuth() {
   const isLoading = status === "loading";
   const resolvedUser = sessionUser ?? user;
   const isAuthenticated = resolvedUser !== null;
+  const authSource: AuthSource = sessionUser
+    ? "next-auth"
+    : user
+      ? "desktop-store"
+      : "none";
 
   useEffect(() => {
     if (status === "loading") {
@@ -140,11 +146,34 @@ export function useAuth() {
     }
   }
 
+  async function refreshSession() {
+    const latestSession = await getSession();
+
+    if (!latestSession?.user?.id) {
+      if (!desktopRuntime) {
+        clearUser();
+      }
+      return false;
+    }
+
+    const nextUser = buildUserSession(latestSession.user);
+    if (!nextUser) {
+      return false;
+    }
+
+    setUser(nextUser);
+    return true;
+  }
+
   return {
     user: resolvedUser,
     isAuthenticated,
     isLoading,
+    session,
+    sessionStatus: status,
+    authSource,
     login,
     logout,
+    refreshSession,
   };
 }

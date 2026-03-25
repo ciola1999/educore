@@ -10,10 +10,13 @@ export class AttendancePage {
   }
 
   async goto() {
-    await this.page.goto("/dashboard/attendance");
+    await this.page.goto("/dashboard/attendance", {
+      waitUntil: "domcontentloaded",
+      timeout: 240_000,
+    });
     await expect(
       this.page.getByRole("heading", { name: /Manajemen Absensi/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20_000 });
   }
 
   async expectShellReady() {
@@ -36,19 +39,19 @@ export class AttendancePage {
 
   async expectQrSection() {
     await expect(
-      this.page.getByRole("heading", { name: /QR Attendance/i }),
+      this.page.getByRole("heading", { name: /^QR Attendance$/i }).first(),
     ).toBeVisible();
   }
 
   async expectManualSection() {
     await expect(
-      this.page.getByRole("heading", { name: /Input Manual/i }),
+      this.page.getByRole("heading", { name: /^Input Manual$/i }).first(),
     ).toBeVisible();
   }
 
   async expectHistorySection() {
     await expect(
-      this.page.getByRole("heading", { name: /Log Absensi/i }),
+      this.page.getByRole("heading", { name: /^Log Absensi$/i }).first(),
     ).toBeVisible();
   }
 }

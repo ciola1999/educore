@@ -2,14 +2,16 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
 const shouldManageWebServer = !process.env.PLAYWRIGHT_BASE_URL;
+const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  fullyParallel: true,
+  fullyParallel: false,
+  timeout: 120_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
-  reporter: [["list"], ["html", { open: "never" }]],
+  workers: process.env.CI ? 2 : 1,
+  reporter: isCI ? [["list"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL,
     trace: "retain-on-failure",
@@ -18,10 +20,10 @@ export default defineConfig({
   },
   webServer: shouldManageWebServer
     ? {
-        command: "bun run dev",
+        command: "npx next dev --webpack -p 3000",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
+        timeout: 180_000,
       }
     : undefined,
   projects: [

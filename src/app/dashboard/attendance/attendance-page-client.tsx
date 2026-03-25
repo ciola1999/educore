@@ -11,12 +11,8 @@ import {
   Sparkles,
   SunMoon,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { AttendanceForm } from "@/components/attendance/attendance-form";
-import { DailyLogView } from "@/components/attendance/daily-log-view";
-import { HolidayManager } from "@/components/attendance/holiday-manager";
-import { QRScannerView } from "@/components/attendance/qr-scanner-view";
-import { ScheduleSettings } from "@/components/attendance/schedule-settings";
 import { InlineState } from "@/components/common/inline-state";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useAuth } from "@/hooks/use-auth";
@@ -132,6 +128,72 @@ const sectionIcons: Record<AttendanceSection, AttendanceMenuItem["icon"]> = {
   schedule: Settings2,
   holiday: SunMoon,
 };
+
+function AttendanceSectionLoading() {
+  return (
+    <div className="rounded-[1.5rem] border border-zinc-800/70 bg-zinc-950/40 p-6">
+      <div className="h-5 w-44 animate-pulse rounded bg-zinc-800/90" />
+      <div className="mt-4 h-4 w-full animate-pulse rounded bg-zinc-800/70" />
+      <div className="mt-2 h-4 w-5/6 animate-pulse rounded bg-zinc-800/70" />
+      <div className="mt-6 h-28 animate-pulse rounded-2xl bg-zinc-800/60" />
+    </div>
+  );
+}
+
+const QRScannerView = dynamic(
+  () =>
+    import("@/components/attendance/qr-scanner-view").then(
+      (module) => module.QRScannerView,
+    ),
+  {
+    ssr: false,
+    loading: AttendanceSectionLoading,
+  },
+);
+
+const AttendanceForm = dynamic(
+  () =>
+    import("@/components/attendance/attendance-form").then(
+      (module) => module.AttendanceForm,
+    ),
+  {
+    ssr: false,
+    loading: AttendanceSectionLoading,
+  },
+);
+
+const DailyLogView = dynamic(
+  () =>
+    import("@/components/attendance/daily-log-view").then(
+      (module) => module.DailyLogView,
+    ),
+  {
+    ssr: false,
+    loading: AttendanceSectionLoading,
+  },
+);
+
+const ScheduleSettings = dynamic(
+  () =>
+    import("@/components/attendance/schedule-settings").then(
+      (module) => module.ScheduleSettings,
+    ),
+  {
+    ssr: false,
+    loading: AttendanceSectionLoading,
+  },
+);
+
+const HolidayManager = dynamic(
+  () =>
+    import("@/components/attendance/holiday-manager").then(
+      (module) => module.HolidayManager,
+    ),
+  {
+    ssr: false,
+    loading: AttendanceSectionLoading,
+  },
+);
 
 function getDefaultSection(options: {
   canWriteAttendance: boolean;

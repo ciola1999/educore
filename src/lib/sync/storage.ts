@@ -1,3 +1,5 @@
+import { isTauri } from "@/core/env";
+
 export const DESKTOP_SYNC_URL_KEY = "educore.sync.url";
 export const DESKTOP_SYNC_TOKEN_KEY = "educore.sync.token";
 
@@ -7,7 +9,7 @@ export type DesktopSyncStorageConfig = {
 };
 
 export function readDesktopSyncStorageConfig(): DesktopSyncStorageConfig | null {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !isTauri()) {
     return null;
   }
 
@@ -27,7 +29,7 @@ export function readDesktopSyncStorageConfig(): DesktopSyncStorageConfig | null 
 export function writeDesktopSyncStorageConfig(
   config: DesktopSyncStorageConfig,
 ) {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !isTauri()) {
     return;
   }
 

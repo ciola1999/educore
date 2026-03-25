@@ -16,6 +16,15 @@ export class LoginPage {
       .getByLabel(/Email \/ Username \/ NIP \/ NIS/i)
       .fill(identifier);
     await this.page.getByLabel(/Password/i).fill(password);
+
+    const callbackResponse = this.page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/api/auth/callback/credentials"),
+      { timeout: 45_000 },
+    );
+
     await this.page.getByRole("button", { name: /^Masuk$/i }).click();
+    await callbackResponse;
   }
 }

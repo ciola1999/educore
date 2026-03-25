@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev -p 3000",
+    "build": "bun run scripts/run-next-build.ts",
     "start": "next start",
     "tauri": "tauri",
     "desktop": "tauri dev",
@@ -12,14 +12,18 @@
     "format": "biome format --write",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:e2e": "bunx playwright test",
-    "test:e2e:headed": "bunx playwright test --headed",
-    "typecheck": "tsc --noEmit",
+    "test:e2e": "npx playwright test",
+    "test:e2e:smoke": "npx playwright test --grep @smoke --reporter=list",
+    "test:e2e:strict": "bun run scripts/run-e2e-strict.ts",
+    "test:e2e:smoke:strict": "bun run scripts/run-e2e-strict.ts --smoke",
+    "test:e2e:headed": "npx playwright test --headed",
+    "typecheck": "npx next typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "debug:admin-user": "bun run scripts/check-admin-user.ts",
-    "debug:admin-hash": "bun run scripts/check-admin-hash.ts"
+    "debug:admin-hash": "bun run scripts/check-admin-hash.ts",
+    "debug:reset-admin-password": "bun run scripts/reset-admin-password.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

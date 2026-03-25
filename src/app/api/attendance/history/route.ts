@@ -1,5 +1,6 @@
 import {
   getAttendanceHistory,
+  getAttendanceHistoryAnalyticsBundle,
   getAttendanceHistoryClassSummary,
   getAttendanceHistoryCount,
   getAttendanceHistoryExportRows,
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
   const studentSummaryMode = searchParams.get("studentSummary") === "true";
   const trendMode = searchParams.get("trend") === "true";
   const heatmapMode = searchParams.get("heatmap") === "true";
+  const analyticsBundleMode = searchParams.get("analyticsBundle") === "true";
   const source =
     sourceParam === "qr" || sourceParam === "manual" || sourceParam === "all"
       ? sourceParam
@@ -137,6 +139,21 @@ export async function GET(request: Request) {
       });
 
       return apiOk(heatmap);
+    }
+
+    if (analyticsBundleMode) {
+      const analytics = await getAttendanceHistoryAnalyticsBundle({
+        startDate,
+        endDate,
+        sortBy,
+        studentId,
+        status,
+        searchQuery,
+        source,
+        className,
+      });
+
+      return apiOk(analytics);
     }
 
     const [data, total] = await Promise.all([

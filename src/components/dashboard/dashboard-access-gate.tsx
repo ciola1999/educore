@@ -22,12 +22,30 @@ export function DashboardAccessGate({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, sessionStatus } = useAuth();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const currentRole = toAuthRole(user?.role);
+  const defaultPath = currentRole
+    ? DASHBOARD_ROLE_DEFAULT_PATH[currentRole]
+    : "/";
+  const hasAccess = currentRole
+    ? isAllowedDashboardPath(currentRole, pathname)
+    : false;
+
+  useEffect(() => {
+    if (!mounted || isLoading) {
+      return;
+    }
+
+    if (sessionStatus === "unauthenticated" && !currentRole) {
+      router.replace("/");
+    }
+  }, [mounted, isLoading, currentRole, router, sessionStatus]);
 
   if (!mounted || isLoading) {
     return (
@@ -42,14 +60,6 @@ export function DashboardAccessGate({
       </div>
     );
   }
-
-  const currentRole = toAuthRole(user?.role);
-  const defaultPath = currentRole
-    ? DASHBOARD_ROLE_DEFAULT_PATH[currentRole]
-    : "/";
-  const hasAccess = currentRole
-    ? isAllowedDashboardPath(currentRole, pathname)
-    : false;
 
   if (hasAccess) {
     return <>{children}</>;

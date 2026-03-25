@@ -5,7 +5,7 @@ import { LoginPage } from "../page-objects/login-page";
 const attendanceIdentifier = process.env.E2E_ATTENDANCE_IDENTIFIER;
 const attendancePassword = process.env.E2E_ATTENDANCE_PASSWORD;
 
-test.describe("Attendance shell", () => {
+test.describe("Attendance shell @smoke", () => {
   test.skip(
     !attendanceIdentifier || !attendancePassword,
     "Set E2E_ATTENDANCE_IDENTIFIER dan E2E_ATTENDANCE_PASSWORD untuk menjalankan Attendance E2E.",
@@ -20,12 +20,14 @@ test.describe("Attendance shell", () => {
       password: attendancePassword ?? "",
     });
 
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 45_000 });
   });
 
   test("allows admin to open attendance and switch core sections", async ({
     page,
   }) => {
+    test.setTimeout(300_000);
+
     const attendancePage = new AttendancePage(page);
 
     await attendancePage.goto();

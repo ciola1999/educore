@@ -999,6 +999,14 @@ export type AttendanceHistoryHeatmapPoint = {
   attendanceRate: number;
 };
 
+export type AttendanceHistoryAnalyticsBundle = {
+  summary: AttendanceHistorySummary;
+  classSummary: AttendanceHistoryClassSummary[];
+  studentSummary: AttendanceHistoryStudentSummary[];
+  trend: AttendanceHistoryTrendPoint[];
+  heatmap: AttendanceHistoryHeatmapPoint[];
+};
+
 export type AttendanceRiskSettings = {
   alphaThreshold: number;
   lateThreshold: number;
@@ -1401,8 +1409,14 @@ export async function getAttendanceHistoryExportRows(
 export async function getAttendanceHistorySummary(
   filter: AttendanceHistoryFilter,
 ): Promise<AttendanceHistorySummary> {
-  const rows = await getAttendanceHistoryExportRows(filter);
+  return buildAttendanceHistorySummary(
+    await getAttendanceHistoryExportRows(filter),
+  );
+}
 
+function buildAttendanceHistorySummary(
+  rows: AttendanceHistoryRecord[],
+): AttendanceHistorySummary {
   return rows.reduce<AttendanceHistorySummary>(
     (summary, row) => {
       summary.total += 1;
@@ -1432,7 +1446,14 @@ export async function getAttendanceHistorySummary(
 export async function getAttendanceHistoryClassSummary(
   filter: AttendanceHistoryFilter,
 ): Promise<AttendanceHistoryClassSummary[]> {
-  const rows = await getAttendanceHistoryExportRows(filter);
+  return buildAttendanceHistoryClassSummary(
+    await getAttendanceHistoryExportRows(filter),
+  );
+}
+
+function buildAttendanceHistoryClassSummary(
+  rows: AttendanceHistoryRecord[],
+): AttendanceHistoryClassSummary[] {
   const grouped = new Map<string, AttendanceHistoryClassSummary>();
 
   for (const row of rows) {
@@ -1481,7 +1502,14 @@ export async function getAttendanceHistoryClassSummary(
 export async function getAttendanceHistoryStudentSummary(
   filter: AttendanceHistoryFilter,
 ): Promise<AttendanceHistoryStudentSummary[]> {
-  const rows = await getAttendanceHistoryExportRows(filter);
+  return buildAttendanceHistoryStudentSummary(
+    await getAttendanceHistoryExportRows(filter),
+  );
+}
+
+function buildAttendanceHistoryStudentSummary(
+  rows: AttendanceHistoryRecord[],
+): AttendanceHistoryStudentSummary[] {
   const grouped = new Map<string, AttendanceHistoryStudentSummary>();
 
   for (const row of rows) {
@@ -1533,7 +1561,16 @@ export async function getAttendanceHistoryStudentSummary(
 export async function getAttendanceHistoryTrend(
   filter: AttendanceHistoryFilter,
 ): Promise<AttendanceHistoryTrendPoint[]> {
-  const rows = await getAttendanceHistoryExportRows(filter);
+  return buildAttendanceHistoryTrend(
+    await getAttendanceHistoryExportRows(filter),
+    filter,
+  );
+}
+
+function buildAttendanceHistoryTrend(
+  rows: AttendanceHistoryRecord[],
+  filter: AttendanceHistoryFilter,
+): AttendanceHistoryTrendPoint[] {
   const startDate = filter.startDate ?? "";
   const endDate = filter.endDate ?? "";
   const hasWideRange =
@@ -1581,7 +1618,14 @@ export async function getAttendanceHistoryTrend(
 export async function getAttendanceHistoryHeatmap(
   filter: AttendanceHistoryFilter,
 ): Promise<AttendanceHistoryHeatmapPoint[]> {
-  const rows = await getAttendanceHistoryExportRows(filter);
+  return buildAttendanceHistoryHeatmap(
+    await getAttendanceHistoryExportRows(filter),
+  );
+}
+
+function buildAttendanceHistoryHeatmap(
+  rows: AttendanceHistoryRecord[],
+): AttendanceHistoryHeatmapPoint[] {
   const grouped = new Map<string, AttendanceHistoryHeatmapPoint>();
 
   for (const row of rows) {
@@ -1616,6 +1660,19 @@ export async function getAttendanceHistoryHeatmap(
             ),
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function getAttendanceHistoryAnalyticsBundle(
+  filter: AttendanceHistoryFilter,
+): Promise<AttendanceHistoryAnalyticsBundle> {
+  const rows = await getAttendanceHistoryExportRows(filter);
+  return {
+    summary: buildAttendanceHistorySummary(rows),
+    classSummary: buildAttendanceHistoryClassSummary(rows),
+    studentSummary: buildAttendanceHistoryStudentSummary(rows),
+    trend: buildAttendanceHistoryTrend(rows, filter),
+    heatmap: buildAttendanceHistoryHeatmap(rows),
+  };
 }
 
 export async function getAttendanceRiskSettings(): Promise<AttendanceRiskSettings> {

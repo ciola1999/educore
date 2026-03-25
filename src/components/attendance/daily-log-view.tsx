@@ -1,7 +1,8 @@
 "use client";
 
 import { Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,14 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPost, apiPut } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { InlineState } from "../common/inline-state";
-import { HistoryAnalyticsPanel } from "./history/history-analytics-panel";
-import { HistoryExportToolbar } from "./history/history-export-toolbar";
-import { HistoryFiltersPanel } from "./history/history-filters-panel";
-import { HistoryGroupedLogList } from "./history/history-grouped-log-list";
-import { HistoryInsightsPanel } from "./history/history-insights-panel";
 import { HistoryLoadingSkeleton } from "./history/history-loading-skeleton";
-import { HistoryLogList } from "./history/history-log-list";
-import { HistoryRiskPanel } from "./history/history-risk-panel";
 import type {
   AttendanceHistoryClassSummary,
   AttendanceHistoryHeatmapPoint,
@@ -35,11 +29,75 @@ import type {
   TodayAttendanceLog,
 } from "./history/history-types";
 
+const HistoryFiltersPanel = dynamic(
+  () =>
+    import("./history/history-filters-panel").then(
+      (module) => module.HistoryFiltersPanel,
+    ),
+  { ssr: false },
+);
+
+const HistoryAnalyticsPanel = dynamic(
+  () =>
+    import("./history/history-analytics-panel").then(
+      (module) => module.HistoryAnalyticsPanel,
+    ),
+  { ssr: false },
+);
+
+const HistoryRiskPanel = dynamic(
+  () =>
+    import("./history/history-risk-panel").then(
+      (module) => module.HistoryRiskPanel,
+    ),
+  { ssr: false },
+);
+
+const HistoryInsightsPanel = dynamic(
+  () =>
+    import("./history/history-insights-panel").then(
+      (module) => module.HistoryInsightsPanel,
+    ),
+  { ssr: false },
+);
+
+const HistoryExportToolbar = dynamic(
+  () =>
+    import("./history/history-export-toolbar").then(
+      (module) => module.HistoryExportToolbar,
+    ),
+  { ssr: false },
+);
+
+const HistoryLogList = dynamic(
+  () =>
+    import("./history/history-log-list").then(
+      (module) => module.HistoryLogList,
+    ),
+  { ssr: false },
+);
+
+const HistoryGroupedLogList = dynamic(
+  () =>
+    import("./history/history-grouped-log-list").then(
+      (module) => module.HistoryGroupedLogList,
+    ),
+  { ssr: false },
+);
+
 type AttendanceHistoryResponse = {
   data: TodayAttendanceLog[];
   total: number;
   limit: number;
   offset: number;
+};
+
+type AttendanceHistoryAnalyticsBundleResponse = {
+  summary: AttendanceHistorySummary;
+  classSummary: AttendanceHistoryClassSummary[];
+  studentSummary: AttendanceHistoryStudentSummary[];
+  trend: AttendanceHistoryTrendPoint[];
+  heatmap: AttendanceHistoryHeatmapPoint[];
 };
 
 type AttendanceRiskSettings = {
@@ -185,6 +243,8 @@ export function DailyLogView({
   const [exportingPdf, setExportingPdf] = useState(false);
   const [printingReport, setPrintingReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const historyRequestKeyRef = useRef("");
+  const historyRequestSeqRef = useRef(0);
   const historyLimit = 20;
 
   const dateRangeInvalid =
@@ -209,111 +269,118 @@ export function DailyLogView({
     }
   }, []);
 
-  const loadHistoryLogs = useCallback(async () => {
-    setLoadingHistory(true);
-    setError(null);
-    try {
-      if (dateRangeInvalid) {
-        setHistoryLogs([]);
-        setHistoryTotal(0);
-        setError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir");
+  const loadHistoryLogs = useCallback(
+    async (options?: { force?: boolean }) => {
+      const requestKey = JSON.stringify({
+        dateRangeInvalid,
+        historyEndDate,
+        historyOffset,
+        historySearch,
+        historySort,
+        historySource,
+        historyStartDate,
+        historyStatus,
+        analyticsClassFilter,
+        isAdminView,
+        isStudentView,
+        selectedHistoryStudentId,
+        userId: user?.id ?? null,
+      });
+
+      if (!options?.force && requestKey === historyRequestKeyRef.current) {
         return;
       }
 
-      const params = new URLSearchParams({
-        limit: String(historyLimit),
-        offset: String(historyOffset),
-        sortBy: historySort,
-      });
-      if (isStudentView && user?.id) params.set("studentId", user.id);
-      if (!isStudentView && selectedHistoryStudentId !== "all") {
-        params.set("studentId", selectedHistoryStudentId);
-      }
-      if (historySearch.trim()) params.set("searchQuery", historySearch.trim());
-      if (historyStatus !== "all") params.set("status", historyStatus);
-      if (historySource !== "all") params.set("source", historySource);
-      if (historyStartDate) params.set("startDate", historyStartDate);
-      if (historyEndDate) params.set("endDate", historyEndDate);
-      const classSummaryParams = new URLSearchParams(params);
-      classSummaryParams.set("classSummary", "true");
-      if (analyticsClassFilter !== "all") {
-        params.set("className", analyticsClassFilter);
-      }
-      const summaryParams = new URLSearchParams(params);
-      summaryParams.set("summary", "true");
-      const studentSummaryParams = new URLSearchParams(params);
-      studentSummaryParams.set("studentSummary", "true");
-      const trendParams = new URLSearchParams(params);
-      trendParams.set("trend", "true");
-      const heatmapParams = new URLSearchParams(params);
-      heatmapParams.set("heatmap", "true");
+      historyRequestKeyRef.current = requestKey;
+      const requestSeq = historyRequestSeqRef.current + 1;
+      historyRequestSeqRef.current = requestSeq;
 
-      const requests: [
-        Promise<AttendanceHistoryResponse>,
-        Promise<AttendanceHistorySummary>,
-        Promise<AttendanceHistoryClassSummary[] | null>,
-        Promise<AttendanceHistoryStudentSummary[]>,
-        Promise<AttendanceHistoryTrendPoint[]>,
-        Promise<AttendanceHistoryHeatmapPoint[]>,
-      ] = [
-        apiGet<AttendanceHistoryResponse>(
-          `/api/attendance/history?${params.toString()}`,
-        ),
-        apiGet<AttendanceHistorySummary>(
-          `/api/attendance/history?${summaryParams.toString()}`,
-        ),
-        isAdminView && selectedHistoryStudentId === "all"
-          ? apiGet<AttendanceHistoryClassSummary[]>(
-              `/api/attendance/history?${classSummaryParams.toString()}`,
-            )
-          : Promise.resolve(null),
-        apiGet<AttendanceHistoryStudentSummary[]>(
-          `/api/attendance/history?${studentSummaryParams.toString()}`,
-        ),
-        apiGet<AttendanceHistoryTrendPoint[]>(
-          `/api/attendance/history?${trendParams.toString()}`,
-        ),
-        apiGet<AttendanceHistoryHeatmapPoint[]>(
-          `/api/attendance/history?${heatmapParams.toString()}`,
-        ),
-      ];
+      setLoadingHistory(true);
+      setError(null);
+      try {
+        if (dateRangeInvalid) {
+          setHistoryLogs([]);
+          setHistoryTotal(0);
+          setError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir");
+          return;
+        }
 
-      const [result, summary, classSummary, studentSummary, trend, heatmap] =
-        await Promise.all(requests);
-      setHistoryLogs(result.data);
-      setHistoryTotal(result.total);
-      setHistorySummary(summary);
-      setHistoryClassSummary(classSummary ?? []);
-      setHistoryStudentSummary(studentSummary);
-      setHistoryTrend(trend);
-      setHistoryHeatmap(heatmap);
-    } catch (err) {
-      setHistorySummary(null);
-      setHistoryClassSummary([]);
-      setHistoryStudentSummary([]);
-      setHistoryTrend([]);
-      setHistoryHeatmap([]);
-      setError(
-        err instanceof Error ? err.message : "Gagal memuat riwayat attendance",
-      );
-    } finally {
-      setLoadingHistory(false);
-    }
-  }, [
-    dateRangeInvalid,
-    historyEndDate,
-    historyOffset,
-    historySearch,
-    historySort,
-    historySource,
-    historyStartDate,
-    historyStatus,
-    analyticsClassFilter,
-    isAdminView,
-    isStudentView,
-    selectedHistoryStudentId,
-    user?.id,
-  ]);
+        const params = new URLSearchParams({
+          limit: String(historyLimit),
+          offset: String(historyOffset),
+          sortBy: historySort,
+        });
+        if (isStudentView && user?.id) params.set("studentId", user.id);
+        if (!isStudentView && selectedHistoryStudentId !== "all") {
+          params.set("studentId", selectedHistoryStudentId);
+        }
+        if (historySearch.trim())
+          params.set("searchQuery", historySearch.trim());
+        if (historyStatus !== "all") params.set("status", historyStatus);
+        if (historySource !== "all") params.set("source", historySource);
+        if (historyStartDate) params.set("startDate", historyStartDate);
+        if (historyEndDate) params.set("endDate", historyEndDate);
+        if (analyticsClassFilter !== "all") {
+          params.set("className", analyticsClassFilter);
+        }
+        const analyticsParams = new URLSearchParams(params);
+        analyticsParams.set("analyticsBundle", "true");
+        const [result, analytics] = await Promise.all([
+          apiGet<AttendanceHistoryResponse>(
+            `/api/attendance/history?${params.toString()}`,
+          ),
+          apiGet<AttendanceHistoryAnalyticsBundleResponse>(
+            `/api/attendance/history?${analyticsParams.toString()}`,
+          ),
+        ]);
+
+        if (requestSeq !== historyRequestSeqRef.current) {
+          return;
+        }
+
+        setHistoryLogs(result.data);
+        setHistoryTotal(result.total);
+        setHistorySummary(analytics.summary);
+        setHistoryClassSummary(analytics.classSummary);
+        setHistoryStudentSummary(analytics.studentSummary);
+        setHistoryTrend(analytics.trend);
+        setHistoryHeatmap(analytics.heatmap);
+      } catch (err) {
+        if (requestSeq !== historyRequestSeqRef.current) {
+          return;
+        }
+        setHistorySummary(null);
+        setHistoryClassSummary([]);
+        setHistoryStudentSummary([]);
+        setHistoryTrend([]);
+        setHistoryHeatmap([]);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Gagal memuat riwayat attendance",
+        );
+      } finally {
+        if (requestSeq === historyRequestSeqRef.current) {
+          setLoadingHistory(false);
+        }
+      }
+    },
+    [
+      dateRangeInvalid,
+      historyEndDate,
+      historyOffset,
+      historySearch,
+      historySort,
+      historySource,
+      historyStartDate,
+      historyStatus,
+      analyticsClassFilter,
+      isAdminView,
+      isStudentView,
+      selectedHistoryStudentId,
+      user?.id,
+    ],
+  );
 
   useEffect(() => {
     void loadTodayLogs();
@@ -342,6 +409,10 @@ export function DailyLogView({
   }, [initialEndDate]);
 
   useEffect(() => {
+    if (activeTab !== "history") {
+      return;
+    }
+
     if (!isAdminView) {
       setHistoryStudentOptions([]);
       if (isStudentView && user?.id) {
@@ -379,14 +450,17 @@ export function DailyLogView({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [historyStudentSearch, isAdminView, isStudentView, user?.id]);
+  }, [activeTab, historyStudentSearch, isAdminView, isStudentView, user?.id]);
 
   useEffect(() => {
+    if (activeTab !== "history") {
+      return;
+    }
     void loadHistoryLogs();
-  }, [loadHistoryLogs]);
+  }, [activeTab, loadHistoryLogs]);
 
   useEffect(() => {
-    if (!isAdminView) {
+    if (activeTab !== "history" || !isAdminView) {
       return;
     }
 
@@ -399,7 +473,7 @@ export function DailyLogView({
       .catch(() => {
         // keep defaults if settings unavailable
       });
-  }, [isAdminView]);
+  }, [activeTab, isAdminView]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -491,6 +565,10 @@ export function DailyLogView({
   }, [historyQuickRange]);
 
   useEffect(() => {
+    if (activeTab !== "history") {
+      return;
+    }
+
     if (!selectedHistoryStudentId || selectedHistoryStudentId === "all") {
       setFollowUpHistory([]);
       return;
@@ -503,7 +581,7 @@ export function DailyLogView({
       .catch(() => {
         setFollowUpHistory([]);
       });
-  }, [selectedHistoryStudentId]);
+  }, [activeTab, selectedHistoryStudentId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset pagination whenever filters change
   useEffect(() => {
@@ -1406,7 +1484,7 @@ export function DailyLogView({
           actionLabel="Muat Ulang"
           onAction={() => {
             void loadTodayLogs();
-            void loadHistoryLogs();
+            void loadHistoryLogs({ force: true });
           }}
           variant="error"
         />
