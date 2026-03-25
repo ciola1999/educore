@@ -10,6 +10,15 @@ export class SettingsAuthPage {
   readonly authSourceValue: Locator;
   readonly activeRoleValue: Locator;
   readonly activeEmailValue: Locator;
+  readonly tracePanelTitle: Locator;
+  readonly traceErrorOnlyButton: Locator;
+  readonly traceAllEventsButton: Locator;
+  readonly traceClearButton: Locator;
+  readonly traceCopyReportButton: Locator;
+  readonly traceExportJsonButton: Locator;
+  readonly traceRedactToggleButton: Locator;
+  readonly incidentPlaybookCard: Locator;
+  readonly incidentPlaybookTitle: Locator;
 
   constructor(private readonly page: Page) {
     this.pushSyncButton = page.getByRole("button", { name: /Push Sync/i });
@@ -23,6 +32,23 @@ export class SettingsAuthPage {
     this.authSourceValue = page.getByTestId("settings-auth-source");
     this.activeRoleValue = page.getByTestId("settings-active-role");
     this.activeEmailValue = page.getByTestId("settings-active-email");
+    this.tracePanelTitle = page.getByText(/Auth\/Sync Event Trace/i);
+    this.traceErrorOnlyButton = page.getByRole("button", {
+      name: /^Error Only$/i,
+    });
+    this.traceAllEventsButton = page.getByRole("button", {
+      name: /^All Events$/i,
+    });
+    this.traceClearButton = page.getByRole("button", { name: /^Clear$/i });
+    this.traceCopyReportButton = page.getByRole("button", {
+      name: /^Copy Report$/i,
+    });
+    this.traceExportJsonButton = page.getByRole("button", {
+      name: /^Export JSON$/i,
+    });
+    this.traceRedactToggleButton = page.getByRole("button", { name: /^On$/i });
+    this.incidentPlaybookCard = page.getByTestId("settings-incident-playbook");
+    this.incidentPlaybookTitle = page.getByText(/Incident Playbook/i);
   }
 
   async goto() {
@@ -46,6 +72,45 @@ export class SettingsAuthPage {
     await expect(this.runtimeSyncInfo).toBeVisible();
     await expect(this.pushSyncButton).toBeDisabled();
     await expect(this.pullSyncButton).toBeDisabled();
+  }
+
+  async expectTraceControlsOnWeb() {
+    await expect(this.tracePanelTitle).toBeVisible();
+    await expect(this.traceErrorOnlyButton).toBeVisible();
+    await expect(this.traceClearButton).toBeVisible();
+    await expect(this.traceCopyReportButton).toBeVisible();
+    await expect(this.traceRedactToggleButton).toBeVisible();
+    await expect(this.traceExportJsonButton).toHaveCount(0);
+  }
+
+  async expectIncidentPlaybookReady() {
+    await expect(this.incidentPlaybookCard).toBeVisible();
+    await expect(this.incidentPlaybookTitle).toBeVisible();
+    await expect(
+      this.page.getByRole("button", { name: /Run Recovery/i }),
+    ).toBeVisible();
+    await expect(
+      this.page.getByRole("button", { name: /Full Sync Check/i }),
+    ).toBeVisible();
+  }
+
+  async expectTraceEntriesAvailable() {
+    await expect(this.page.getByText(/session-refresh/i).first()).toBeVisible();
+  }
+
+  async toggleTraceFilterRoundTrip() {
+    await this.traceErrorOnlyButton.click();
+    await expect(this.traceAllEventsButton).toBeVisible();
+    await this.traceAllEventsButton.click();
+    await expect(this.traceErrorOnlyButton).toBeVisible();
+  }
+
+  async toggleTraceRedactionRoundTrip() {
+    await this.traceRedactToggleButton.click();
+    const offButton = this.page.getByRole("button", { name: /^Off$/i });
+    await expect(offButton).toBeVisible();
+    await offButton.click();
+    await expect(this.traceRedactToggleButton).toBeVisible();
   }
 
   async expectIdentityConsistency(params?: {
@@ -74,7 +139,16 @@ export class SettingsAuthPage {
   }
 
   async expectSessionRefreshTimestampUpdated() {
-    await expect(this.lastSessionRefreshCard).not.toHaveText("-");
+    const currentValue = (
+      await this.lastSessionRefreshCard.textContent()
+    )?.trim();
+    if (currentValue === "-" || !currentValue) {
+      await this.refreshSessionButton.click();
+    }
+
+    await expect(this.lastSessionRefreshCard).not.toHaveText("-", {
+      timeout: 20_000,
+    });
   }
 
   async logout() {

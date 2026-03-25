@@ -51,10 +51,24 @@ test.describe("Settings/Auth shell @smoke", () => {
     page,
   }) => {
     const settingsPage = new SettingsAuthPage(page);
+    const telemetryResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/api/telemetry/settings-auth"),
+      { timeout: 45_000 },
+    );
 
     await settingsPage.goto();
     await settingsPage.expectSessionSectionReady();
+    await settingsPage.expectIncidentPlaybookReady();
     await settingsPage.expectWebSyncBoundary();
+    await settingsPage.expectTraceControlsOnWeb();
+    await settingsPage.refreshSession();
+    const telemetryResponse = await telemetryResponsePromise;
+    expect(telemetryResponse.status()).toBe(200);
+    await settingsPage.expectTraceEntriesAvailable();
+    await settingsPage.toggleTraceFilterRoundTrip();
+    await settingsPage.toggleTraceRedactionRoundTrip();
   });
 
   test("keeps auth source and active identity in sync", async ({ page }) => {
@@ -83,5 +97,20 @@ test.describe("Settings/Auth shell @smoke", () => {
     await page.goto("/dashboard/settings");
     await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 60_000 });
     await expect(page.getByRole("heading", { name: /Educore/i })).toBeVisible();
+  });
+
+  test("keeps session refresh functional when telemetry endpoint fails", async ({
+    page,
+  }) => {
+    const settingsPage = new SettingsAuthPage(page);
+
+    await page.route("**/api/telemetry/settings-auth", async (route) => {
+      await route.abort("failed");
+    });
+
+    await settingsPage.goto();
+    await settingsPage.expectSessionSectionReady();
+    await settingsPage.refreshSession();
+    await settingsPage.expectSessionRefreshTimestampUpdated();
   });
 });

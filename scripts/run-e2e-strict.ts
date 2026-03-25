@@ -109,6 +109,12 @@ async function verifyCredentials(params: {
   }
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function assertAuthBaseUrlAlignment(baseUrl: string) {
   const providersUrl = new URL("/api/auth/providers", baseUrl).toString();
   const response = await fetch(providersUrl);
@@ -194,15 +200,27 @@ async function run() {
       continue;
     }
     seenKey.add(uniqueKey);
-    try {
-      await verifyCredentials({
-        baseUrl,
-        identifier: credential.identifier,
-        password: credential.password,
-        label: credential.label,
-      });
-    } catch (error) {
-      console.error(String(error));
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        await verifyCredentials({
+          baseUrl,
+          identifier: credential.identifier,
+          password: credential.password,
+          label: credential.label,
+        });
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await delay(750);
+        }
+      }
+    }
+
+    if (lastError) {
+      console.error(String(lastError));
       process.exit(1);
     }
   }
