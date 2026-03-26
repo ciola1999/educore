@@ -2371,7 +2371,7 @@ function currentUserIdFromNotification(notification: { userId?: string }) {
   return notification.userId?.trim() || "";
 }
 
-export async function getAttendanceRiskAssignmentSummary() {
+export async function getAttendanceRiskAssignmentSummary(className?: string) {
   const db = await getDb();
   const notifications = await db
     .select({
@@ -2379,6 +2379,7 @@ export async function getAttendanceRiskAssignmentSummary() {
       assigneeName: users.fullName,
       isRead: notifikasi.isRead,
       pesan: notifikasi.pesan,
+      link: notifikasi.link,
     })
     .from(notifikasi)
     .innerJoin(users, eq(notifikasi.userId, users.id))
@@ -2389,6 +2390,13 @@ export async function getAttendanceRiskAssignmentSummary() {
         isNull(users.deletedAt),
       ),
     );
+
+  const scopedNotifications = className
+    ? notifications.filter(
+        (item) =>
+          extractAttendanceRiskClassName(item.link, item.pesan) === className,
+      )
+    : notifications;
 
   const today = new Date().toISOString().slice(0, 10);
   const grouped = new Map<
@@ -2403,7 +2411,7 @@ export async function getAttendanceRiskAssignmentSummary() {
     }
   >();
 
-  for (const item of notifications) {
+  for (const item of scopedNotifications) {
     const current = grouped.get(item.userId) ?? {
       userId: item.userId,
       assigneeName: item.assigneeName,

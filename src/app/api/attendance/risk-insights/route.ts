@@ -60,7 +60,7 @@ export async function GET(request: Request) {
         getAttendanceRiskNotifications(assigneeUserId),
         getAttendanceRiskNotificationSummary(assigneeUserId),
         canViewAssignmentSummary
-          ? getAttendanceRiskAssignmentSummary()
+          ? getAttendanceRiskAssignmentSummary(className)
           : Promise.resolve([]),
       ]);
     const scopedNotifications = className

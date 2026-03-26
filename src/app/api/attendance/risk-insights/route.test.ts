@@ -95,6 +95,9 @@ describe("GET /api/attendance/risk-insights", () => {
       "teacher-2",
     );
     expect(getAttendanceRiskAssignmentSummaryMock).toHaveBeenCalledTimes(1);
+    expect(getAttendanceRiskAssignmentSummaryMock).toHaveBeenCalledWith(
+      undefined,
+    );
     await expect(response.json()).resolves.toMatchObject({
       data: {
         assigneeUserId: "teacher-2",
@@ -137,6 +140,7 @@ describe("GET /api/attendance/risk-insights", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(getAttendanceRiskAssignmentSummaryMock).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
       data: {
         notifications: [
@@ -150,5 +154,22 @@ describe("GET /api/attendance/risk-insights", () => {
         },
       },
     });
+  });
+
+  it("passes class filter into admin assignment summary scope", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/attendance/risk-insights?className=XII%20TSM%201",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getAttendanceRiskAssignmentSummaryMock).toHaveBeenCalledWith(
+      "XII TSM 1",
+    );
   });
 });
