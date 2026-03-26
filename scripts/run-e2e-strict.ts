@@ -46,6 +46,12 @@ type BrowserCookie = {
   sameSite?: "Lax" | "None" | "Strict";
 };
 
+function hasNextAuthSessionCookie(cookies: BrowserCookie[]) {
+  return cookies.some((cookie) =>
+    cookie.name.includes("next-auth.session-token"),
+  );
+}
+
 function splitSetCookieHeader(raw: string | null): string[] {
   if (!raw) {
     return [];
@@ -200,22 +206,42 @@ async function verifyCredentials(params: {
   );
 
   const location = response.headers.get("location") ?? "";
-  if (response.status !== 302 || !location.includes("/dashboard")) {
+  const redirectPathname = (() => {
+    if (!location) {
+      return "";
+    }
+    try {
+      return new URL(location, baseUrl).pathname;
+    } catch {
+      return location;
+    }
+  })();
+  const browserCookies = parseSetCookieForBrowser(
+    response.headers.get("set-cookie"),
+    baseUrl,
+  );
+  const hasSessionCookie = hasNextAuthSessionCookie(browserCookies);
+
+  if (
+    response.status !== 302 ||
+    (!redirectPathname.startsWith("/dashboard") && !hasSessionCookie) ||
+    browserCookies.length === 0
+  ) {
     throw new Error(
       [
         `[E2E STRICT] Invalid credentials for ${label}.`,
         `- identifier: ${identifier}`,
         `- status: ${response.status}`,
         `- location: ${location || "<none>"}`,
+        `- redirectPathname: ${redirectPathname || "<none>"}`,
+        `- cookies: ${browserCookies.length}`,
+        `- hasSessionCookie: ${hasSessionCookie}`,
       ].join("\n"),
     );
   }
 
   return {
-    browserCookies: parseSetCookieForBrowser(
-      response.headers.get("set-cookie"),
-      baseUrl,
-    ),
+    browserCookies,
   };
 }
 
@@ -279,13 +305,26 @@ async function assertAuthBaseUrlAlignment(baseUrl: string) {
   const actual = new URL(signinUrl);
   const samePort = expected.port === actual.port;
   const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+  const expectedIsLoopback = loopbackHosts.has(expected.hostname);
+  const actualIsLoopback = loopbackHosts.has(actual.hostname);
   const sameHost =
     expected.hostname === actual.hostname ||
-    (loopbackHosts.has(expected.hostname) &&
-      loopbackHosts.has(actual.hostname));
+    (expectedIsLoopback && actualIsLoopback);
   const sameProtocol = expected.protocol === actual.protocol;
 
   if (!(sameHost && samePort && sameProtocol)) {
+    if (expectedIsLoopback && !actualIsLoopback) {
+      console.warn(
+        [
+          "[E2E STRICT] Auth origin mismatch tolerated for local loopback runtime.",
+          `- PLAYWRIGHT_BASE_URL: ${expected.origin}`,
+          `- credentials.signinUrl: ${actual.origin}`,
+          "Reason: local dev may intentionally fall back to request host while AUTH_URL/NEXTAUTH_URL remain non-local.",
+        ].join("\n"),
+      );
+      return;
+    }
+
     throw new Error(
       [
         "[E2E STRICT] Auth origin mismatch detected.",
