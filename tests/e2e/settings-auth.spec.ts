@@ -81,6 +81,21 @@ test.describe("Settings/Auth shell @smoke", () => {
     });
   });
 
+  test("keeps session refresh functional when telemetry endpoint fails", async ({
+    page,
+  }) => {
+    const settingsPage = new SettingsAuthPage(page);
+
+    await page.route("**/api/telemetry/settings-auth", async (route) => {
+      await route.abort("failed");
+    });
+
+    await settingsPage.goto();
+    await settingsPage.expectSessionSectionReady();
+    await settingsPage.refreshSession();
+    await settingsPage.expectSessionRefreshTimestampUpdated();
+  });
+
   test("refreshes session indicator and revokes route access after logout", async ({
     page,
   }) => {
@@ -97,20 +112,5 @@ test.describe("Settings/Auth shell @smoke", () => {
     await page.goto("/dashboard/settings");
     await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 60_000 });
     await expect(page.getByRole("heading", { name: /Educore/i })).toBeVisible();
-  });
-
-  test("keeps session refresh functional when telemetry endpoint fails", async ({
-    page,
-  }) => {
-    const settingsPage = new SettingsAuthPage(page);
-
-    await page.route("**/api/telemetry/settings-auth", async (route) => {
-      await route.abort("failed");
-    });
-
-    await settingsPage.goto();
-    await settingsPage.expectSessionSectionReady();
-    await settingsPage.refreshSession();
-    await settingsPage.expectSessionRefreshTimestampUpdated();
   });
 });

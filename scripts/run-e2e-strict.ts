@@ -1,4 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { createAuthDbClient } from "@/lib/auth/web/db";
+import {
+  buildLoginEmailCandidates,
+  normalizeLoginIdentifier,
+} from "@/lib/auth/web/login-identifier";
 
 const requiredE2EEnv = [
   "E2E_ATTENDANCE_IDENTIFIER",
@@ -30,6 +35,104 @@ function parseSetCookie(raw: string | null): string {
     .join("; ");
 }
 
+type BrowserCookie = {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Lax" | "None" | "Strict";
+};
+
+function splitSetCookieHeader(raw: string | null): string[] {
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(/,(?=[^;]+=[^;]+)/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseSetCookieForBrowser(
+  raw: string | null,
+  baseUrl: string,
+): BrowserCookie[] {
+  const origin = new URL(baseUrl);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  return splitSetCookieHeader(raw)
+    .map((entry) => {
+      const parts = entry.split(";").map((part) => part.trim());
+      const [nameValue, ...attributes] = parts;
+      const separatorIndex = nameValue.indexOf("=");
+      if (separatorIndex <= 0) {
+        return null;
+      }
+
+      const cookie: BrowserCookie = {
+        name: nameValue.slice(0, separatorIndex),
+        value: nameValue.slice(separatorIndex + 1),
+        domain: origin.hostname,
+        path: "/",
+      };
+
+      for (const attribute of attributes) {
+        const [rawKey, ...rawValueParts] = attribute.split("=");
+        const key = rawKey.toLowerCase();
+        const value = rawValueParts.join("=");
+
+        if (key === "path" && value) {
+          cookie.path = value;
+          continue;
+        }
+
+        if (key === "domain" && value) {
+          cookie.domain = value.replace(/^\./, "");
+          continue;
+        }
+
+        if (key === "max-age") {
+          const parsed = Number(value);
+          if (Number.isFinite(parsed)) {
+            cookie.expires = nowSeconds + parsed;
+          }
+          continue;
+        }
+
+        if (key === "expires") {
+          const parsed = Date.parse(value);
+          if (Number.isFinite(parsed)) {
+            cookie.expires = Math.floor(parsed / 1000);
+          }
+          continue;
+        }
+
+        if (key === "httponly") {
+          cookie.httpOnly = true;
+          continue;
+        }
+
+        if (key === "secure") {
+          cookie.secure = true;
+          continue;
+        }
+
+        if (key === "samesite") {
+          if (value === "Lax" || value === "None" || value === "Strict") {
+            cookie.sameSite = value;
+          }
+        }
+      }
+
+      return cookie;
+    })
+    .filter((cookie): cookie is BrowserCookie => Boolean(cookie));
+}
+
 async function assertServerReachable(baseUrl: string) {
   const providersUrl = new URL("/api/auth/providers", baseUrl).toString();
   try {
@@ -56,7 +159,7 @@ async function verifyCredentials(params: {
   identifier: string;
   password: string;
   label: string;
-}) {
+}): Promise<{ browserCookies: BrowserCookie[] }> {
   const { baseUrl, identifier, password, label } = params;
   const csrfResponse = await fetch(new URL("/api/auth/csrf", baseUrl), {
     redirect: "manual",
@@ -107,12 +210,51 @@ async function verifyCredentials(params: {
       ].join("\n"),
     );
   }
+
+  return {
+    browserCookies: parseSetCookieForBrowser(
+      response.headers.get("set-cookie"),
+      baseUrl,
+    ),
+  };
 }
 
 function delay(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+async function clearE2EAuthRateLimits(identifiers: string[]) {
+  const normalizedIdentifiers = identifiers
+    .map((value) => normalizeLoginIdentifier(value))
+    .filter(Boolean);
+  if (normalizedIdentifiers.length === 0) {
+    return;
+  }
+
+  const emailKeys = new Set<string>();
+  for (const identifier of normalizedIdentifiers) {
+    emailKeys.add(identifier);
+    for (const candidate of buildLoginEmailCandidates(identifier)) {
+      emailKeys.add(candidate);
+    }
+  }
+
+  const client = createAuthDbClient();
+  for (const key of emailKeys) {
+    await client.execute({
+      sql: "DELETE FROM auth_rate_limits WHERE scope = ? AND key = ?",
+      args: ["login:email", key],
+    });
+  }
+
+  for (const key of ["::1", "127.0.0.1", "localhost", "unknown"]) {
+    await client.execute({
+      sql: "DELETE FROM auth_rate_limits WHERE scope = ? AND key = ?",
+      args: ["login:ip", key],
+    });
+  }
 }
 
 async function assertAuthBaseUrlAlignment(baseUrl: string) {
@@ -193,7 +335,13 @@ async function run() {
       password: process.env.E2E_SETTINGS_PASSWORD?.trim() ?? "",
     },
   ];
+
+  await clearE2EAuthRateLimits(
+    credentialSet.map((credential) => credential.identifier),
+  );
+
   const seenKey = new Set<string>();
+  let e2eSessionCookies: BrowserCookie[] = [];
   for (const credential of credentialSet) {
     const uniqueKey = `${credential.identifier}::${credential.password}`;
     if (seenKey.has(uniqueKey)) {
@@ -203,12 +351,18 @@ async function run() {
     let lastError: unknown = null;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
-        await verifyCredentials({
+        const verified = await verifyCredentials({
           baseUrl,
           identifier: credential.identifier,
           password: credential.password,
           label: credential.label,
         });
+        if (
+          e2eSessionCookies.length === 0 &&
+          verified.browserCookies.length > 0
+        ) {
+          e2eSessionCookies = verified.browserCookies;
+        }
         lastError = null;
         break;
       } catch (error) {
@@ -232,7 +386,10 @@ async function run() {
   const command = process.platform === "win32" ? "npx.cmd" : "npx";
   const result = spawnSync(command, commandArgs, {
     stdio: "inherit",
-    env: process.env,
+    env: {
+      ...process.env,
+      E2E_SESSION_COOKIES_JSON: JSON.stringify(e2eSessionCookies),
+    },
   });
 
   process.exit(result.status ?? 1);
