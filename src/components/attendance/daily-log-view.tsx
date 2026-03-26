@@ -11,6 +11,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPost, apiPut } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { InlineState } from "../common/inline-state";
+import {
+  buildAttendanceHistoryQueryParams,
+  escapeAttendanceHistoryHtml,
+  getAttendanceHistoryStudentLabel,
+} from "./history/history-export-utils";
 import { HistoryLoadingSkeleton } from "./history/history-loading-skeleton";
 import type {
   AttendanceHistoryClassSummary,
@@ -262,6 +267,12 @@ export function DailyLogView({
     historyEndDate,
   });
   const historyFilterKeyRef = useRef(historyFilterKey);
+  const activeHistoryStudentId =
+    isStudentView && user?.id
+      ? user.id
+      : selectedHistoryStudentId !== "all"
+        ? selectedHistoryStudentId
+        : null;
 
   const loadTodayLogs = useCallback(async () => {
     setLoadingToday(true);
@@ -294,8 +305,7 @@ export function DailyLogView({
         analyticsClassFilter,
         isAdminView,
         isStudentView,
-        selectedHistoryStudentId,
-        userId: user?.id ?? null,
+        activeHistoryStudentId,
       });
 
       if (!options?.force && requestKey === historyRequestKeyRef.current) {
@@ -316,26 +326,31 @@ export function DailyLogView({
           return;
         }
 
-        const params = new URLSearchParams({
-          limit: String(historyLimit),
-          offset: String(historyOffset),
+        const params = buildAttendanceHistoryQueryParams({
+          limit: historyLimit,
+          offset: historyOffset,
           sortBy: historySort,
+          studentId: activeHistoryStudentId,
+          searchQuery: historySearch,
+          status: historyStatus,
+          source: historySource,
+          startDate: historyStartDate,
+          endDate: historyEndDate,
+          className: analyticsClassFilter,
         });
-        if (isStudentView && user?.id) params.set("studentId", user.id);
-        if (!isStudentView && selectedHistoryStudentId !== "all") {
-          params.set("studentId", selectedHistoryStudentId);
-        }
-        if (historySearch.trim())
-          params.set("searchQuery", historySearch.trim());
-        if (historyStatus !== "all") params.set("status", historyStatus);
-        if (historySource !== "all") params.set("source", historySource);
-        if (historyStartDate) params.set("startDate", historyStartDate);
-        if (historyEndDate) params.set("endDate", historyEndDate);
-        if (analyticsClassFilter !== "all") {
-          params.set("className", analyticsClassFilter);
-        }
-        const analyticsParams = new URLSearchParams(params);
-        analyticsParams.set("analyticsBundle", "true");
+        const analyticsParams = buildAttendanceHistoryQueryParams({
+          limit: historyLimit,
+          offset: historyOffset,
+          sortBy: historySort,
+          studentId: activeHistoryStudentId,
+          searchQuery: historySearch,
+          status: historyStatus,
+          source: historySource,
+          startDate: historyStartDate,
+          endDate: historyEndDate,
+          className: analyticsClassFilter,
+          analyticsBundle: true,
+        });
         const [result, analytics] = await Promise.all([
           apiGet<AttendanceHistoryResponse>(
             `/api/attendance/history?${params.toString()}`,
@@ -386,10 +401,9 @@ export function DailyLogView({
       historyStartDate,
       historyStatus,
       analyticsClassFilter,
+      activeHistoryStudentId,
       isAdminView,
       isStudentView,
-      selectedHistoryStudentId,
-      user?.id,
     ],
   );
 
@@ -629,20 +643,17 @@ export function DailyLogView({
         return;
       }
 
-      const params = new URLSearchParams({
-        export: "true",
-        offset: "0",
+      const params = buildAttendanceHistoryQueryParams({
+        exportData: true,
+        offset: 0,
         sortBy: historySort,
+        studentId: activeHistoryStudentId,
+        searchQuery: historySearch,
+        status: historyStatus,
+        source: historySource,
+        startDate: historyStartDate,
+        endDate: historyEndDate,
       });
-      if (isStudentView && user?.id) params.set("studentId", user.id);
-      if (!isStudentView && selectedHistoryStudentId !== "all") {
-        params.set("studentId", selectedHistoryStudentId);
-      }
-      if (historySearch.trim()) params.set("searchQuery", historySearch.trim());
-      if (historyStatus !== "all") params.set("status", historyStatus);
-      if (historySource !== "all") params.set("source", historySource);
-      if (historyStartDate) params.set("startDate", historyStartDate);
-      if (historyEndDate) params.set("endDate", historyEndDate);
 
       const result = await apiGet<AttendanceHistoryResponse>(
         `/api/attendance/history?${params.toString()}`,
@@ -666,12 +677,10 @@ export function DailyLogView({
         Catatan: log.notes || "-",
       }));
 
-      const selectedStudentLabel =
-        selectedHistoryStudentId === "all"
-          ? "all-students"
-          : historyStudentOptions.find(
-              (student) => student.id === selectedHistoryStudentId,
-            )?.nis || selectedHistoryStudentId;
+      const selectedStudentLabel = getAttendanceHistoryStudentLabel(
+        selectedHistoryStudentId,
+        historyStudentOptions,
+      );
 
       await exportRowsToXlsx({
         fileName: `attendance-history-${selectedStudentLabel}-${historyStartDate || "recent"}-${historyEndDate || "latest"}-${historySource}-${historyStatus}.xlsx`,
@@ -973,20 +982,17 @@ export function DailyLogView({
         return;
       }
 
-      const params = new URLSearchParams({
-        export: "true",
-        offset: "0",
+      const params = buildAttendanceHistoryQueryParams({
+        exportData: true,
+        offset: 0,
         sortBy: historySort,
+        studentId: activeHistoryStudentId,
+        searchQuery: historySearch,
+        status: historyStatus,
+        source: historySource,
+        startDate: historyStartDate,
+        endDate: historyEndDate,
       });
-      if (isStudentView && user?.id) params.set("studentId", user.id);
-      if (!isStudentView && selectedHistoryStudentId !== "all") {
-        params.set("studentId", selectedHistoryStudentId);
-      }
-      if (historySearch.trim()) params.set("searchQuery", historySearch.trim());
-      if (historyStatus !== "all") params.set("status", historyStatus);
-      if (historySource !== "all") params.set("source", historySource);
-      if (historyStartDate) params.set("startDate", historyStartDate);
-      if (historyEndDate) params.set("endDate", historyEndDate);
 
       const result = await apiGet<AttendanceHistoryResponse>(
         `/api/attendance/history?${params.toString()}`,
@@ -1005,12 +1011,10 @@ export function DailyLogView({
         compress: true,
       });
 
-      const selectedStudentLabel =
-        selectedHistoryStudentId === "all"
-          ? "all-students"
-          : historyStudentOptions.find(
-              (student) => student.id === selectedHistoryStudentId,
-            )?.nis || selectedHistoryStudentId;
+      const selectedStudentLabel = getAttendanceHistoryStudentLabel(
+        selectedHistoryStudentId,
+        historyStudentOptions,
+      );
       const fileName = `attendance-history-${selectedStudentLabel}-${historyStartDate || "all"}-${historyEndDate || "all"}.pdf`;
 
       const pageWidth = pdf.internal.pageSize.getWidth();
@@ -1137,20 +1141,17 @@ export function DailyLogView({
         return;
       }
 
-      const params = new URLSearchParams({
-        export: "true",
-        offset: "0",
+      const params = buildAttendanceHistoryQueryParams({
+        exportData: true,
+        offset: 0,
         sortBy: historySort,
+        studentId: activeHistoryStudentId,
+        searchQuery: historySearch,
+        status: historyStatus,
+        source: historySource,
+        startDate: historyStartDate,
+        endDate: historyEndDate,
       });
-      if (isStudentView && user?.id) params.set("studentId", user.id);
-      if (!isStudentView && selectedHistoryStudentId !== "all") {
-        params.set("studentId", selectedHistoryStudentId);
-      }
-      if (historySearch.trim()) params.set("searchQuery", historySearch.trim());
-      if (historyStatus !== "all") params.set("status", historyStatus);
-      if (historySource !== "all") params.set("source", historySource);
-      if (historyStartDate) params.set("startDate", historyStartDate);
-      if (historyEndDate) params.set("endDate", historyEndDate);
 
       const result = await apiGet<AttendanceHistoryResponse>(
         `/api/attendance/history?${params.toString()}`,
@@ -1171,16 +1172,16 @@ export function DailyLogView({
         .map(
           (log) => `
             <tr>
-              <td>${log.date}</td>
-              <td>${log.snapshotStudentName || "-"}</td>
-              <td>${log.snapshotStudentNis || "-"}</td>
-              <td>${log.className || "-"}</td>
-              <td>${formatStatusLabel(log.status)}</td>
-              <td>${log.source === "qr" ? "QR" : "Manual"}</td>
-              <td>${formatTime(log.checkInTime)}</td>
-              <td>${formatTime(log.checkOutTime)}</td>
-              <td>${log.lateDuration ?? 0}</td>
-              <td>${log.notes || "-"}</td>
+              <td>${escapeAttendanceHistoryHtml(log.date)}</td>
+              <td>${escapeAttendanceHistoryHtml(log.snapshotStudentName || "-")}</td>
+              <td>${escapeAttendanceHistoryHtml(log.snapshotStudentNis || "-")}</td>
+              <td>${escapeAttendanceHistoryHtml(log.className || "-")}</td>
+              <td>${escapeAttendanceHistoryHtml(formatStatusLabel(log.status))}</td>
+              <td>${escapeAttendanceHistoryHtml(log.source === "qr" ? "QR" : "Manual")}</td>
+              <td>${escapeAttendanceHistoryHtml(formatTime(log.checkInTime))}</td>
+              <td>${escapeAttendanceHistoryHtml(formatTime(log.checkOutTime))}</td>
+              <td>${escapeAttendanceHistoryHtml(log.lateDuration ?? 0)}</td>
+              <td>${escapeAttendanceHistoryHtml(log.notes || "-")}</td>
             </tr>
           `,
         )
@@ -1189,13 +1190,13 @@ export function DailyLogView({
       const summaryHtml = historySummary
         ? `
           <div class="summary">
-            <div><strong>Total:</strong> ${historySummary.total}</div>
-            <div><strong>Hadir:</strong> ${historySummary.present}</div>
-            <div><strong>Terlambat:</strong> ${historySummary.late}</div>
-            <div><strong>Izin/Sakit:</strong> ${historySummary.excused}</div>
-            <div><strong>Alpha:</strong> ${historySummary.absent}</div>
-            <div><strong>QR:</strong> ${historySummary.qr}</div>
-            <div><strong>Manual:</strong> ${historySummary.manual}</div>
+            <div><strong>Total:</strong> ${escapeAttendanceHistoryHtml(historySummary.total)}</div>
+            <div><strong>Hadir:</strong> ${escapeAttendanceHistoryHtml(historySummary.present)}</div>
+            <div><strong>Terlambat:</strong> ${escapeAttendanceHistoryHtml(historySummary.late)}</div>
+            <div><strong>Izin/Sakit:</strong> ${escapeAttendanceHistoryHtml(historySummary.excused)}</div>
+            <div><strong>Alpha:</strong> ${escapeAttendanceHistoryHtml(historySummary.absent)}</div>
+            <div><strong>QR:</strong> ${escapeAttendanceHistoryHtml(historySummary.qr)}</div>
+            <div><strong>Manual:</strong> ${escapeAttendanceHistoryHtml(historySummary.manual)}</div>
           </div>
         `
         : "";
@@ -1250,9 +1251,9 @@ export function DailyLogView({
           <body>
             <h1>EduCore Attendance History</h1>
             <div class="meta">
-              Filter tanggal: ${historyStartDate || "awal"} s/d ${historyEndDate || "akhir"} |
-              Status: ${historyStatus} |
-              Sumber: ${historySource}
+              Filter tanggal: ${escapeAttendanceHistoryHtml(historyStartDate || "awal")} s/d ${escapeAttendanceHistoryHtml(historyEndDate || "akhir")} |
+              Status: ${escapeAttendanceHistoryHtml(historyStatus)} |
+              Sumber: ${escapeAttendanceHistoryHtml(historySource)}
             </div>
             ${summaryHtml}
             <table>
