@@ -12,10 +12,27 @@ export class LoginPage {
 
   async login(params: { identifier: string; password: string }) {
     const { identifier, password } = params;
-    await this.page
-      .getByLabel(/Email \/ Username \/ NIP \/ NIS/i)
-      .fill(identifier);
-    await this.page.getByLabel(/Password/i).fill(password);
-    await this.page.getByRole("button", { name: /^Masuk$/i }).click();
+    const identifierField = this.page.getByLabel(/Email \/ Username \/ NIP \/ NIS/i);
+    const passwordField = this.page.getByLabel(/Password/i);
+    const submitButton = this.page.getByRole("button", { name: /^Masuk$/i });
+
+    await identifierField.fill(identifier);
+    await passwordField.fill(password);
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await passwordField.press("Enter");
+
+      try {
+        await this.page.waitForURL(/\/dashboard/, { timeout: 12_000 });
+        return;
+      } catch {
+        if (attempt === 2) {
+          break;
+        }
+
+        await expect(identifierField).toBeVisible();
+        await expect(passwordField).toBeVisible();
+      }
+    }
   }
 }

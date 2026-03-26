@@ -245,12 +245,23 @@ export function DailyLogView({
   const [error, setError] = useState<string | null>(null);
   const historyRequestKeyRef = useRef("");
   const historyRequestSeqRef = useRef(0);
+  const studentOptionsRequestSeqRef = useRef(0);
   const historyLimit = 20;
 
   const dateRangeInvalid =
     Boolean(historyStartDate) &&
     Boolean(historyEndDate) &&
     historyStartDate > historyEndDate;
+  const historyFilterKey = JSON.stringify({
+    historySearch,
+    selectedHistoryStudentId,
+    historyStatus,
+    historySource,
+    historySort,
+    historyStartDate,
+    historyEndDate,
+  });
+  const historyFilterKeyRef = useRef(historyFilterKey);
 
   const loadTodayLogs = useCallback(async () => {
     setLoadingToday(true);
@@ -410,10 +421,12 @@ export function DailyLogView({
 
   useEffect(() => {
     if (activeTab !== "history") {
+      studentOptionsRequestSeqRef.current += 1;
       return;
     }
 
     if (!isAdminView) {
+      studentOptionsRequestSeqRef.current += 1;
       setHistoryStudentOptions([]);
       if (isStudentView && user?.id) {
         setSelectedHistoryStudentId(user.id);
@@ -424,6 +437,8 @@ export function DailyLogView({
     }
 
     const timeoutId = window.setTimeout(() => {
+      const requestSeq = studentOptionsRequestSeqRef.current + 1;
+      studentOptionsRequestSeqRef.current = requestSeq;
       setLoadingStudentOptions(true);
       const params = new URLSearchParams({
         page: "1",
@@ -437,13 +452,21 @@ export function DailyLogView({
 
       void apiGet<StudentOptionsResponse>(`/api/students?${params.toString()}`)
         .then((result) => {
+          if (requestSeq !== studentOptionsRequestSeqRef.current) {
+            return;
+          }
           setHistoryStudentOptions(result.data);
         })
         .catch(() => {
+          if (requestSeq !== studentOptionsRequestSeqRef.current) {
+            return;
+          }
           setHistoryStudentOptions([]);
         })
         .finally(() => {
-          setLoadingStudentOptions(false);
+          if (requestSeq === studentOptionsRequestSeqRef.current) {
+            setLoadingStudentOptions(false);
+          }
         });
     }, 250);
 
@@ -456,8 +479,15 @@ export function DailyLogView({
     if (activeTab !== "history") {
       return;
     }
+
+    const filterChangedWhilePaginated =
+      historyOffset > 0 && historyFilterKeyRef.current !== historyFilterKey;
+    if (filterChangedWhilePaginated) {
+      return;
+    }
+
     void loadHistoryLogs();
-  }, [activeTab, loadHistoryLogs]);
+  }, [activeTab, historyFilterKey, historyOffset, loadHistoryLogs]);
 
   useEffect(() => {
     if (activeTab !== "history" || !isAdminView) {
@@ -583,18 +613,13 @@ export function DailyLogView({
       });
   }, [activeTab, selectedHistoryStudentId]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset pagination whenever filters change
   useEffect(() => {
+    if (historyFilterKeyRef.current === historyFilterKey) {
+      return;
+    }
+    historyFilterKeyRef.current = historyFilterKey;
     setHistoryOffset(0);
-  }, [
-    historySearch,
-    selectedHistoryStudentId,
-    historyStatus,
-    historySource,
-    historySort,
-    historyStartDate,
-    historyEndDate,
-  ]);
+  }, [historyFilterKey]);
 
   async function handleExportHistory() {
     setExportingHistory(true);

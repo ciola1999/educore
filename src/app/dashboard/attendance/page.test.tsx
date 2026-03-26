@@ -62,7 +62,7 @@ describe("AttendancePageClient", () => {
     });
   }
 
-  it("hides QR and manual sections for read-only attendance roles", () => {
+  it("hides QR and manual sections for read-only attendance roles", async () => {
     replaceMock.mockReset();
     setNavigation();
     useAuthMock.mockReturnValue({
@@ -71,7 +71,7 @@ describe("AttendancePageClient", () => {
 
     render(<AttendancePageClient />);
 
-    expect(screen.getByText("Daily Log Mock")).toBeInTheDocument();
+    expect(await screen.findByText("Daily Log Mock")).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: /Log Absensi/i }),
     ).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe("AttendancePageClient", () => {
     expect(screen.getByText("Analitik Saja")).toBeInTheDocument();
   });
 
-  it("switches attendance content through menu tabs for write-enabled roles", () => {
+  it("switches attendance content through menu tabs for write-enabled roles", async () => {
     replaceMock.mockReset();
     setNavigation();
     useAuthMock.mockReturnValue({
@@ -89,20 +89,22 @@ describe("AttendancePageClient", () => {
 
     render(<AttendancePageClient />);
 
-    expect(screen.getByText("QR Scanner Mock")).toBeInTheDocument();
+    expect(await screen.findByText("QR Scanner Mock")).toBeInTheDocument();
     expect(screen.queryByText("Attendance Form Mock")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Input Manual/i }));
-    expect(screen.getByText("Attendance Form Mock")).toBeInTheDocument();
+    expect(await screen.findByText("Attendance Form Mock")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Pengaturan Jadwal/i }));
-    expect(screen.getByText("Schedule Settings Mock")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Schedule Settings Mock"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Kelola Hari Libur/i }));
-    expect(screen.getByText("Holiday Manager Mock")).toBeInTheDocument();
+    expect(await screen.findByText("Holiday Manager Mock")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Log Absensi/i }));
-    expect(screen.getByText("Daily Log Mock")).toBeInTheDocument();
+    expect(await screen.findByText("Daily Log Mock")).toBeInTheDocument();
     expect(screen.getByText("Akses Tulis Aktif")).toBeInTheDocument();
   });
 
-  it("opens the requested section from search params", () => {
+  it("opens the requested section from search params", async () => {
     replaceMock.mockReset();
     setNavigation("section=manual");
     useAuthMock.mockReturnValue({
@@ -111,7 +113,7 @@ describe("AttendancePageClient", () => {
 
     render(<AttendancePageClient />);
 
-    expect(screen.getByText("Attendance Form Mock")).toBeInTheDocument();
+    expect(await screen.findByText("Attendance Form Mock")).toBeInTheDocument();
     expect(screen.queryByText("QR Scanner Mock")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Input Manual/i })).toHaveAttribute(
       "aria-selected",
