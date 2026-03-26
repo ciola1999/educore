@@ -3,8 +3,20 @@ import { expect, type Page } from "@playwright/test";
 export class LoginPage {
   constructor(private readonly page: Page) {}
 
+  private async waitForLoginOrDashboard() {
+    const identifierField = this.page.getByLabel(
+      /Email \/ Username \/ NIP \/ NIS/i,
+    );
+
+    await Promise.race([
+      this.page.waitForURL(/\/dashboard/, { timeout: 15_000 }),
+      expect(identifierField).toBeVisible({ timeout: 15_000 }),
+    ]).catch(() => undefined);
+  }
+
   async goto() {
     await this.page.goto("/");
+    await this.waitForLoginOrDashboard();
     await expect(
       this.page
         .getByRole("heading", { name: /Educore/i })
@@ -18,6 +30,8 @@ export class LoginPage {
       /Email \/ Username \/ NIP \/ NIS/i,
     );
     const passwordField = this.page.getByLabel(/Password/i);
+
+    await this.waitForLoginOrDashboard();
 
     if (this.page.url().includes("/dashboard")) {
       return;
@@ -40,6 +54,8 @@ export class LoginPage {
         if (this.page.url().includes("/dashboard")) {
           return;
         }
+
+        await this.waitForLoginOrDashboard();
 
         await expect(identifierField).toBeVisible();
         await expect(passwordField).toBeVisible();
