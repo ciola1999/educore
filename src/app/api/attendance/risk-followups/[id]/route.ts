@@ -16,7 +16,7 @@ export async function PATCH(
   context: { params: Promise<unknown> },
 ) {
   const session = await auth();
-  const guard = requirePermission(session, "attendance:read");
+  const guard = requirePermission(session, "attendance:write");
   if (guard) {
     return guard;
   }
