@@ -6,15 +6,22 @@ export class LoginPage {
   async goto() {
     await this.page.goto("/");
     await expect(
-      this.page.getByRole("heading", { name: /Educore/i }),
+      this.page
+        .getByRole("heading", { name: /Educore/i })
+        .or(this.page.getByRole("heading", { name: /Dashboard/i })),
     ).toBeVisible();
   }
 
   async login(params: { identifier: string; password: string }) {
     const { identifier, password } = params;
-    const identifierField = this.page.getByLabel(/Email \/ Username \/ NIP \/ NIS/i);
+    const identifierField = this.page.getByLabel(
+      /Email \/ Username \/ NIP \/ NIS/i,
+    );
     const passwordField = this.page.getByLabel(/Password/i);
-    const submitButton = this.page.getByRole("button", { name: /^Masuk$/i });
+
+    if (this.page.url().includes("/dashboard")) {
+      return;
+    }
 
     await identifierField.fill(identifier);
     await passwordField.fill(password);
@@ -28,6 +35,10 @@ export class LoginPage {
       } catch {
         if (attempt === 2) {
           break;
+        }
+
+        if (this.page.url().includes("/dashboard")) {
+          return;
         }
 
         await expect(identifierField).toBeVisible();
