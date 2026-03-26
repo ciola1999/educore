@@ -102,4 +102,53 @@ describe("GET /api/attendance/risk-insights", () => {
       },
     });
   });
+
+  it("recomputes notification summary from filtered notifications when class filter is active", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-1", role: "teacher" },
+    });
+    getAttendanceRiskNotificationsMock.mockResolvedValue([
+      {
+        id: "notif-1",
+        className: "XII TSM 1",
+        isRead: false,
+      },
+      {
+        id: "notif-2",
+        className: "XII TSM 1",
+        isRead: true,
+      },
+      {
+        id: "notif-3",
+        className: "XII TSM 2",
+        isRead: false,
+      },
+    ]);
+    getAttendanceRiskNotificationSummaryMock.mockResolvedValue({
+      total: 3,
+      pending: 2,
+      done: 1,
+    });
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/attendance/risk-insights?className=XII%20TSM%201",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        notifications: [
+          { id: "notif-1", className: "XII TSM 1", isRead: false },
+          { id: "notif-2", className: "XII TSM 1", isRead: true },
+        ],
+        notificationSummary: {
+          total: 2,
+          pending: 1,
+          done: 1,
+        },
+      },
+    });
+  });
 });

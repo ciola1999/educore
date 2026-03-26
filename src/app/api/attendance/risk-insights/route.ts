@@ -63,16 +63,28 @@ export async function GET(request: Request) {
           ? getAttendanceRiskAssignmentSummary()
           : Promise.resolve([]),
       ]);
+    const scopedNotifications = className
+      ? notifications.filter(
+          (notification) => notification.className === className,
+        )
+      : notifications;
+    const scopedNotificationSummary = className
+      ? {
+          total: scopedNotifications.length,
+          pending: scopedNotifications.filter(
+            (notification) => !notification.isRead,
+          ).length,
+          done: scopedNotifications.filter(
+            (notification) => notification.isRead,
+          ).length,
+        }
+      : notificationSummary;
 
     return apiOk({
       settings,
       students: students.slice(0, 5),
-      notifications: className
-        ? notifications.filter(
-            (notification) => notification.className === className,
-          )
-        : notifications,
-      notificationSummary,
+      notifications: scopedNotifications,
+      notificationSummary: scopedNotificationSummary,
       assignmentSummary: assignmentSummary.slice(0, 6),
       period: { startDate, endDate },
       className: className ?? null,
