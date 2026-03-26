@@ -251,6 +251,7 @@ export function DailyLogView({
   const historyRequestKeyRef = useRef("");
   const historyRequestSeqRef = useRef(0);
   const studentOptionsRequestSeqRef = useRef(0);
+  const followUpHistoryRequestSeqRef = useRef(0);
   const historyLimit = 20;
 
   const dateRangeInvalid =
@@ -503,6 +504,40 @@ export function DailyLogView({
     void loadHistoryLogs();
   }, [activeTab, historyFilterKey, historyOffset, loadHistoryLogs]);
 
+  const loadFollowUpHistory = useCallback(
+    async (studentId: string | null, options?: { force?: boolean }) => {
+      if (!studentId || studentId === "all") {
+        setFollowUpHistory([]);
+        return;
+      }
+
+      const requestSeq = followUpHistoryRequestSeqRef.current + 1;
+      followUpHistoryRequestSeqRef.current = requestSeq;
+
+      try {
+        const rows = await apiGet<AttendanceRiskFollowUpHistoryItem[]>(
+          `/api/attendance/risk-followups/history?studentId=${studentId}`,
+        );
+        if (
+          requestSeq !== followUpHistoryRequestSeqRef.current &&
+          !options?.force
+        ) {
+          return;
+        }
+        setFollowUpHistory(rows);
+      } catch {
+        if (
+          requestSeq !== followUpHistoryRequestSeqRef.current &&
+          !options?.force
+        ) {
+          return;
+        }
+        setFollowUpHistory([]);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (activeTab !== "history" || !isAdminView) {
       return;
@@ -618,14 +653,8 @@ export function DailyLogView({
       return;
     }
 
-    void apiGet<AttendanceRiskFollowUpHistoryItem[]>(
-      `/api/attendance/risk-followups/history?studentId=${selectedHistoryStudentId}`,
-    )
-      .then(setFollowUpHistory)
-      .catch(() => {
-        setFollowUpHistory([]);
-      });
-  }, [activeTab, selectedHistoryStudentId]);
+    void loadFollowUpHistory(selectedHistoryStudentId);
+  }, [activeTab, loadFollowUpHistory, selectedHistoryStudentId]);
 
   useEffect(() => {
     if (historyFilterKeyRef.current === historyFilterKey) {
@@ -912,15 +941,18 @@ export function DailyLogView({
 
       await apiPost<{ success: true }>("/api/attendance/risk-followups", {
         studentId: student.studentId,
-        studentName: student.studentName,
-        nis: student.nis,
-        className: student.className,
         riskFlags,
         note: followUpNote.trim() || undefined,
         deadline: followUpDeadline || null,
       });
       setFollowUpNote("");
       setFollowUpDeadline("");
+      if (
+        activeTab === "history" &&
+        selectedHistoryStudentId === student.studentId
+      ) {
+        await loadFollowUpHistory(student.studentId, { force: true });
+      }
       toast.success(`Tindak lanjut dibuat untuk ${student.studentName}`);
     } catch (error) {
       toast.error(
