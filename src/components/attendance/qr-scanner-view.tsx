@@ -223,6 +223,7 @@ export function QRScannerView() {
     submitting,
     loadingLogs,
     logs,
+    logsError,
     lastResult,
     loadTodayLogs,
     submitQrScan,
@@ -866,6 +867,16 @@ export function QRScannerView() {
               <div className="rounded-3xl border border-dashed border-zinc-800/80 bg-zinc-950/35 p-3">
                 <QrLogSkeleton />
               </div>
+            ) : logsError ? (
+              <InlineState
+                title="Log attendance belum tersinkron ke panel"
+                description={logsError}
+                variant="warning"
+                actionLabel="Coba Muat Ulang"
+                onAction={() => {
+                  void loadTodayLogs();
+                }}
+              />
             ) : logs.length > 0 ? (
               <div className="space-y-3">
                 {logs.slice(0, 8).map((log) => (

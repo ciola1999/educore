@@ -42,12 +42,21 @@ export function useQrAttendance(options: QrAttendanceOptions = {}) {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logs, setLogs] = useState<TodayAttendanceLog[]>([]);
   const [lastResult, setLastResult] = useState<QrScanResult | null>(null);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   const loadTodayLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
       const data = await apiGet<TodayAttendanceLog[]>("/api/attendance/today");
       setLogs(data);
+      setLogsError(null);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal memuat log attendance hari ini";
+      setLogsError(message);
+      throw error;
     } finally {
       setLoadingLogs(false);
     }
@@ -60,7 +69,15 @@ export function useQrAttendance(options: QrAttendanceOptions = {}) {
         qrData,
       });
       setLastResult(result);
-      await loadTodayLogs();
+      try {
+        await loadTodayLogs();
+      } catch {
+        if (result.success) {
+          setLogsError(
+            "Attendance berhasil diproses, tetapi log hari ini belum berhasil diperbarui.",
+          );
+        }
+      }
       if (result.success && options.onSuccess) {
         options.onSuccess(result);
       }
@@ -90,6 +107,7 @@ export function useQrAttendance(options: QrAttendanceOptions = {}) {
     submitting,
     loadingLogs,
     logs,
+    logsError,
     lastResult,
     loadTodayLogs,
     submitQrScan,

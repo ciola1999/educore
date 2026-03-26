@@ -38,6 +38,7 @@ describe("QRScannerView", () => {
       submitting: false,
       loadingLogs: false,
       logs: [],
+      logsError: null,
       lastResult: null,
       loadTodayLogs: vi.fn(),
       submitQrScan: vi.fn(),
@@ -128,6 +129,28 @@ describe("QRScannerView", () => {
     expect(screen.getByText("Hadir")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Muat Ulang/i }));
+
+    await waitFor(() => {
+      expect(hookState.loadTodayLogs).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("shows log refresh warning and allows retry when today logs fail to load", async () => {
+    const logsError =
+      "Attendance berhasil diproses, tetapi log hari ini belum berhasil diperbarui.";
+    const hookState = createQrAttendanceState({
+      logsError,
+    });
+    useQrAttendanceMock.mockReturnValue(hookState);
+
+    render(<QRScannerView />);
+
+    expect(
+      screen.getByText("Log attendance belum tersinkron ke panel"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(logsError)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Coba Muat Ulang/i }));
 
     await waitFor(() => {
       expect(hookState.loadTodayLogs).toHaveBeenCalledTimes(1);
