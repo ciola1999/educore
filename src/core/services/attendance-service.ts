@@ -1025,6 +1025,8 @@ export const DEFAULT_ATTENDANCE_RISK_SETTINGS: AttendanceRiskSettings = {
   rateThreshold: 75,
 };
 
+const ATTENDANCE_HISTORY_EXPORT_MAX_ROWS = 5_000;
+
 type NormalizedAttendanceHistoryStatus = {
   qrStatuses: Array<"PRESENT" | "LATE" | "EXCUSED" | "ABSENT">;
   manualStatuses: Array<"present" | "sick" | "permission" | "alpha">;
@@ -1093,7 +1095,9 @@ export async function getAttendanceHistory(
     studentId,
     status,
     source = "all",
+    limit = 100,
   } = parsed.data;
+  const offset = Math.max(filter.offset ?? 0, 0);
   const className = filter.className?.trim();
   const normalizedStatus = resolveAttendanceHistoryStatus(status);
 
@@ -1258,17 +1262,21 @@ export async function getAttendanceHistory(
       : unified;
 
   if (sortBy === "latest") {
-    return filtered.sort(
-      (a, b) =>
-        b.date.localeCompare(a.date) ||
-        b.createdAt.getTime() - a.createdAt.getTime(),
-    );
+    return filtered
+      .sort(
+        (a, b) =>
+          b.date.localeCompare(a.date) ||
+          b.createdAt.getTime() - a.createdAt.getTime(),
+      )
+      .slice(offset, offset + limit);
   }
-  return filtered.sort(
-    (a, b) =>
-      a.date.localeCompare(b.date) ||
-      a.createdAt.getTime() - b.createdAt.getTime(),
-  );
+  return filtered
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    )
+    .slice(offset, offset + limit);
 }
 
 /**
@@ -1297,6 +1305,7 @@ export async function getAttendanceHistoryCount(
     searchQuery,
     source = "all",
   } = parsed.data;
+  const className = filter.className?.trim();
   const normalizedStatus = resolveAttendanceHistoryStatus(status);
 
   // Build conditions for QR records
@@ -1324,12 +1333,19 @@ export async function getAttendanceHistoryCount(
     );
   }
 
-  const qrCountResult =
+  const qrCountRows =
     source === "manual"
-      ? [{ count: 0 }]
+      ? []
       : await db
-          .select({ count: count() })
+          .select({
+            id: studentDailyAttendance.id,
+            className: classes.name,
+            studentGrade: students.grade,
+          })
           .from(studentDailyAttendance)
+          .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
+          .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
+          .leftJoin(classes, eq(users.kelasId, classes.id))
           .where(and(...qrConditions));
 
   // Build conditions for Manual records count
@@ -1353,19 +1369,44 @@ export async function getAttendanceHistoryCount(
     );
   }
 
-  const manualCountResult =
+  const manualCountRows =
     source === "qr"
-      ? [{ count: 0 }]
+      ? []
       : await db
-          .select({ count: count() })
+          .select({
+            id: attendance.id,
+            className: classes.name,
+            studentGrade: students.grade,
+          })
           .from(attendance)
           .innerJoin(students, eq(attendance.studentId, students.id))
+          .leftJoin(users, eq(attendance.studentId, users.id))
+          .leftJoin(classes, eq(users.kelasId, classes.id))
           .where(and(...manualConditions));
 
-  return (
-    Number(qrCountResult[0]?.count || 0) +
-    Number(manualCountResult[0]?.count || 0)
+  const resolvedQrRows = await resolveAttendanceHistoryClassNames(
+    db,
+    qrCountRows,
   );
+  const resolvedManualRows = await resolveAttendanceHistoryClassNames(
+    db,
+    manualCountRows,
+  );
+
+  const totalQrRows =
+    className && className !== "all"
+      ? resolvedQrRows.filter(
+          (row) => (row.className?.trim() || "UNASSIGNED") === className,
+        ).length
+      : resolvedQrRows.length;
+  const totalManualRows =
+    className && className !== "all"
+      ? resolvedManualRows.filter(
+          (row) => (row.className?.trim() || "UNASSIGNED") === className,
+        ).length
+      : resolvedManualRows.length;
+
+  return totalQrRows + totalManualRows;
 }
 
 export async function getAttendanceHistoryExportRows(
@@ -1391,19 +1432,25 @@ export async function getAttendanceHistoryExportRows(
   if (total === 0) {
     return [];
   }
+  if (total > ATTENDANCE_HISTORY_EXPORT_MAX_ROWS) {
+    throw new Error(
+      `Rentang riwayat terlalu besar untuk diekspor. Batasi filter hingga maksimal ${ATTENDANCE_HISTORY_EXPORT_MAX_ROWS} data.`,
+    );
+  }
 
   const pages = Math.ceil(total / ATTENDANCE_HISTORY_EXPORT_BATCH);
-  const chunks = await Promise.all(
-    Array.from({ length: pages }, (_, index) =>
-      getAttendanceHistory({
-        ...baseFilter,
-        limit: ATTENDANCE_HISTORY_EXPORT_BATCH,
-        offset: index * ATTENDANCE_HISTORY_EXPORT_BATCH,
-      }),
-    ),
-  );
+  const rows: AttendanceHistoryRecord[] = [];
 
-  return chunks.flat();
+  for (let index = 0; index < pages; index += 1) {
+    const chunk = await getAttendanceHistory({
+      ...baseFilter,
+      limit: ATTENDANCE_HISTORY_EXPORT_BATCH,
+      offset: index * ATTENDANCE_HISTORY_EXPORT_BATCH,
+    });
+    rows.push(...chunk);
+  }
+
+  return rows;
 }
 
 export async function getAttendanceHistorySummary(

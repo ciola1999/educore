@@ -166,6 +166,7 @@ export async function GET(request: Request) {
             status,
             searchQuery,
             source,
+            className,
           })
         : getAttendanceHistory({
             startDate,
@@ -177,6 +178,7 @@ export async function GET(request: Request) {
             status,
             searchQuery,
             source,
+            className,
           }),
       getAttendanceHistoryCount({
         startDate,
@@ -187,11 +189,12 @@ export async function GET(request: Request) {
         status,
         searchQuery,
         source,
+        className,
       }),
     ]);
 
     return apiOk({
-      data: exportMode ? data : data.slice(offset, offset + limit),
+      data,
       total,
       limit,
       offset,

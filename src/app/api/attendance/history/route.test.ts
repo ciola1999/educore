@@ -83,6 +83,33 @@ describe("GET /api/attendance/history", () => {
     );
   });
 
+  it("forwards class name filter to default history and count paths", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    getAttendanceHistoryMock.mockResolvedValue([{ id: "row-1" }]);
+    getAttendanceHistoryCountMock.mockResolvedValue(1);
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/attendance/history?className=XII%20TSM%201",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getAttendanceHistoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        className: "XII TSM 1",
+      }),
+    );
+    expect(getAttendanceHistoryCountMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        className: "XII TSM 1",
+      }),
+    );
+  });
+
   it("uses export history path when export mode is requested", async () => {
     authMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
@@ -93,7 +120,7 @@ describe("GET /api/attendance/history", () => {
 
     const response = await GET(
       new Request(
-        "http://localhost/api/attendance/history?export=true&startDate=2026-03-01&endDate=2026-03-22",
+        "http://localhost/api/attendance/history?export=true&startDate=2026-03-01&endDate=2026-03-22&className=XII%20TSM%201",
       ),
     );
 
@@ -102,9 +129,15 @@ describe("GET /api/attendance/history", () => {
       expect.objectContaining({
         startDate: "2026-03-01",
         endDate: "2026-03-22",
+        className: "XII TSM 1",
       }),
     );
     expect(getAttendanceHistoryMock).not.toHaveBeenCalled();
+    expect(getAttendanceHistoryCountMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        className: "XII TSM 1",
+      }),
+    );
   });
 
   it("uses summary history path when summary mode is requested", async () => {
@@ -297,5 +330,28 @@ describe("GET /api/attendance/history", () => {
         className: "XII TSM 1",
       }),
     );
+  });
+
+  it("returns paginated data from service without re-slicing in the route", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    getAttendanceHistoryMock.mockResolvedValue([{ id: "row-3" }]);
+    getAttendanceHistoryCountMock.mockResolvedValue(3);
+
+    const response = await GET(
+      new Request("http://localhost/api/attendance/history?limit=1&offset=2"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        data: [{ id: "row-3" }],
+        total: 3,
+        limit: 1,
+        offset: 2,
+      },
+    });
   });
 });
