@@ -9,7 +9,10 @@ test.describe("Auth guard", () => {
       timeout: 60_000,
     });
 
-    await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 60_000 });
+    await page.waitForURL((url) => {
+      const pathname = new URL(url.toString()).pathname;
+      return pathname === "/" || pathname === "/login";
+    });
     await expect(page.getByRole("heading", { name: /Educore/i })).toBeVisible();
   });
 });

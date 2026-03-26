@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,10 +50,28 @@ const playSuccessSound = () => {
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  function resolveCallbackUrl() {
+    const value = searchParams.get("callbackUrl")?.trim();
+    if (!value) {
+      return "/dashboard";
+    }
+
+    if (!value.startsWith("/")) {
+      return "/dashboard";
+    }
+
+    if (value.startsWith("//")) {
+      return "/dashboard";
+    }
+
+    return value;
+  }
 
   async function onSubmit(event: React.SyntheticEvent) {
     event.preventDefault();
@@ -73,7 +91,7 @@ export function LoginForm() {
 
       if (result.success) {
         playSuccessSound();
-        router.push("/dashboard");
+        router.replace(resolveCallbackUrl());
       } else {
         triggerErrorHaptic();
         setError(result.error);
@@ -133,6 +151,7 @@ export function LoginForm() {
         </CardContent>
         <CardFooter className="pt-6">
           <Button
+            type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-[0.98]"
             disabled={isLoading}
           >

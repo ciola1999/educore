@@ -36,7 +36,7 @@ export default auth((request) => {
   }
 
   if (!currentRole) {
-    const loginUrl = new URL("/", nextUrl);
+    const loginUrl = new URL("/login", nextUrl);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
