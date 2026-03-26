@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, BellRing } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -250,7 +250,7 @@ export function AttendanceRiskInsights() {
   const [compareAssigneeA, setCompareAssigneeA] = useState("none");
   const [compareAssigneeB, setCompareAssigneeB] = useState("none");
 
-  useEffect(() => {
+  const buildRiskInsightsQueryString = useCallback(() => {
     const params = new URLSearchParams();
     if (classFilter !== "all") {
       params.set("className", classFilter);
@@ -259,17 +259,46 @@ export function AttendanceRiskInsights() {
       params.set("assigneeUserId", assigneeFilter);
     }
 
-    void apiGet<RiskInsightsResponse>(
-      `/api/attendance/risk-insights${params.size > 0 ? `?${params.toString()}` : ""}`,
+    return params.size > 0 ? `?${params.toString()}` : "";
+  }, [assigneeFilter, classFilter]);
+
+  const refreshRiskInsights = useCallback(async () => {
+    const queryString = buildRiskInsightsQueryString();
+    return apiGet<RiskInsightsResponse>(
+      `/api/attendance/risk-insights${queryString}`,
     )
       .then(setData)
       .catch(() => {
         setData(null);
-      })
-      .finally(() => {
-        setLoading(false);
       });
-  }, [assigneeFilter, classFilter]);
+  }, [buildRiskInsightsQueryString]);
+
+  function invalidateAuditTrail(notificationIds: string[]) {
+    if (notificationIds.length === 0) {
+      return;
+    }
+
+    const notificationIdSet = new Set(notificationIds);
+    setAuditTrail((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([notificationId]) => !notificationIdSet.has(notificationId),
+        ),
+      ),
+    );
+    setAuditLoadingId((current) =>
+      current && notificationIdSet.has(current) ? null : current,
+    );
+    setAuditOpenId((current) =>
+      current && notificationIdSet.has(current) ? null : current,
+    );
+  }
+
+  useEffect(() => {
+    void refreshRiskInsights().finally(() => {
+      setLoading(false);
+    });
+  }, [refreshRiskInsights]);
 
   useEffect(() => {
     void apiGet<ClassOption[]>("/api/attendance/classes")
@@ -898,6 +927,7 @@ export function AttendanceRiskInsights() {
       await apiPatch<{ success: true }>(
         `/api/attendance/risk-followups/${notificationId}`,
       );
+      invalidateAuditTrail([notificationId]);
       setData((current) =>
         current
           ? {
@@ -931,6 +961,7 @@ export function AttendanceRiskInsights() {
         },
       );
 
+      invalidateAuditTrail([notificationId]);
       setData((current) =>
         current
           ? {
@@ -988,6 +1019,7 @@ export function AttendanceRiskInsights() {
         ),
       );
 
+      invalidateAuditTrail(pendingIds);
       setData((current) =>
         current
           ? {
@@ -1074,6 +1106,7 @@ export function AttendanceRiskInsights() {
         ),
       );
 
+      invalidateAuditTrail(pendingIds);
       setData((current) =>
         current
           ? {
@@ -1117,8 +1150,9 @@ export function AttendanceRiskInsights() {
           ),
         ),
       );
+      invalidateAuditTrail(pendingIds);
       setBulkAssigneeId("none");
-      window.location.reload();
+      await refreshRiskInsights();
     } finally {
       setBulkReassigning(false);
     }
@@ -1653,8 +1687,13 @@ export function AttendanceRiskInsights() {
       return;
     }
 
+    const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+      periodFilter,
+      classFilter,
+      assigneeFilter,
+    });
     await exportRowsToXlsx({
-      fileName: `attendance-follow-up-audit-${notification.className || "unassigned"}-${notification.id}.xlsx`,
+      fileName: `attendance-follow-up-audit-${toFileNameSegment(notification.className || "unassigned") || "unassigned"}-${notification.id}-${exportScopeSuffix}.xlsx`,
       sheetName: "Follow Up Audit",
       rows: rows.map((item) => ({
         FollowUp: notification.judul,
