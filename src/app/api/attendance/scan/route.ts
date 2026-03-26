@@ -12,7 +12,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return apiError(
+        "Payload QR scan harus berupa JSON yang valid",
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
+
     const parsed = qrScanSchema.safeParse(body);
 
     if (!parsed.success) {

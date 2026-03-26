@@ -206,6 +206,8 @@ export function QRScannerView() {
     isScanning?: boolean;
   } | null>(null);
   const lockRef = useRef(false);
+  const unlockTimerRef = useRef<number | null>(null);
+  const scannerStartRequestRef = useRef(0);
   const [cameraActive, setCameraActive] = useState(false);
   const [startingCamera, setStartingCamera] = useState(false);
   const [manualInput, setManualInput] = useState("");
@@ -274,6 +276,12 @@ export function QRScannerView() {
   }
 
   const stopScanner = useCallback(async () => {
+    scannerStartRequestRef.current += 1;
+    if (unlockTimerRef.current) {
+      clearTimeout(unlockTimerRef.current);
+      unlockTimerRef.current = null;
+    }
+    lockRef.current = false;
     if (!scannerRef.current) {
       setCameraActive(false);
       return;
@@ -289,6 +297,7 @@ export function QRScannerView() {
     } finally {
       scannerRef.current = null;
       setCameraActive(false);
+      setStartingCamera(false);
     }
   }, []);
 
@@ -329,11 +338,15 @@ export function QRScannerView() {
         error instanceof Error ? error.message : "Gagal memproses QR scan",
       );
     } finally {
-      window.setTimeout(() => {
+      if (unlockTimerRef.current) {
+        clearTimeout(unlockTimerRef.current);
+      }
+      unlockTimerRef.current = window.setTimeout(() => {
         lockRef.current = false;
         if (source === "camera") {
           setScanningStatus("idle");
         }
+        unlockTimerRef.current = null;
       }, 1200);
     }
   }
@@ -343,6 +356,12 @@ export function QRScannerView() {
   }
 
   async function startScanner() {
+    if (startingCamera || cameraActive || submitting) {
+      return;
+    }
+
+    const startRequestId = scannerStartRequestRef.current + 1;
+    scannerStartRequestRef.current = startRequestId;
     setStartingCamera(true);
     setCameraError(null);
 
@@ -384,9 +403,21 @@ export function QRScannerView() {
         undefined,
       );
 
+      if (startRequestId !== scannerStartRequestRef.current) {
+        await scanner.stop().catch(() => {
+          // Ignore cleanup error for aborted startup.
+        });
+        await Promise.resolve(scanner.clear()).catch(() => {
+          // Ignore cleanup error for aborted startup.
+        });
+        return;
+      }
+
       setCameraActive(true);
     } catch (error) {
-      await stopScanner();
+      if (startRequestId === scannerStartRequestRef.current) {
+        await stopScanner();
+      }
       const message =
         error instanceof Error
           ? error.message
@@ -404,6 +435,10 @@ export function QRScannerView() {
 
   useEffect(() => {
     return () => {
+      if (unlockTimerRef.current) {
+        clearTimeout(unlockTimerRef.current);
+        unlockTimerRef.current = null;
+      }
       void stopScanner();
     };
   }, [stopScanner]);
