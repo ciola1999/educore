@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAttendanceHistoryFileScope,
   buildAttendanceHistoryQueryParams,
   escapeAttendanceHistoryHtml,
   getAttendanceHistoryStudentLabel,
@@ -50,6 +51,22 @@ describe("history-export-utils", () => {
     ).toBe("100");
 
     expect(getAttendanceHistoryStudentLabel("missing", [])).toBe("missing");
+  });
+
+  it("builds sanitized history file scope from active filters", () => {
+    expect(
+      buildAttendanceHistoryFileScope({
+        selectedHistoryStudentId: "student-1",
+        historyStudentOptions: [
+          { id: "student-1", fullName: "A", nis: "10/01", grade: "10" },
+        ],
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+        className: "X IPA 1",
+        source: "qr",
+        status: "late",
+      }),
+    ).toBe("10-01-2026-03-01-2026-03-31-x-ipa-1-qr-late");
   });
 
   it("escapes html-sensitive content before print rendering", () => {

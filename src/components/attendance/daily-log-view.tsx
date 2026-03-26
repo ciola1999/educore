@@ -12,9 +12,9 @@ import { apiGet, apiPost, apiPut } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { InlineState } from "../common/inline-state";
 import {
+  buildAttendanceHistoryFileScope,
   buildAttendanceHistoryQueryParams,
   escapeAttendanceHistoryHtml,
-  getAttendanceHistoryStudentLabel,
 } from "./history/history-export-utils";
 import { HistoryLoadingSkeleton } from "./history/history-loading-skeleton";
 import type {
@@ -653,6 +653,7 @@ export function DailyLogView({
         source: historySource,
         startDate: historyStartDate,
         endDate: historyEndDate,
+        className: analyticsClassFilter,
       });
 
       const result = await apiGet<AttendanceHistoryResponse>(
@@ -677,13 +678,18 @@ export function DailyLogView({
         Catatan: log.notes || "-",
       }));
 
-      const selectedStudentLabel = getAttendanceHistoryStudentLabel(
+      const fileScope = buildAttendanceHistoryFileScope({
         selectedHistoryStudentId,
         historyStudentOptions,
-      );
+        startDate: historyStartDate || "recent",
+        endDate: historyEndDate || "latest",
+        className: analyticsClassFilter,
+        source: historySource,
+        status: historyStatus,
+      });
 
       await exportRowsToXlsx({
-        fileName: `attendance-history-${selectedStudentLabel}-${historyStartDate || "recent"}-${historyEndDate || "latest"}-${historySource}-${historyStatus}.xlsx`,
+        fileName: `attendance-history-${fileScope}.xlsx`,
         sheetName: "Attendance History",
         rows,
       });
@@ -992,6 +998,7 @@ export function DailyLogView({
         source: historySource,
         startDate: historyStartDate,
         endDate: historyEndDate,
+        className: analyticsClassFilter,
       });
 
       const result = await apiGet<AttendanceHistoryResponse>(
@@ -1011,11 +1018,16 @@ export function DailyLogView({
         compress: true,
       });
 
-      const selectedStudentLabel = getAttendanceHistoryStudentLabel(
+      const fileScope = buildAttendanceHistoryFileScope({
         selectedHistoryStudentId,
         historyStudentOptions,
-      );
-      const fileName = `attendance-history-${selectedStudentLabel}-${historyStartDate || "all"}-${historyEndDate || "all"}.pdf`;
+        startDate: historyStartDate || "all",
+        endDate: historyEndDate || "all",
+        className: analyticsClassFilter,
+        source: historySource,
+        status: historyStatus,
+      });
+      const fileName = `attendance-history-${fileScope}.pdf`;
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -1032,7 +1044,7 @@ export function DailyLogView({
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(9);
         pdf.text(
-          `Filter: ${historyStartDate || "awal"} s/d ${historyEndDate || "akhir"} | Status: ${historyStatus} | Sumber: ${historySource}`,
+          `Filter: ${historyStartDate || "awal"} s/d ${historyEndDate || "akhir"} | Kelas: ${analyticsClassFilter} | Status: ${historyStatus} | Sumber: ${historySource}`,
           margin,
           y,
         );
@@ -1151,6 +1163,7 @@ export function DailyLogView({
         source: historySource,
         startDate: historyStartDate,
         endDate: historyEndDate,
+        className: analyticsClassFilter,
       });
 
       const result = await apiGet<AttendanceHistoryResponse>(
@@ -1252,6 +1265,7 @@ export function DailyLogView({
             <h1>EduCore Attendance History</h1>
             <div class="meta">
               Filter tanggal: ${escapeAttendanceHistoryHtml(historyStartDate || "awal")} s/d ${escapeAttendanceHistoryHtml(historyEndDate || "akhir")} |
+              Kelas: ${escapeAttendanceHistoryHtml(analyticsClassFilter)} |
               Status: ${escapeAttendanceHistoryHtml(historyStatus)} |
               Sumber: ${escapeAttendanceHistoryHtml(historySource)}
             </div>

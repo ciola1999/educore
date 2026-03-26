@@ -79,6 +79,40 @@ export function getAttendanceHistoryStudentLabel(
   );
 }
 
+function sanitizeAttendanceHistoryFileSegment(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+export function buildAttendanceHistoryFileScope(options: {
+  selectedHistoryStudentId: string;
+  historyStudentOptions: StudentOption[];
+  startDate: string;
+  endDate: string;
+  source: string;
+  status: string;
+  className?: string;
+}) {
+  const studentLabel = getAttendanceHistoryStudentLabel(
+    options.selectedHistoryStudentId,
+    options.historyStudentOptions,
+  );
+
+  return [
+    sanitizeAttendanceHistoryFileSegment(studentLabel) || "all-students",
+    sanitizeAttendanceHistoryFileSegment(options.startDate || "all") || "all",
+    sanitizeAttendanceHistoryFileSegment(options.endDate || "all") || "all",
+    sanitizeAttendanceHistoryFileSegment(options.className || "all-classes") ||
+      "all-classes",
+    sanitizeAttendanceHistoryFileSegment(options.source || "all") || "all",
+    sanitizeAttendanceHistoryFileSegment(options.status || "all") || "all",
+  ].join("-");
+}
+
 export function escapeAttendanceHistoryHtml(
   value: string | number | null | undefined,
 ) {
