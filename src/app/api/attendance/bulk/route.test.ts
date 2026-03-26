@@ -84,4 +84,56 @@ describe("POST /api/attendance/bulk", () => {
     expect(payload.code).toBe("INVALID_CLASS_SCOPE");
     expect(recordBulkAttendanceMock).not.toHaveBeenCalled();
   });
+
+  it("returns partial success payload when some attendance rows fail", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    recordBulkAttendanceMock.mockResolvedValue({
+      success: true,
+      partial: true,
+      message: "Absensi tersimpan untuk 20 siswa, 2 siswa gagal diproses",
+      successCount: 20,
+      failedCount: 2,
+      totalRecords: 22,
+      failures: [
+        {
+          studentId: "student-2",
+          message: "Gagal menyimpan absensi siswa ini",
+        },
+      ],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          classId: "550e8400-e29b-41d4-a716-446655440000",
+          date: "2026-03-19",
+          records: [
+            {
+              studentId: "550e8400-e29b-41d4-a716-446655440001",
+              status: "present",
+              notes: "",
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      success: boolean;
+      data?: {
+        partial?: boolean;
+        successCount?: number;
+        failedCount?: number;
+      };
+    };
+    expect(payload.success).toBe(true);
+    expect(payload.data?.partial).toBe(true);
+    expect(payload.data?.successCount).toBe(20);
+    expect(payload.data?.failedCount).toBe(2);
+  });
 });

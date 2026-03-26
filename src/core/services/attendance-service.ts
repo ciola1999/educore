@@ -837,8 +837,11 @@ export async function recordBulkAttendance(data: BulkAttendanceInput) {
     };
   }
 
-  try {
-    for (const record of normalizedRecords) {
+  const failures: Array<{ studentId: string; message: string }> = [];
+  let successCount = 0;
+
+  for (const record of normalizedRecords) {
+    try {
       const existing = await db
         .select({ id: attendance.id })
         .from(attendance)
@@ -863,6 +866,7 @@ export async function recordBulkAttendance(data: BulkAttendanceInput) {
             updatedAt: now,
           })
           .where(eq(attendance.id, existing[0].id));
+        successCount += 1;
         continue;
       }
 
@@ -878,15 +882,51 @@ export async function recordBulkAttendance(data: BulkAttendanceInput) {
         createdAt: now,
         updatedAt: now,
       });
+      successCount += 1;
+    } catch {
+      failures.push({
+        studentId: record.studentId,
+        message: "Gagal menyimpan absensi siswa ini",
+      });
     }
+  }
 
+  const failedCount = failures.length;
+  if (successCount === 0) {
+    return {
+      success: false,
+      message:
+        failedCount > 0
+          ? `Gagal menyimpan absensi untuk ${failedCount} siswa`
+          : "Gagal menyimpan data absensi",
+      successCount,
+      failedCount,
+      totalRecords: normalizedRecords.length,
+      failures,
+    };
+  }
+
+  if (failedCount > 0) {
     return {
       success: true,
-      message: `Data absensi berhasil disimpan (${normalizedRecords.length} siswa)`,
+      partial: true,
+      message: `Absensi tersimpan untuk ${successCount} siswa, ${failedCount} siswa gagal diproses`,
+      successCount,
+      failedCount,
+      totalRecords: normalizedRecords.length,
+      failures,
     };
-  } catch {
-    return { success: false, message: "Gagal menyimpan data absensi" };
   }
+
+  return {
+    success: true,
+    partial: false,
+    message: `Data absensi berhasil disimpan (${successCount} siswa)`,
+    successCount,
+    failedCount,
+    totalRecords: normalizedRecords.length,
+    failures,
+  };
 }
 
 export async function getTodayAttendanceRecords() {

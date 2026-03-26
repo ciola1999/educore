@@ -30,6 +30,27 @@ export interface ClassOption {
   name: string;
 }
 
+type BulkAttendanceResponse = {
+  success: boolean;
+  message: string;
+  partial?: boolean;
+  successCount?: number;
+  failedCount?: number;
+  totalRecords?: number;
+  failures?: Array<{ studentId: string; message: string }>;
+};
+
+type AttendanceSubmitSummary = {
+  tone: "success" | "warning" | "error";
+  title: string;
+  description: string;
+  failedStudents: Array<{
+    studentId: string;
+    studentName: string;
+    message: string;
+  }>;
+};
+
 type AttendanceFormInitialState = {
   initialClassId?: string;
   initialClassName?: string;
@@ -81,6 +102,8 @@ export function useAttendanceForm(
   const [submitting, setSubmitting] = useState(false);
   const [classLoadError, setClassLoadError] = useState<string | null>(null);
   const [studentLoadError, setStudentLoadError] = useState<string | null>(null);
+  const [submitSummary, setSubmitSummary] =
+    useState<AttendanceSubmitSummary | null>(null);
   const [studentList, setStudentList] = useState<StudentRecord[]>([]);
   const initialDate = normalizeDateInput(initialState.initialDate);
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -249,6 +272,7 @@ export function useAttendanceForm(
 
     setSubmitting(true);
     try {
+      setSubmitSummary(null);
       // Filter out locked students as they are already handled by QR
       const recordableStudents = studentList.filter((s) => !s.isLocked);
 
@@ -257,7 +281,7 @@ export function useAttendanceForm(
         return;
       }
 
-      const result = await apiPost<{ success: true; message: string }>(
+      const result = await apiPost<BulkAttendanceResponse>(
         "/api/attendance/bulk",
         {
           classId: selectedClass,
@@ -269,9 +293,49 @@ export function useAttendanceForm(
           })),
         },
       );
-      toast.success(result.message || "Attendance recorded successfully");
-      await loadStudentsByClass(selectedClass, selectedDate, true);
+      const failedStudents = (result.failures || []).map((failure) => {
+        const matchedStudent = studentList.find(
+          (student) => student.id === failure.studentId,
+        );
+        return {
+          studentId: failure.studentId,
+          studentName:
+            matchedStudent?.fullName || matchedStudent?.nis || "Siswa",
+          message: failure.message,
+        };
+      });
+
+      if (result.partial) {
+        setSubmitSummary({
+          tone: "warning",
+          title: "Sebagian attendance belum tersimpan",
+          description: result.message,
+          failedStudents,
+        });
+        toast.warning(result.message || "Sebagian attendance gagal diproses");
+      } else {
+        setSubmitSummary({
+          tone: "success",
+          title: "Attendance berhasil disimpan",
+          description: result.message || "Semua attendance berhasil diproses.",
+          failedStudents: [],
+        });
+        toast.success(result.message || "Attendance recorded successfully");
+      }
+
+      if ((result.successCount || 0) > 0) {
+        await loadStudentsByClass(selectedClass, selectedDate, true);
+      }
     } catch (error) {
+      setSubmitSummary({
+        tone: "error",
+        title: "Attendance gagal disimpan",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to record attendance",
+        failedStudents: [],
+      });
       toast.error(
         error instanceof Error ? error.message : "Failed to record attendance",
       );
@@ -302,6 +366,7 @@ export function useAttendanceForm(
     submitting,
     classLoadError,
     studentLoadError,
+    submitSummary,
     studentList,
     paginatedStudentList,
     currentPage,

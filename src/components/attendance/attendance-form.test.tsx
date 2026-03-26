@@ -27,6 +27,7 @@ describe("AttendanceForm", () => {
       submitting: false,
       classLoadError: null,
       studentLoadError: null,
+      submitSummary: null,
       studentList: [
         {
           id: "student-1",
@@ -177,5 +178,36 @@ describe("AttendanceForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /Simpan Attendance/i }));
 
     expect(hookState.handleSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders partial submit summary with retry action when provided by the hook", () => {
+    const hookState = createAttendanceFormState({
+      submitSummary: {
+        tone: "warning",
+        title: "Sebagian attendance belum tersimpan",
+        description: "Absensi tersimpan untuk 20 siswa, 2 siswa gagal diproses",
+        failedStudents: [
+          {
+            studentId: "student-1",
+            studentName: "Budi Santoso",
+            message: "Gagal menyimpan absensi siswa ini",
+          },
+        ],
+      },
+    });
+    useAttendanceFormMock.mockReturnValue(hookState);
+
+    render(<AttendanceForm />);
+
+    expect(
+      screen.getByText(/Sebagian attendance belum tersimpan/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Budi Santoso: Gagal menyimpan absensi siswa ini/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Muat Ulang Siswa/i }));
+
+    expect(hookState.refreshStudents).toHaveBeenCalledTimes(1);
   });
 });

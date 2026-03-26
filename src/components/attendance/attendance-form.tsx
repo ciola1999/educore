@@ -108,6 +108,7 @@ export function AttendanceForm({
     submitting,
     classLoadError,
     studentLoadError,
+    submitSummary,
     studentList,
     paginatedStudentList,
     currentPage,
@@ -303,6 +304,8 @@ export function AttendanceForm({
     "rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-900/65 to-zinc-950/75 shadow-sm shadow-black/10";
   const filteredStudentCount = paginatedStudentList.length;
   const hasSearchQuery = searchQuery.trim().length > 0;
+  const submitSummaryVariant =
+    submitSummary?.tone === "success" ? "info" : submitSummary?.tone;
 
   return (
     <div className="space-y-6">
@@ -821,6 +824,42 @@ export function AttendanceForm({
           {/* Submit Button */}
           {studentList.length > 0 && (
             <div className="mt-4 space-y-4 border-t border-zinc-800/50 pt-6">
+              {submitSummary ? (
+                <div className="space-y-3">
+                  <InlineState
+                    title={submitSummary.title}
+                    description={submitSummary.description}
+                    variant={submitSummaryVariant}
+                    actionLabel={
+                      submitSummary.tone === "warning"
+                        ? "Muat Ulang Siswa"
+                        : undefined
+                    }
+                    onAction={
+                      submitSummary.tone === "warning"
+                        ? refreshStudents
+                        : undefined
+                    }
+                    className="text-sm"
+                  />
+                  {submitSummary.failedStudents.length > 0 ? (
+                    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/55 p-3 text-xs text-zinc-300">
+                      <p className="font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                        Siswa yang perlu dicek ulang
+                      </p>
+                      <ul className="mt-2 space-y-1">
+                        {submitSummary.failedStudents
+                          .slice(0, 5)
+                          .map((student) => (
+                            <li key={student.studentId}>
+                              • {student.studentName}: {student.message}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {selectedClass === "all" ? (
                 <InlineState
                   title="Mode baca semua kelas"
