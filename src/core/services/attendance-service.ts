@@ -2259,39 +2259,41 @@ export async function updateAttendanceRiskFollowUp(
     input.deadline === undefined
       ? parsedMessage.deadline
       : input.deadline?.trim() || null;
+  const currentAssigneeUserId = currentUserIdFromNotification(current);
   const normalizedAssigneeUserId =
     input.assigneeUserId === undefined
-      ? currentUserIdFromNotification(current)
-      : input.assigneeUserId?.trim() || currentUserIdFromNotification(current);
+      ? currentAssigneeUserId
+      : input.assigneeUserId?.trim() || currentAssigneeUserId;
   let assigneeChangeMessage: string | null = null;
 
-  if (
-    normalizedAssigneeUserId &&
-    normalizedAssigneeUserId !== currentUserIdFromNotification(current)
-  ) {
+  if (!normalizedAssigneeUserId) {
+    throw new Error("Assignee follow-up tidak valid");
+  }
+
+  if (normalizedAssigneeUserId !== currentAssigneeUserId) {
     const assigneeRows = await db
       .select({
         id: users.id,
         fullName: users.fullName,
+        isActive: users.isActive,
       })
       .from(users)
       .where(
         and(
-          inArray(users.id, [
-            currentUserIdFromNotification(current),
-            normalizedAssigneeUserId,
-          ]),
+          inArray(users.id, [currentAssigneeUserId, normalizedAssigneeUserId]),
           isNull(users.deletedAt),
         ),
       );
     const previousAssignee =
-      assigneeRows.find(
-        (row) => row.id === currentUserIdFromNotification(current),
-      )?.fullName || "Assignee lama";
-    const nextAssignee =
-      assigneeRows.find((row) => row.id === normalizedAssigneeUserId)
-        ?.fullName || "Assignee baru";
-    assigneeChangeMessage = `reassign ${previousAssignee} -> ${nextAssignee}`;
+      assigneeRows.find((row) => row.id === currentAssigneeUserId)?.fullName ||
+      "Assignee lama";
+    const nextAssignee = assigneeRows.find(
+      (row) => row.id === normalizedAssigneeUserId,
+    );
+    if (!nextAssignee || !nextAssignee.isActive) {
+      throw new Error("Assignee follow-up tidak ditemukan atau nonaktif");
+    }
+    assigneeChangeMessage = `reassign ${previousAssignee} -> ${nextAssignee.fullName}`;
   }
 
   baseUrl.searchParams.set("className", className);
