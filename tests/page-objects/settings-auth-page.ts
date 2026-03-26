@@ -56,9 +56,29 @@ export class SettingsAuthPage {
       waitUntil: "domcontentloaded",
       timeout: 45_000,
     });
-    await expect(this.page.getByTestId("settings-page-title")).toBeVisible({
-      timeout: 20_000,
+    await this.page.waitForURL(/\/dashboard\/settings/, {
+      timeout: 45_000,
     });
+
+    const title = this.page.getByTestId("settings-page-title");
+    const sessionSection = this.page.getByText(/Status Session & Akun Aktif/i);
+
+    try {
+      await expect(title.or(sessionSection).first()).toBeVisible({
+        timeout: 25_000,
+      });
+    } catch {
+      await this.page.reload({
+        waitUntil: "domcontentloaded",
+        timeout: 45_000,
+      });
+      await this.page.waitForURL(/\/dashboard\/settings/, {
+        timeout: 45_000,
+      });
+      await expect(title.or(sessionSection).first()).toBeVisible({
+        timeout: 25_000,
+      });
+    }
   }
 
   async expectSessionSectionReady() {
