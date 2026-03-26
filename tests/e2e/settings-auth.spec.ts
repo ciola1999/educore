@@ -86,12 +86,18 @@ test.describe("Settings/Auth shell @smoke", () => {
   }) => {
     const settingsPage = new SettingsAuthPage(page);
 
-    await page.route("**/api/telemetry/settings-auth", async (route) => {
-      await route.abort("failed");
-    });
-
     await settingsPage.goto();
     await settingsPage.expectSessionSectionReady();
+
+    await page.route("**/api/telemetry/settings-auth", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.abort("failed");
+        return;
+      }
+
+      await route.continue();
+    });
+
     await settingsPage.refreshSession();
     await settingsPage.expectSessionRefreshTimestampUpdated();
   });

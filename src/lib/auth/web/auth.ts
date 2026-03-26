@@ -7,6 +7,7 @@ import {
   buildLoginEmailCandidates,
   normalizeLoginIdentifier,
 } from "@/lib/auth/web/login-identifier";
+import { resolveAuthRuntimeConfig } from "@/lib/auth/web/runtime-config";
 import {
   consumeRateLimit,
   extractClientIp,
@@ -16,51 +17,7 @@ import {
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 5 * 60 * 1000; // 5 minutes
-
-function isLocalOrigin(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1" ||
-      parsed.hostname === "::1"
-    );
-  } catch {
-    return false;
-  }
-}
-
-function sanitizeAuthUrlForDevelopment() {
-  if (process.env.NODE_ENV === "production") {
-    return;
-  }
-
-  const authUrl = process.env.AUTH_URL;
-  const nextAuthUrl = process.env.NEXTAUTH_URL;
-  const hasNonLocalAuthUrl = authUrl && !isLocalOrigin(authUrl);
-  const hasNonLocalNextAuthUrl = nextAuthUrl && !isLocalOrigin(nextAuthUrl);
-
-  if (hasNonLocalAuthUrl || hasNonLocalNextAuthUrl) {
-    console.warn(
-      "[AUTH] Non-local AUTH_URL/NEXTAUTH_URL detected in development. Falling back to request host for local sign-in routes.",
-    );
-    delete process.env.AUTH_URL;
-    delete process.env.NEXTAUTH_URL;
-  }
-}
-
-sanitizeAuthUrlForDevelopment();
-
-const trustHost =
-  process.env.AUTH_TRUST_HOST === "true" ||
-  process.env.NODE_ENV !== "production";
-const authSecret =
-  process.env.AUTH_SECRET ||
-  process.env.NEXTAUTH_SECRET ||
-  (process.env.NODE_ENV !== "production"
-    ? "educore-dev-auth-secret"
-    : undefined);
-const cookieSameSite = process.env.NODE_ENV === "production" ? "strict" : "lax";
+const { trustHost, authSecret, cookieSameSite } = resolveAuthRuntimeConfig();
 
 type AuthRow = {
   id: string;
