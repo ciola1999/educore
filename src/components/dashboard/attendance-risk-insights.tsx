@@ -98,6 +98,39 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
+function toFileNameSegment(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+function buildRiskInsightsExportScopeSuffix({
+  periodFilter,
+  classFilter,
+  assigneeFilter,
+  notificationFilter,
+}: {
+  periodFilter: "7d" | "30d" | "month";
+  classFilter: string;
+  assigneeFilter: string;
+  notificationFilter?: "all" | "pending" | "done" | "overdue" | "dueToday";
+}) {
+  const parts = [
+    `period-${periodFilter}`,
+    `class-${toFileNameSegment(classFilter === "all" ? "all" : classFilter) || "all"}`,
+    `assignee-${toFileNameSegment(assigneeFilter === "all" ? "all" : assigneeFilter) || "all"}`,
+  ];
+
+  if (notificationFilter) {
+    parts.push(`status-${notificationFilter}`);
+  }
+
+  return parts.join("-");
+}
+
 function createPrintTarget() {
   const popup = window.open("", "_blank", "noopener,noreferrer");
   if (popup) {
@@ -981,6 +1014,12 @@ export function AttendanceRiskInsights() {
   async function handleExportFollowUpReport() {
     setExportingReport(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+        notificationFilter,
+      });
       const rows = filteredNotifications.map((notification) => ({
         Judul: notification.judul,
         Kelas: notification.className || "-",
@@ -1006,7 +1045,7 @@ export function AttendanceRiskInsights() {
       }
 
       await exportRowsToXlsx({
-        fileName: `attendance-follow-up-report-${classFilter}-${notificationFilter}.xlsx`,
+        fileName: `attendance-follow-up-report-${exportScopeSuffix}.xlsx`,
         sheetName: "Follow Up",
         rows,
       });
@@ -1092,8 +1131,13 @@ export function AttendanceRiskInsights() {
 
     setExportingAssignmentSummary(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       await exportRowsToXlsx({
-        fileName: "attendance-follow-up-assignment-summary.xlsx",
+        fileName: `attendance-follow-up-assignment-summary-${exportScopeSuffix}.xlsx`,
         sheetName: "Assignment Summary",
         rows: data.assignmentSummary.map((item) => ({
           Assignee: item.assigneeName,
@@ -1111,8 +1155,13 @@ export function AttendanceRiskInsights() {
   async function handleExportKpiDashboard() {
     setExportingKpi(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       await exportRowsToXlsx({
-        fileName: "attendance-follow-up-kpi-dashboard.xlsx",
+        fileName: `attendance-follow-up-kpi-dashboard-${exportScopeSuffix}.xlsx`,
         sheetName: "Attendance KPI",
         rows: [
           {
@@ -1155,6 +1204,11 @@ export function AttendanceRiskInsights() {
   async function handleExportAnalytics() {
     setExportingAnalytics(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       const rows = [
         ...trendBuckets.map((item) => ({
           Section: "Trend 7 Hari",
@@ -1194,7 +1248,7 @@ export function AttendanceRiskInsights() {
       ];
 
       await exportRowsToXlsx({
-        fileName: "attendance-follow-up-analytics.xlsx",
+        fileName: `attendance-follow-up-analytics-${exportScopeSuffix}.xlsx`,
         sheetName: "Attendance Analytics",
         rows,
       });
@@ -1210,8 +1264,13 @@ export function AttendanceRiskInsights() {
 
     setExportingCompare(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       await exportRowsToXlsx({
-        fileName: `attendance-compare-assignee-${compareAssigneeItemA.assigneeName}-vs-${compareAssigneeItemB.assigneeName}.xlsx`,
+        fileName: `attendance-compare-assignee-${toFileNameSegment(compareAssigneeItemA.assigneeName) || compareAssigneeItemA.userId}-vs-${toFileNameSegment(compareAssigneeItemB.assigneeName) || compareAssigneeItemB.userId}-${exportScopeSuffix}.xlsx`,
         sheetName: "Compare Assignee",
         rows: [compareAssigneeItemA, compareAssigneeItemB].map((item) => ({
           Assignee: item.assigneeName,
@@ -1234,8 +1293,13 @@ export function AttendanceRiskInsights() {
 
     setExportingClassSummary(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       await exportRowsToXlsx({
-        fileName: "attendance-follow-up-class-summary.xlsx",
+        fileName: `attendance-follow-up-class-summary-${exportScopeSuffix}.xlsx`,
         sheetName: "Class Summary",
         rows: classSummaryRows.map((item) => ({
           Kelas: item.className,
@@ -1490,8 +1554,13 @@ export function AttendanceRiskInsights() {
 
     setExportingClassLeaderboard(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       await exportRowsToXlsx({
-        fileName: `attendance-class-recovery-leaderboard-${periodFilter}.xlsx`,
+        fileName: `attendance-class-recovery-leaderboard-${exportScopeSuffix}.xlsx`,
         sheetName: "Class Recovery",
         rows: classRecoveryLeaderboard.map((item) => ({
           Kelas: item.className,
@@ -1509,6 +1578,11 @@ export function AttendanceRiskInsights() {
   async function handleExportDashboardPack() {
     setExportingDashboardPack(true);
     try {
+      const exportScopeSuffix = buildRiskInsightsExportScopeSuffix({
+        periodFilter,
+        classFilter,
+        assigneeFilter,
+      });
       const rows = [
         {
           Section: "KPI",
@@ -1562,7 +1636,7 @@ export function AttendanceRiskInsights() {
       ];
 
       await exportRowsToXlsx({
-        fileName: `attendance-dashboard-pack-${periodFilter}.xlsx`,
+        fileName: `attendance-dashboard-pack-${exportScopeSuffix}.xlsx`,
         sheetName: "Dashboard Pack",
         rows,
       });
@@ -2169,12 +2243,12 @@ export function AttendanceRiskInsights() {
               </div>
             </div>
             <div className="mt-4 grid gap-3 md:hidden">
-              {classSummaryRows.map((item) => (
+              {topAssigneePerformance.map((item) => (
                 <button
-                  key={`class-summary-mobile-${item.className}`}
+                  key={`performance-mobile-top-${item.userId}`}
                   type="button"
                   onClick={() => {
-                    setClassFilter(item.className);
+                    setAssigneeFilter(item.userId);
                     setVisibleCount(10);
                   }}
                   className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
@@ -2182,23 +2256,23 @@ export function AttendanceRiskInsights() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-zinc-100">
-                        {item.className}
+                        {item.assigneeName}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        Ringkasan follow-up per kelas
+                        Ringkasan follow-up per assignee
                       </p>
                     </div>
                     <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
-                      Total {item.total}
+                      {item.completionRate}% complete
                     </span>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
-                        Done
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                        Total
                       </p>
-                      <p className="mt-1 font-semibold text-emerald-100">
-                        {item.done}
+                      <p className="mt-1 font-semibold text-zinc-100">
+                        {item.total}
                       </p>
                     </div>
                     <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
@@ -2207,6 +2281,14 @@ export function AttendanceRiskInsights() {
                       </p>
                       <p className="mt-1 font-semibold text-amber-100">
                         {item.pending}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                        Done
+                      </p>
+                      <p className="mt-1 font-semibold text-emerald-100">
+                        {item.done}
                       </p>
                     </div>
                     <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
