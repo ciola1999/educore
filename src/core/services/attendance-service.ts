@@ -14,6 +14,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { extractAttendanceRiskFollowUpId } from "@/core/services/attendance-risk-utils";
 import {
   attendanceHistoryFilterSchema,
   attendanceSettingsSchema,
@@ -2342,7 +2343,7 @@ export async function getAttendanceRiskFollowUpAuditTrail(
   options?: { allowAnyAssignee?: boolean },
 ) {
   const db = await getDb();
-  return db
+  const rows = await db
     .select({
       id: notifikasi.id,
       judul: notifikasi.judul,
@@ -2355,12 +2356,15 @@ export async function getAttendanceRiskFollowUpAuditTrail(
       and(
         options?.allowAnyAssignee ? sql`1 = 1` : eq(notifikasi.userId, userId),
         eq(notifikasi.tipe, "attendance-risk-log"),
-        like(notifikasi.link, `%followUpId=${followUpId}%`),
         isNull(notifikasi.deletedAt),
       ),
     )
     .orderBy(desc(notifikasi.createdAt))
-    .limit(20);
+    .limit(100);
+
+  return rows
+    .filter((row) => extractAttendanceRiskFollowUpId(row.link) === followUpId)
+    .slice(0, 20);
 }
 
 function currentUserIdFromNotification(notification: { userId?: string }) {
