@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ export function HolidayManager({
   const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
   const [error, setError] = useState<string | null>(null);
 
-  const loadHolidays = useEffectEvent(async () => {
+  const loadHolidays = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -44,10 +44,12 @@ export function HolidayManager({
     } finally {
       setLoading(false);
     }
-  });
+  }, []);
 
   useEffect(() => {
     if (initialHolidays !== undefined) {
+      setHolidays(initialHolidays);
+      setLoading(false);
       return;
     }
     void (async () => {

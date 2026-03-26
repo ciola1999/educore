@@ -1,7 +1,7 @@
 "use client";
 
 import { Clock3, Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ export function ScheduleSettings({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSettings = useEffectEvent(async () => {
+  const loadSettings = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -55,10 +55,12 @@ export function ScheduleSettings({
     } finally {
       setLoading(false);
     }
-  });
+  }, []);
 
   useEffect(() => {
     if (initialSettings !== undefined) {
+      setSettings(initialSettings);
+      setLoading(false);
       return;
     }
     void (async () => {
