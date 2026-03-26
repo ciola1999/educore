@@ -22,23 +22,29 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       studentId?: string;
-      studentName?: string;
-      nis?: string;
-      className?: string;
-      riskFlags?: string[];
+      riskFlags?: unknown[];
       note?: string;
       deadline?: string | null;
     };
+    const normalizedRiskFlags = Array.isArray(body.riskFlags)
+      ? body.riskFlags
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
 
-    if (
-      !body.studentId ||
-      !body.studentName ||
-      !body.nis ||
-      !body.className ||
-      !Array.isArray(body.riskFlags) ||
-      body.riskFlags.length === 0
-    ) {
+    if (!body.studentId || normalizedRiskFlags.length === 0) {
       return apiError("Payload follow-up tidak valid", 400, "VALIDATION_ERROR");
+    }
+    if (
+      normalizedRiskFlags.length > 10 ||
+      normalizedRiskFlags.some((item) => item.length > 120)
+    ) {
+      return apiError(
+        "Indikator follow-up tidak valid",
+        400,
+        "VALIDATION_ERROR",
+      );
     }
 
     if (typeof body.note === "string" && body.note.trim().length > 300) {
@@ -65,10 +71,7 @@ export async function POST(request: Request) {
     await createAttendanceRiskFollowUp({
       actorUserId: sessionUser.id,
       studentId: body.studentId,
-      studentName: body.studentName,
-      nis: body.nis,
-      className: body.className,
-      riskFlags: body.riskFlags,
+      riskFlags: normalizedRiskFlags,
       note: typeof body.note === "string" ? body.note : undefined,
       deadline: typeof body.deadline === "string" ? body.deadline : null,
     });

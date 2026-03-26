@@ -1974,9 +1974,6 @@ function extractAttendanceRiskClassName(
 export async function createAttendanceRiskFollowUp(input: {
   actorUserId: string;
   studentId: string;
-  studentName: string;
-  nis: string;
-  className: string;
   riskFlags: string[];
   note?: string;
   deadline?: string | null;
@@ -1985,6 +1982,43 @@ export async function createAttendanceRiskFollowUp(input: {
   const now = new Date();
   const normalizedNote = input.note?.trim().slice(0, 300) || "";
   const normalizedDeadline = input.deadline?.trim() || null;
+  const normalizedRiskFlags = input.riskFlags
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
+  if (normalizedRiskFlags.length === 0) {
+    throw new Error("Indikator follow-up tidak valid");
+  }
+
+  const studentRows = await db
+    .select({
+      id: students.id,
+      fullName: students.fullName,
+      nis: students.nis,
+      grade: students.grade,
+      accountClassName: classes.name,
+    })
+    .from(students)
+    .leftJoin(users, eq(students.id, users.id))
+    .leftJoin(classes, eq(users.kelasId, classes.id))
+    .where(and(eq(students.id, input.studentId), isNull(students.deletedAt)))
+    .limit(1);
+  const student = studentRows[0];
+
+  if (!student) {
+    throw new Error("Siswa follow-up tidak ditemukan");
+  }
+
+  const resolvedStudentName = student.fullName.trim();
+  const resolvedNis = student.nis.trim();
+  const resolvedClassName =
+    student.accountClassName?.trim() || student.grade?.trim() || "";
+
+  if (!resolvedStudentName || !resolvedNis || !resolvedClassName) {
+    throw new Error("Data siswa follow-up tidak lengkap");
+  }
+
   const classRow = await db
     .select({
       homeroomTeacherId: classes.homeroomTeacherId,
@@ -1992,7 +2026,7 @@ export async function createAttendanceRiskFollowUp(input: {
     .from(classes)
     .where(
       and(
-        eq(classes.name, input.className),
+        eq(classes.name, resolvedClassName),
         eq(classes.isActive, true),
         isNull(classes.deletedAt),
       ),
@@ -2006,17 +2040,17 @@ export async function createAttendanceRiskFollowUp(input: {
   await db.insert(notifikasi).values({
     id: followUpId,
     userId: assigneeUserId,
-    judul: `Follow-up Attendance: ${input.studentName}`,
+    judul: `Follow-up Attendance: ${resolvedStudentName}`,
     pesan: buildAttendanceRiskFollowUpMessage({
-      studentName: input.studentName,
-      nis: input.nis,
-      className: input.className,
-      riskFlags: input.riskFlags,
+      studentName: resolvedStudentName,
+      nis: resolvedNis,
+      className: resolvedClassName,
+      riskFlags: normalizedRiskFlags,
       note: normalizedNote,
       deadline: normalizedDeadline,
     }),
     tipe: "attendance-risk",
-    link: `/dashboard/attendance?tab=history&studentId=${input.studentId}&className=${encodeURIComponent(input.className)}${normalizedDeadline ? `&followUpDeadline=${encodeURIComponent(normalizedDeadline)}` : ""}`,
+    link: `/dashboard/attendance?tab=history&studentId=${input.studentId}&className=${encodeURIComponent(resolvedClassName)}${normalizedDeadline ? `&followUpDeadline=${encodeURIComponent(normalizedDeadline)}` : ""}`,
     isRead: false,
     createdAt: now,
     updatedAt: now,
@@ -2027,7 +2061,7 @@ export async function createAttendanceRiskFollowUp(input: {
     actorUserId: input.actorUserId,
     followUpId,
     studentId: input.studentId,
-    studentName: input.studentName,
+    studentName: resolvedStudentName,
     assigneeUserId,
     action: "created",
     note: normalizedNote,
