@@ -1,7 +1,7 @@
 "use client";
 
 import { Clock3, Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,8 +38,11 @@ export function ScheduleSettings({
   const [loading, setLoading] = useState(initialSettings === undefined);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestSequenceRef = useRef(0);
 
   const loadSettings = useCallback(async () => {
+    const requestId = requestSequenceRef.current + 1;
+    requestSequenceRef.current = requestId;
     setLoading(true);
     setError(null);
     try {
@@ -47,18 +50,25 @@ export function ScheduleSettings({
         "/api/attendance/settings",
         { timeoutMs: 30000 },
       );
-      setSettings(data);
+      if (requestId === requestSequenceRef.current) {
+        setSettings(data);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Gagal memuat pengaturan";
-      setError(message);
+      if (requestId === requestSequenceRef.current) {
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestSequenceRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     if (initialSettings !== undefined) {
+      requestSequenceRef.current += 1;
       setSettings(initialSettings);
       setLoading(false);
       return;
@@ -171,6 +181,15 @@ export function ScheduleSettings({
             void loadSettings();
           }}
           variant="error"
+        />
+      ) : null}
+
+      {savingId ? (
+        <InlineState
+          title="Menyinkronkan pengaturan absensi"
+          description="Perubahan jadwal sedang diproses. Data terbaru akan dimuat ulang setelah aksi selesai."
+          variant="info"
+          className="text-sm"
         />
       ) : null}
 

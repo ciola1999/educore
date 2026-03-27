@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,26 +28,36 @@ export function HolidayManager({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newHoliday, setNewHoliday] = useState({ date: "", name: "" });
   const [error, setError] = useState<string | null>(null);
+  const requestSequenceRef = useRef(0);
 
   const loadHolidays = useCallback(async () => {
+    const requestId = requestSequenceRef.current + 1;
+    requestSequenceRef.current = requestId;
     setLoading(true);
     setError(null);
     try {
       const data = await apiGet<HolidayItem[]>("/api/attendance/holidays", {
         timeoutMs: 30000,
       });
-      setHolidays(data);
+      if (requestId === requestSequenceRef.current) {
+        setHolidays(data);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Gagal memuat hari libur";
-      setError(message);
+      if (requestId === requestSequenceRef.current) {
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestSequenceRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     if (initialHolidays !== undefined) {
+      requestSequenceRef.current += 1;
       setHolidays(initialHolidays);
       setLoading(false);
       return;
@@ -175,6 +185,15 @@ export function HolidayManager({
             void loadHolidays();
           }}
           variant="error"
+        />
+      ) : null}
+
+      {submitting || deletingId ? (
+        <InlineState
+          title="Kalender hari libur sedang diperbarui"
+          description="Perubahan hari libur sedang diproses. Data terbaru akan dimuat ulang setelah aksi selesai."
+          variant="info"
+          className="text-sm"
         />
       ) : null}
 
