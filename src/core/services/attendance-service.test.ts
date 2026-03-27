@@ -6,7 +6,7 @@ vi.mock("@/lib/db", () => ({
   getDb: getDbMock,
 }));
 
-import { recordBulkAttendance } from "./attendance-service";
+import { processQRScan, recordBulkAttendance } from "./attendance-service";
 
 type FakeDbOptions = {
   selectResults: unknown[];
@@ -77,6 +77,7 @@ function createFakeDb(options: FakeDbOptions) {
 describe("recordBulkAttendance", () => {
   beforeEach(() => {
     getDbMock.mockReset();
+    vi.useRealTimers();
   });
 
   it("returns partial success when one student write fails", async () => {
@@ -163,5 +164,137 @@ describe("recordBulkAttendance", () => {
     expect(result.successCount).toBe(0);
     expect(result.failedCount).toBe(2);
     expect(result.message).toBe("Gagal menyimpan absensi untuk 2 siswa");
+  });
+
+  it("rejects QR scan on holiday with resolved student context", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 23, 7, 10, 0));
+
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [{ name: "Libur Nasional" }],
+          [{ lateThreshold: "07:15" }],
+          [
+            {
+              studentId: "student-1",
+              studentName: "Budi Santoso",
+              studentNis: "2324.10.001",
+              grade: "X-A",
+              accountClassName: "X-A",
+              photo: null,
+            },
+          ],
+        ],
+      }),
+    );
+
+    const result = await processQRScan('{"token":"CARD-001"}');
+
+    expect(result.success).toBe(false);
+    expect(result.type).toBe("ERROR");
+    expect(result.message).toBe("Hari ini libur: Libur Nasional");
+    expect(result.data?.fullName).toBe("Budi Santoso");
+  });
+
+  it("rejects QR scan on weekend when no active settings exist", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 29, 9, 0, 0));
+
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [],
+          [],
+          [
+            {
+              studentId: "student-1",
+              studentName: "Budi Santoso",
+              studentNis: "2324.10.001",
+              grade: "X-A",
+              accountClassName: "X-A",
+              photo: null,
+            },
+          ],
+        ],
+      }),
+    );
+
+    const result = await processQRScan('{"token":"CARD-001"}');
+
+    expect(result.success).toBe(false);
+    expect(result.type).toBe("ERROR");
+    expect(result.message).toBe("Tidak ada jadwal sekolah hari ini.");
+  });
+
+  it("records QR check-in when student has no attendance record today", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 23, 7, 10, 0));
+
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [],
+          [{ lateThreshold: "07:15" }],
+          [
+            {
+              studentId: "student-1",
+              studentName: "Budi Santoso",
+              studentNis: "2324.10.001",
+              grade: "X-A",
+              accountClassName: "X-A",
+              photo: null,
+            },
+          ],
+          [],
+        ],
+      }),
+    );
+
+    const result = await processQRScan('{"token":"CARD-001"}');
+
+    expect(result.success).toBe(true);
+    expect(result.type).toBe("CHECK_IN");
+    expect(result.data?.type).toBe("in");
+    expect(result.data?.fullName).toBe("Budi Santoso");
+  });
+
+  it("records QR check-out when student already checked in today", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 23, 15, 5, 0));
+
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [],
+          [{ lateThreshold: "07:15" }],
+          [
+            {
+              studentId: "student-1",
+              studentName: "Budi Santoso",
+              studentNis: "2324.10.001",
+              grade: "X-A",
+              accountClassName: "X-A",
+              photo: null,
+            },
+          ],
+          [
+            {
+              id: "attendance-today-1",
+              status: "PRESENT",
+              checkOutTime: null,
+              lateDuration: 0,
+            },
+          ],
+        ],
+      }),
+    );
+
+    const result = await processQRScan('{"token":"CARD-001"}');
+
+    expect(result.success).toBe(true);
+    expect(result.type).toBe("CHECK_OUT");
+    expect(result.data?.type).toBe("out");
+    expect(result.message).toMatch(/Hati-hati di jalan/);
   });
 });

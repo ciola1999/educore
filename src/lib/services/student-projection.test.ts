@@ -108,6 +108,122 @@ describe("student-projection", () => {
     expect(mockDb.values).not.toHaveBeenCalled();
   });
 
+  it("warns and skips duplicate student users that share the same NIS", async () => {
+    const { syncUsersToStudentsProjection } = await import(
+      "./student-projection"
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    selectPlans.push(
+      {
+        result: [{ id: "class-1", name: "X-A" }],
+      },
+      {
+        result: [
+          {
+            user: {
+              id: "student-1",
+              fullName: "Budi Satu",
+              nis: "2026009",
+              nisn: "1111111111",
+              jenisKelamin: "L",
+              tempatLahir: null,
+              tanggalLahir: null,
+              alamat: null,
+              kelasId: "class-1",
+            },
+            className: "X-A",
+          },
+          {
+            user: {
+              id: "student-2",
+              fullName: "Budi Dua",
+              nis: "2026009",
+              nisn: "2222222222",
+              jenisKelamin: "L",
+              tempatLahir: null,
+              tanggalLahir: null,
+              alamat: null,
+              kelasId: "class-1",
+            },
+            className: "X-A",
+          },
+        ],
+      },
+      {
+        result: [],
+        viaOrderBy: true,
+      },
+      {
+        result: [],
+      },
+      {
+        result: [{ id: "setting-1" }],
+        viaLimit: true,
+      },
+    );
+
+    const result = await syncUsersToStudentsProjection();
+
+    expect(result).toEqual({
+      classCreated: 0,
+      studentUpserted: 1,
+      settingsSeeded: 0,
+    });
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Collision detected"),
+    );
+  });
+
+  it("creates missing classes from legacy student grades before sync completes", async () => {
+    const { syncUsersToStudentsProjection } = await import(
+      "./student-projection"
+    );
+
+    selectPlans.push(
+      {
+        result: [],
+      },
+      {
+        result: [],
+      },
+      {
+        result: [
+          {
+            id: "student-legacy",
+            nis: "2026010",
+            fullName: "Legacy Grade",
+            gender: "L",
+            grade: "XII-RPL",
+            nisn: "3333333333",
+            alamat: null,
+          },
+        ],
+      },
+      {
+        result: [{ id: "setting-1" }],
+        viaLimit: true,
+      },
+    );
+
+    const result = await syncUsersToStudentsProjection();
+
+    expect(result).toEqual({
+      classCreated: 1,
+      studentUpserted: 0,
+      settingsSeeded: 0,
+    });
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "XII-RPL",
+        isActive: true,
+      }),
+    );
+  });
+
   it("keeps existing student grade when user account has no class reference", async () => {
     const { syncUsersToStudentsProjection } = await import(
       "./student-projection"
