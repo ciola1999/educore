@@ -4,6 +4,7 @@ import Script from "next/script";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "sonner";
 import { AuthSessionProvider } from "@/components/providers/auth-session-provider";
+import { primeServerRuntimeWarmup } from "@/lib/runtime/server-warmup";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,6 +28,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  primeServerRuntimeWarmup();
+
   return (
     <html lang="en">
       <head>
@@ -45,6 +48,38 @@ export default function RootLayout({
           <NuqsAdapter>{children}</NuqsAdapter>
         </AuthSessionProvider>
         <Toaster position="top-right" richColors closeButton />
+        <Script id="runtime-warmup" strategy="beforeInteractive">
+          {`
+            (function() {
+              try {
+                var isTauriRuntime =
+                  typeof window !== 'undefined' &&
+                  typeof window.__TAURI_INTERNALS__ !== 'undefined';
+                var shouldWarm =
+                  typeof window !== 'undefined' &&
+                  (window.location.pathname === '/' ||
+                    window.location.pathname === '/login' ||
+                    window.location.pathname.indexOf('/dashboard') === 0 ||
+                    isTauriRuntime);
+
+                if (!shouldWarm) {
+                  return;
+                }
+
+                void fetch('/api/runtime/warmup', {
+                  method: 'GET',
+                  credentials: 'include',
+                  cache: 'no-store',
+                  headers: {
+                    'x-educore-warmup': '1'
+                  }
+                });
+              } catch (error) {
+                console.warn('[BOOTSTRAP] beforeInteractive warmup failed', error);
+              }
+            })();
+          `}
+        </Script>
         <Script id="register-sw" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {
