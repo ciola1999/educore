@@ -1,3 +1,4 @@
+import { getApiTimeoutMs } from "@/lib/runtime/app-bootstrap";
 import {
   type ApiResponse,
   getApiErrorMessage,
@@ -14,7 +15,7 @@ async function requestJson<T>(
   init?: RequestOptions,
 ): Promise<T> {
   const controller = new AbortController();
-  const timeoutMs = init?.timeoutMs ?? 10000;
+  const timeoutMs = getApiTimeoutMs(input, init?.timeoutMs);
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   const headers = new Headers(init?.headers);

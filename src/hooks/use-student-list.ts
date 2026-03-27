@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api/request";
+import { ensureAppWarmup, scheduleIdleTask } from "@/lib/runtime/app-bootstrap";
 
 export type AttendanceTodayStatus =
   | "present"
@@ -80,6 +81,8 @@ export function useStudentList() {
       setLoading(true);
       setError(null);
       try {
+        await ensureAppWarmup();
+
         const params = new URLSearchParams({
           page: String(page),
           limit: "12",
@@ -92,6 +95,7 @@ export function useStudentList() {
 
         const result = await apiGet<StudentListResponse>(
           `/api/students?${params.toString()}`,
+          { timeoutMs: 20_000 },
         );
 
         const date = getTodayDateString();
@@ -102,6 +106,7 @@ export function useStudentList() {
           try {
             const attendanceRows = await apiGet<AttendanceTodaySnapshot[]>(
               `/api/students/attendance-today?date=${date}&ids=${encodeURIComponent(ids)}`,
+              { timeoutMs: 20_000 },
             );
             attendanceMap = new Map(
               attendanceRows.map((row) => [row.studentId, row]),
@@ -138,7 +143,10 @@ export function useStudentList() {
     setStatsLoading(true);
     setError(null);
     try {
-      const result = await apiGet<StudentStats>("/api/students/stats");
+      await ensureAppWarmup();
+      const result = await apiGet<StudentStats>("/api/students/stats", {
+        timeoutMs: 20_000,
+      });
       setStats(result);
     } catch (err) {
       setStats(null);
@@ -160,24 +168,35 @@ export function useStudentList() {
 
   useEffect(() => {
     const key = "students_projection_last_sync";
-    const lastSync = sessionStorage.getItem(key);
-    const now = Date.now();
+    const cancelIdleTask = scheduleIdleTask(() => {
+      const lastSync = sessionStorage.getItem(key);
+      const now = Date.now();
 
-    if (lastSync && now - Number(lastSync) <= 300000) {
-      return;
-    }
+      if (lastSync && now - Number(lastSync) <= 300000) {
+        return;
+      }
 
-    void apiPost<{
-      classCreated: number;
-      studentUpserted: number;
-      settingsSeeded: number;
-    }>("/api/attendance/projection-sync")
-      .then(() => {
-        sessionStorage.setItem(key, now.toString());
-      })
-      .catch(() => {
-        // Keep student list usable even when projection sync endpoint is unavailable.
-      });
+      void ensureAppWarmup()
+        .then(() =>
+          apiPost<{
+            classCreated: number;
+            studentUpserted: number;
+            settingsSeeded: number;
+          }>("/api/attendance/projection-sync", undefined, {
+            timeoutMs: 30_000,
+          }),
+        )
+        .then(() => {
+          sessionStorage.setItem(key, now.toString());
+        })
+        .catch(() => {
+          // Keep student list usable even when projection sync endpoint is unavailable.
+        });
+    }, 2_500);
+
+    return () => {
+      cancelIdleTask();
+    };
   }, []);
 
   return {

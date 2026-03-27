@@ -18,6 +18,7 @@ import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { checkPermission } from "@/lib/auth/rbac";
 import type { AttendanceSetting, Holiday } from "@/lib/db/schema";
+import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 import { cn } from "@/lib/utils";
 
 type AttendanceSection = "qr" | "manual" | "log" | "schedule" | "holiday";
@@ -281,6 +282,7 @@ export function AttendancePageClient({
   const [activeSection, setActiveSection] =
     useState<AttendanceSection>(defaultSection);
   const [isMenuCollapsed, setIsMenuCollapsed] = useState(true);
+  const [startupReady, setStartupReady] = useState(false);
   const activeMenuItem = menuItems.find((item) => item.id === activeSection);
   const activeSectionTheme = sectionThemes[activeSection];
   const ActiveSectionIcon = sectionIcons[activeSection];
@@ -288,6 +290,20 @@ export function AttendancePageClient({
   useEffect(() => {
     setActiveSection(defaultSection);
   }, [defaultSection]);
+
+  useEffect(() => {
+    let active = true;
+
+    void ensureAppWarmup().finally(() => {
+      if (active) {
+        setStartupReady(true);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -652,7 +668,47 @@ export function AttendancePageClient({
             })}
           </div>
 
-          {activeSection === "qr" ? (
+          {!startupReady ? (
+            <section
+              className={cn(attendanceStackClass, sectionTransitionClass)}
+            >
+              <div className={sectionHeaderShellClass}>
+                <div className="flex items-start gap-3">
+                  <span
+                    className={cn(
+                      sectionHeaderIconShellClass,
+                      "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+                    )}
+                  >
+                    <ActiveSectionIcon className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p
+                      className={cn(
+                        sectionHeaderEyebrowClass,
+                        activeSectionTheme.accentClass,
+                      )}
+                    >
+                      Menyiapkan Runtime Attendance
+                    </p>
+                    <h2 className={sectionHeaderTitleClass}>
+                      {activeMenuItem?.label || "Attendance"}
+                    </h2>
+                    <p className={sectionHeaderCopyClass}>
+                      Runtime lokal/web sedang menyelesaikan bootstrap database
+                      agar section aktif tidak timeout saat cold start pertama.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={sectionSurfaceClass}>
+                <AttendanceSectionLoading />
+              </div>
+            </section>
+          ) : null}
+
+          {startupReady && activeSection === "qr" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -689,7 +745,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {activeSection === "manual" ? (
+          {startupReady && activeSection === "manual" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -730,7 +786,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {activeSection === "log" ? (
+          {startupReady && activeSection === "log" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -772,7 +828,9 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {canWriteAttendance && activeSection === "schedule" ? (
+          {startupReady &&
+          canWriteAttendance &&
+          activeSection === "schedule" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -811,7 +869,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {canWriteAttendance && activeSection === "holiday" ? (
+          {startupReady && canWriteAttendance && activeSection === "holiday" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >

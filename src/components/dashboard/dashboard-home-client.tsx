@@ -10,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { AttendanceRiskInsights } from "@/components/dashboard/attendance-risk-insights";
 import { DashboardStatsCards } from "@/components/dashboard/dashboard-stats";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import {
   DASHBOARD_ROLE_DEFAULT_PATH,
 } from "@/lib/auth/dashboard-access";
 import { checkPermission } from "@/lib/auth/rbac";
+import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 
 type QuickLink = {
   href: string;
@@ -88,6 +90,7 @@ function toRoleLabel(role: AuthRole | null) {
 
 export function DashboardHomeClient() {
   const { user } = useAuth();
+  const [startupReady, setStartupReady] = useState(false);
   const currentRole = (user?.role as AuthRole | undefined) ?? null;
   const canReadAttendance = checkPermission(user, "attendance:read");
   const canOperateDashboard =
@@ -102,6 +105,20 @@ export function DashboardHomeClient() {
     allowedPaths.includes(item.href),
   );
   const primaryLinks = visibleQuickLinks.slice(0, 3);
+
+  useEffect(() => {
+    let active = true;
+
+    void ensureAppWarmup().finally(() => {
+      if (active) {
+        setStartupReady(true);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -241,12 +258,45 @@ export function DashboardHomeClient() {
               dan risiko harian lebih cepat.
             </p>
           </div>
-          <DashboardStatsCards />
+          {startupReady ? (
+            <DashboardStatsCards />
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
+              {["kpi-1", "kpi-2", "kpi-3", "kpi-4"].map((key) => (
+                <div
+                  key={key}
+                  className="h-44 animate-pulse rounded-3xl border border-zinc-800 bg-zinc-900/70"
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
 
       {canOperateDashboard ? (
-        <AttendanceRiskInsights />
+        startupReady ? (
+          <AttendanceRiskInsights />
+        ) : (
+          <Card className="border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
+            <CardHeader>
+              <CardTitle className="text-zinc-100">
+                Menyiapkan Insight Attendance
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-zinc-400">
+              <div className="h-4 w-2/3 animate-pulse rounded bg-zinc-800" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-zinc-800/80" />
+              <div className="grid gap-3 md:grid-cols-3">
+                {["risk-1", "risk-2", "risk-3"].map((key) => (
+                  <div
+                    key={key}
+                    className="h-28 animate-pulse rounded-3xl border border-zinc-800 bg-zinc-950/70"
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )
       ) : (
         <Card className="overflow-hidden border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
           <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-zinc-800 via-sky-500/20 to-zinc-800" />

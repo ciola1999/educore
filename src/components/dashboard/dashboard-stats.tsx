@@ -9,6 +9,7 @@ import {
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiGet } from "@/lib/api/request";
+import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 import type { DashboardStats } from "@/lib/services/dashboard";
 
 const emptyStats: DashboardStats = {
@@ -31,7 +32,12 @@ export function DashboardStatsCards() {
   useEffect(() => {
     let active = true;
 
-    void apiGet<DashboardStats>("/api/dashboard/stats")
+    void ensureAppWarmup()
+      .then(() =>
+        apiGet<DashboardStats>("/api/dashboard/stats", {
+          timeoutMs: 20_000,
+        }),
+      )
       .then((response) => {
         if (active) {
           setStats(response);

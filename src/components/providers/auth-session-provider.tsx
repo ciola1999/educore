@@ -1,7 +1,9 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { useEffect } from "react";
 import { isTauri } from "@/core/env";
+import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 
 export function AuthSessionProvider({
   children,
@@ -9,6 +11,10 @@ export function AuthSessionProvider({
   children: React.ReactNode;
 }) {
   const desktopRuntime = isTauri();
+
+  useEffect(() => {
+    void ensureAppWarmup();
+  }, []);
 
   return (
     <SessionProvider
