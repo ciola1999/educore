@@ -224,6 +224,7 @@ export function HolidayManager({
                   variant="ghost"
                   size="icon"
                   disabled={deletingId === holiday.id}
+                  aria-label={`Hapus hari libur ${holiday.name}`}
                   onClick={() => {
                     void handleDelete(holiday.id);
                   }}

@@ -294,6 +294,7 @@ export function ScheduleSettings({
                   <Button
                     type="button"
                     disabled={savingId === setting.id}
+                    aria-label={`Simpan pengaturan absensi ${setting.entityType} hari ${setting.dayOfWeek}`}
                     onClick={() => {
                       void handleSave(setting);
                     }}
@@ -310,6 +311,7 @@ export function ScheduleSettings({
                     type="button"
                     variant="ghost"
                     disabled={savingId === setting.id}
+                    aria-label={`Hapus pengaturan absensi ${setting.entityType} hari ${setting.dayOfWeek}`}
                     onClick={() => {
                       void handleDelete(setting.id);
                     }}

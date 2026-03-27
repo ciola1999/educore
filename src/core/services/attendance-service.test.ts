@@ -6,7 +6,11 @@ vi.mock("@/lib/db", () => ({
   getDb: getDbMock,
 }));
 
-import { processQRScan, recordBulkAttendance } from "./attendance-service";
+import {
+  getAttendanceHistory,
+  processQRScan,
+  recordBulkAttendance,
+} from "./attendance-service";
 
 type FakeDbOptions = {
   selectResults: unknown[];
@@ -296,5 +300,76 @@ describe("recordBulkAttendance", () => {
     expect(result.type).toBe("CHECK_OUT");
     expect(result.data?.type).toBe("out");
     expect(result.message).toMatch(/Hati-hati di jalan/);
+  });
+
+  it("deduplicates manual history rows when QR history for same student-date exists and keeps class filter applied", async () => {
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [
+            {
+              id: "qr-1",
+              studentId: "student-1",
+              snapshotStudentName: "Budi Santoso",
+              snapshotStudentNis: "2324.10.001",
+              className: "X-A",
+              studentGrade: "X-A",
+              date: "2026-03-27",
+              checkInTime: new Date("2026-03-27T07:10:00.000Z"),
+              checkOutTime: null,
+              status: "PRESENT",
+              lateDuration: 0,
+              syncStatus: "synced",
+              version: 1,
+              hlc: null,
+              createdAt: new Date("2026-03-27T07:10:00.000Z"),
+              updatedAt: new Date("2026-03-27T07:10:00.000Z"),
+              deletedAt: null,
+            },
+          ],
+          [
+            {
+              id: "manual-1",
+              studentId: "student-1",
+              date: "2026-03-27",
+              status: "present",
+              fullName: "Budi Santoso",
+              nis: "2324.10.001",
+              className: "X-A",
+              studentGrade: "X-A",
+              notes: "manual duplicate",
+              createdAt: new Date("2026-03-27T08:00:00.000Z"),
+            },
+            {
+              id: "manual-2",
+              studentId: "student-2",
+              date: "2026-03-27",
+              status: "alpha",
+              fullName: "Siti",
+              nis: "2324.10.002",
+              className: "X-B",
+              studentGrade: "X-B",
+              notes: "tidak hadir",
+              createdAt: new Date("2026-03-27T08:00:00.000Z"),
+            },
+          ],
+        ],
+      }),
+    );
+
+    const result = await getAttendanceHistory({
+      className: "X-A",
+      limit: 50,
+      offset: 0,
+      source: "all",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "qr-1",
+      studentId: "student-1",
+      className: "X-A",
+      source: "qr",
+    });
   });
 });

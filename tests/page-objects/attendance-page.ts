@@ -54,4 +54,16 @@ export class AttendancePage {
       this.page.getByRole("heading", { name: /^Log Absensi$/i }).first(),
     ).toBeVisible();
   }
+
+  async expectScheduleSection() {
+    await expect(
+      this.page.getByRole("heading", { name: /Pengaturan Jadwal/i }).first(),
+    ).toBeVisible();
+  }
+
+  async expectHolidaySection() {
+    await expect(
+      this.page.getByRole("heading", { name: /Kelola Hari Libur/i }).first(),
+    ).toBeVisible();
+  }
 }
