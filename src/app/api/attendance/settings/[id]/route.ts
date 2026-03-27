@@ -21,6 +21,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return apiError("ID pengaturan absensi tidak valid", 400);
   }
 
-  await deleteAttendanceSetting(id);
-  return apiOk({ success: true });
+  try {
+    await deleteAttendanceSetting(id);
+    return apiOk({ success: true });
+  } catch (error) {
+    return apiError(
+      error instanceof Error
+        ? error.message
+        : "Gagal menghapus pengaturan absensi",
+      500,
+      "ATTENDANCE_SETTINGS_DELETE_FAILED",
+    );
+  }
 }

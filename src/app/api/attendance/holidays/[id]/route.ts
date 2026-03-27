@@ -21,6 +21,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return apiError("ID hari libur tidak valid", 400);
   }
 
-  await deleteHoliday(id);
-  return apiOk({ success: true });
+  try {
+    await deleteHoliday(id);
+    return apiOk({ success: true });
+  } catch (error) {
+    return apiError(
+      error instanceof Error ? error.message : "Gagal menghapus hari libur",
+      500,
+      "ATTENDANCE_HOLIDAY_DELETE_FAILED",
+    );
+  }
 }

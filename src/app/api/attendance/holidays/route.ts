@@ -10,8 +10,16 @@ export async function GET() {
     return guard;
   }
 
-  const data = await getHolidays();
-  return apiOk(data);
+  try {
+    const data = await getHolidays();
+    return apiOk(data);
+  } catch (error) {
+    return apiError(
+      error instanceof Error ? error.message : "Gagal memuat hari libur",
+      500,
+      "ATTENDANCE_HOLIDAYS_LOAD_FAILED",
+    );
+  }
 }
 
 export async function POST(request: Request) {

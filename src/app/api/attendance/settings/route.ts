@@ -14,8 +14,18 @@ export async function GET() {
     return guard;
   }
 
-  const data = await getAttendanceSettings();
-  return apiOk(data);
+  try {
+    const data = await getAttendanceSettings();
+    return apiOk(data);
+  } catch (error) {
+    return apiError(
+      error instanceof Error
+        ? error.message
+        : "Gagal memuat pengaturan absensi",
+      500,
+      "ATTENDANCE_SETTINGS_LOAD_FAILED",
+    );
+  }
 }
 
 export async function POST(request: Request) {
