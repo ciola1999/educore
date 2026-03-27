@@ -65,6 +65,49 @@ describe("student-projection", () => {
     getDbMock.mockResolvedValue(mockDb);
   });
 
+  it("seeds default attendance settings once when none exist", async () => {
+    const { ensureDefaultAttendanceSettings } = await import(
+      "./student-projection"
+    );
+
+    selectPlans.push({
+      result: [],
+      viaLimit: true,
+    });
+
+    const result = await ensureDefaultAttendanceSettings();
+
+    expect(result).toBe(5);
+    expect(mockDb.insert).toHaveBeenCalledTimes(5);
+    expect(mockDb.values).toHaveBeenCalledTimes(5);
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "student",
+        startTime: "07:00",
+        endTime: "15:00",
+        lateThreshold: "07:15",
+        isActive: true,
+      }),
+    );
+  });
+
+  it("does not reseed default attendance settings when active settings already exist", async () => {
+    const { ensureDefaultAttendanceSettings } = await import(
+      "./student-projection"
+    );
+
+    selectPlans.push({
+      result: [{ id: "setting-1" }],
+      viaLimit: true,
+    });
+
+    const result = await ensureDefaultAttendanceSettings();
+
+    expect(result).toBe(0);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.values).not.toHaveBeenCalled();
+  });
+
   it("keeps existing student grade when user account has no class reference", async () => {
     const { syncUsersToStudentsProjection } = await import(
       "./student-projection"
