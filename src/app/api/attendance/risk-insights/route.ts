@@ -24,6 +24,12 @@ function getCurrentMonthRange() {
   };
 }
 
+function isDisabledParam(value: string | null) {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "0" || normalized === "false" || normalized === "no";
+}
+
 export async function GET(request: Request) {
   const session = await auth();
   const guard = requireRole(session, [
@@ -47,6 +53,12 @@ export async function GET(request: Request) {
     const className = url.searchParams.get("className")?.trim() || undefined;
     const requestedAssigneeId =
       url.searchParams.get("assigneeUserId")?.trim() || undefined;
+    const includeStudents = !isDisabledParam(
+      url.searchParams.get("includeStudents"),
+    );
+    const includeAssignmentSummary = !isDisabledParam(
+      url.searchParams.get("includeAssignmentSummary"),
+    );
     const canViewAssignmentSummary =
       sessionUser.role === "admin" || sessionUser.role === "super_admin";
     const assigneeUserId =
@@ -56,10 +68,17 @@ export async function GET(request: Request) {
     const settings = await getAttendanceRiskSettings();
     const [students, notifications, notificationSummary, assignmentSummary] =
       await Promise.all([
-        getAttendanceRiskStudents({ startDate, endDate, className }, settings),
+        includeStudents
+          ? getAttendanceRiskStudents(
+              { startDate, endDate, className },
+              settings,
+            )
+          : Promise.resolve([]),
         getAttendanceRiskNotifications(assigneeUserId),
-        getAttendanceRiskNotificationSummary(assigneeUserId),
-        canViewAssignmentSummary
+        className
+          ? Promise.resolve(null)
+          : getAttendanceRiskNotificationSummary(assigneeUserId),
+        canViewAssignmentSummary && includeAssignmentSummary
           ? getAttendanceRiskAssignmentSummary(className)
           : Promise.resolve([]),
       ]);
@@ -92,6 +111,11 @@ export async function GET(request: Request) {
         canViewAssignmentSummary && requestedAssigneeId
           ? requestedAssigneeId
           : null,
+      meta: {
+        includeStudents,
+        includeAssignmentSummary:
+          canViewAssignmentSummary && includeAssignmentSummary,
+      },
     });
   } catch (error) {
     return apiError(

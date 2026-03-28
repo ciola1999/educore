@@ -9,6 +9,12 @@ import {
   DASHBOARD_ROLE_DEFAULT_PATH,
   isAllowedDashboardPath,
 } from "@/lib/auth/dashboard-access";
+import {
+  getRuntimeDefaultDashboardPath,
+  isDesktopDashboardConstrainedRuntime,
+  isDesktopStaticRuntime,
+  isRuntimeSupportedDashboardPath,
+} from "@/lib/runtime/desktop-dashboard";
 
 function toAuthRole(role: unknown): AuthRole | null {
   if (typeof role !== "string") return null;
@@ -30,12 +36,18 @@ export function DashboardAccessGate({
   }, []);
 
   const currentRole = toAuthRole(user?.role);
+  const desktopConstrainedRuntime = isDesktopDashboardConstrainedRuntime();
+  const runtimeStaticDesktop = isDesktopStaticRuntime();
   const defaultPath = currentRole
-    ? DASHBOARD_ROLE_DEFAULT_PATH[currentRole]
+    ? getRuntimeDefaultDashboardPath(
+        currentRole,
+        DASHBOARD_ROLE_DEFAULT_PATH[currentRole],
+      )
     : "/";
   const hasAccess = currentRole
     ? isAllowedDashboardPath(currentRole, pathname)
     : false;
+  const runtimeSupported = isRuntimeSupportedDashboardPath(pathname);
 
   useEffect(() => {
     if (!mounted || isLoading) {
@@ -44,8 +56,28 @@ export function DashboardAccessGate({
 
     if (sessionStatus === "unauthenticated" && !currentRole) {
       router.replace("/");
+      return;
     }
-  }, [mounted, isLoading, currentRole, router, sessionStatus]);
+
+    if (
+      currentRole &&
+      desktopConstrainedRuntime &&
+      !runtimeSupported &&
+      pathname !== defaultPath
+    ) {
+      router.replace(defaultPath);
+    }
+  }, [
+    mounted,
+    isLoading,
+    currentRole,
+    router,
+    sessionStatus,
+    desktopConstrainedRuntime,
+    runtimeSupported,
+    pathname,
+    defaultPath,
+  ]);
 
   if (!mounted || isLoading) {
     return (
@@ -61,22 +93,34 @@ export function DashboardAccessGate({
     );
   }
 
-  if (hasAccess) {
+  if (hasAccess && runtimeSupported) {
     return <>{children}</>;
   }
 
   return (
     <div className="pt-8">
       <InlineState
-        title="Akses halaman dibatasi"
-        description="Role akun ini tidak memiliki izin untuk membuka halaman tersebut."
+        title={
+          desktopConstrainedRuntime && !runtimeSupported
+            ? runtimeStaticDesktop
+              ? "Halaman belum siap di desktop production"
+              : "Halaman belum siap di desktop runtime"
+            : "Akses halaman dibatasi"
+        }
+        description={
+          desktopConstrainedRuntime && !runtimeSupported
+            ? "Jalur ini masih bergantung pada runtime web/server. Desktop saat ini diarahkan ke halaman yang sudah aman: Courses, User Management, atau Settings."
+            : "Role akun ini tidak memiliki izin untuk membuka halaman tersebut."
+        }
         actionLabel={
           currentRole ? "Buka Halaman yang Diizinkan" : "Kembali ke Login"
         }
         onAction={() => {
           router.replace(defaultPath || "/");
         }}
-        variant="warning"
+        variant={
+          desktopConstrainedRuntime && !runtimeSupported ? "info" : "warning"
+        }
       />
     </div>
   );

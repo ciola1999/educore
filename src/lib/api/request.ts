@@ -1,4 +1,5 @@
 import { getApiTimeoutMs } from "@/lib/runtime/app-bootstrap";
+import { handleDesktopLocalApiRequest } from "@/lib/runtime/desktop-local-api";
 import {
   type ApiResponse,
   getApiErrorMessage,
@@ -15,7 +16,8 @@ async function requestJson<T>(
   init?: RequestOptions,
 ): Promise<T> {
   const controller = new AbortController();
-  const timeoutMs = getApiTimeoutMs(input, init?.timeoutMs);
+  const method = init?.method?.toUpperCase() ?? "GET";
+  const timeoutMs = getApiTimeoutMs(input, init?.timeoutMs, method);
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   const headers = new Headers(init?.headers);
@@ -28,13 +30,19 @@ async function requestJson<T>(
 
   console.debug(`[API] Fetching ${input}...`);
   try {
-    const response = await fetch(input, {
-      ...init,
-      headers,
-      body,
-      signal: controller.signal,
-      credentials: init?.credentials ?? "include",
+    const desktopResponse = await handleDesktopLocalApiRequest(input, {
+      method,
+      body: init?.body,
     });
+    const response =
+      desktopResponse ??
+      (await fetch(input, {
+        ...init,
+        headers,
+        body,
+        signal: controller.signal,
+        credentials: init?.credentials ?? "include",
+      }));
 
     clearTimeout(timeoutId);
     console.debug(

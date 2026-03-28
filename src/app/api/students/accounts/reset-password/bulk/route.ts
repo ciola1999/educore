@@ -35,7 +35,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { studentIds, password } = validation.data;
+  const { password } = validation.data;
+  const studentIds = Array.from(new Set(validation.data.studentIds));
   const db = await getDb();
   const studentAccounts = await db
     .select({ id: users.id })
@@ -57,24 +58,32 @@ export async function POST(request: Request) {
     );
   }
 
-  let updated = 0;
+  const passwordHash = await hashPassword(password);
+  const updatedAt = new Date();
   const skipped = studentIds.length - studentAccounts.length;
-  for (const account of studentAccounts) {
-    const passwordHash = await hashPassword(password);
-    await db
-      .update(users)
-      .set({
-        passwordHash,
-        syncStatus: "pending",
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, account.id));
-    updated += 1;
-  }
+
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      syncStatus: "pending",
+      updatedAt,
+    })
+    .where(
+      and(
+        inArray(
+          users.id,
+          studentAccounts.map((account) => account.id),
+        ),
+        eq(users.role, "student"),
+        eq(users.isActive, true),
+        isNull(users.deletedAt),
+      ),
+    );
 
   return apiOk({
-    updated,
+    updated: studentAccounts.length,
     skipped,
-    message: `Berhasil reset password ${updated} akun siswa, ${skipped} data dilewati.`,
+    message: `Berhasil reset password ${studentAccounts.length} akun siswa, ${skipped} data dilewati.`,
   });
 }

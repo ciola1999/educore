@@ -24,9 +24,11 @@ export async function PATCH(
         ? 400
         : result.code === "EMAIL_EXISTS"
           ? 409
-          : result.code === "NOT_FOUND"
-            ? 404
-            : 500,
+          : result.code === "TEACHER_IN_USE"
+            ? 409
+            : result.code === "NOT_FOUND"
+              ? 404
+              : 500,
       result.code,
     );
   }
@@ -45,10 +47,18 @@ export async function DELETE(
   }
 
   const { id } = await context.params;
-  const success = await deleteTeacher(id);
+  const result = await deleteTeacher(id);
 
-  if (!success) {
-    return apiError("Gagal menghapus guru", 500);
+  if (!result.success) {
+    return apiError(
+      result.error,
+      result.code === "NOT_FOUND"
+        ? 404
+        : result.code === "TEACHER_IN_USE"
+          ? 409
+          : 500,
+      result.code,
+    );
   }
 
   return apiOk({ deleted: true });

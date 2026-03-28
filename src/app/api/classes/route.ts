@@ -25,11 +25,21 @@ export async function POST(request: Request) {
   const result = (await addClass(body)) as {
     success: boolean;
     error?: string;
+    code?: string;
     id?: string;
   };
 
   if (!result.success) {
-    return apiError(result.error || "Gagal membuat kelas", 400);
+    return apiError(
+      result.error || "Gagal membuat kelas",
+      result.code === "CLASS_EXISTS"
+        ? 409
+        : result.code === "VALIDATION_ERROR" ||
+            result.code === "INVALID_HOMEROOM_TEACHER"
+          ? 400
+          : 500,
+      result.code,
+    );
   }
 
   return apiCreated({ id: result.id });

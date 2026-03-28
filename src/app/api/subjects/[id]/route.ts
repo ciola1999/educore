@@ -18,10 +18,21 @@ export async function PATCH(
   const result = (await updateSubject(id, body)) as {
     success: boolean;
     error?: string;
+    code?: string;
   };
 
   if (!result.success) {
-    return apiError(result.error || "Gagal memperbarui mata pelajaran", 400);
+    return apiError(
+      result.error || "Gagal memperbarui mata pelajaran",
+      result.code === "NOT_FOUND"
+        ? 404
+        : result.code === "SUBJECT_CODE_EXISTS"
+          ? 409
+          : result.code === "VALIDATION_ERROR"
+            ? 400
+            : 500,
+      result.code,
+    );
   }
 
   return apiOk({ updated: true });
@@ -41,10 +52,19 @@ export async function DELETE(
   const result = (await deleteSubject(id)) as {
     success: boolean;
     error?: string;
+    code?: string;
   };
 
   if (!result.success) {
-    return apiError(result.error || "Gagal menghapus mata pelajaran", 400);
+    return apiError(
+      result.error || "Gagal menghapus mata pelajaran",
+      result.code === "NOT_FOUND"
+        ? 404
+        : result.code === "SUBJECT_IN_USE"
+          ? 409
+          : 500,
+      result.code,
+    );
   }
 
   return apiOk({ deleted: true });

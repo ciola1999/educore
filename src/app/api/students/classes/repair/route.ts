@@ -135,42 +135,44 @@ export async function POST(request: Request) {
     .limit(1);
 
   let kelasId = classRows[0]?.id ?? null;
-  if (!kelasId) {
-    kelasId = crypto.randomUUID();
-    await db.insert(classes).values({
-      id: kelasId,
-      name: targetClassName,
-      academicYear: getAcademicYearLabel(),
-      isActive: true,
-      syncStatus: "pending",
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+  await db.transaction(async (tx) => {
+    if (!kelasId) {
+      kelasId = crypto.randomUUID();
+      await tx.insert(classes).values({
+        id: kelasId,
+        name: targetClassName,
+        academicYear: getAcademicYearLabel(),
+        isActive: true,
+        syncStatus: "pending",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
-  await db
-    .update(students)
-    .set({
-      grade: targetClassName,
-      syncStatus: "pending",
-      updatedAt: now,
-    })
-    .where(inArray(students.id, filteredLegacyStudentIds));
+    await tx
+      .update(students)
+      .set({
+        grade: targetClassName,
+        syncStatus: "pending",
+        updatedAt: now,
+      })
+      .where(inArray(students.id, filteredLegacyStudentIds));
 
-  await db
-    .update(users)
-    .set({
-      kelasId,
-      syncStatus: "pending",
-      updatedAt: now,
-    })
-    .where(
-      and(
-        inArray(users.id, filteredLegacyStudentIds),
-        eq(users.role, "student"),
-        isNull(users.deletedAt),
-      ),
-    );
+    await tx
+      .update(users)
+      .set({
+        kelasId,
+        syncStatus: "pending",
+        updatedAt: now,
+      })
+      .where(
+        and(
+          inArray(users.id, filteredLegacyStudentIds),
+          eq(users.role, "student"),
+          isNull(users.deletedAt),
+        ),
+      );
+  });
 
   return apiOk({
     updated: filteredLegacyStudentIds.length,

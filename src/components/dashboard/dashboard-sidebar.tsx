@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import type { AuthRole } from "@/core/auth/roles";
 import { useAuth } from "@/hooks/use-auth";
 import { DASHBOARD_ROLE_ALLOWED_PATHS } from "@/lib/auth/dashboard-access";
+import { getRuntimeSupportedDashboardPaths } from "@/lib/runtime/desktop-dashboard";
 import { cn } from "@/lib/utils";
 
 type DashboardMenuItem = {
@@ -102,7 +103,9 @@ export function DashboardSidebar() {
   const routeKey = `${pathname ?? ""}?${searchParams?.toString() ?? ""}`;
   const visibleMenuItems = menuItems.filter((item) =>
     currentRole
-      ? DASHBOARD_ROLE_ALLOWED_PATHS[currentRole].includes(item.href)
+      ? getRuntimeSupportedDashboardPaths(
+          DASHBOARD_ROLE_ALLOWED_PATHS[currentRole],
+        ).includes(item.href)
       : false,
   );
 

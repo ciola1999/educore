@@ -24,6 +24,7 @@ type SelectQuery = Promise<SelectResult> & {
   from: ReturnType<typeof vi.fn>;
   where: ReturnType<typeof vi.fn>;
   limit: ReturnType<typeof vi.fn>;
+  innerJoin: ReturnType<typeof vi.fn>;
   orderBy: ReturnType<typeof vi.fn>;
 };
 
@@ -32,6 +33,7 @@ function createSelectQuery(result: SelectResult): SelectQuery {
   promise.from = vi.fn().mockReturnValue(promise);
   promise.where = vi.fn().mockReturnValue(promise);
   promise.limit = vi.fn().mockResolvedValue(result);
+  promise.innerJoin = vi.fn().mockReturnValue(promise);
   promise.orderBy = vi.fn().mockReturnValue(promise);
   return promise;
 }
@@ -95,7 +97,7 @@ describe("Teacher Service", () => {
 
   it("fails when email already exists", async () => {
     const { addTeacher } = await import("./teacher");
-    selectResults.push([{ id: "existing-id" }]);
+    selectResults.push([{ id: "existing-id", deletedAt: null }]);
 
     const result = await addTeacher(validTeacherData);
 
@@ -105,6 +107,31 @@ describe("Teacher Service", () => {
     }
     expect(mockDb.insert).not.toHaveBeenCalled();
   }, 20000);
+
+  it("restores a soft-deleted teacher when email is reused", async () => {
+    const { addTeacher } = await import("./teacher");
+    selectResults.push([
+      {
+        id: "deleted-teacher-id",
+        deletedAt: new Date("2026-03-27T00:00:00.000Z"),
+        role: "teacher",
+      },
+    ]);
+
+    const result = await addTeacher(validTeacherData);
+
+    expect(result).toEqual({ success: true, id: "deleted-teacher-id" });
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "guru.baru@example.com",
+        deletedAt: null,
+        passwordHash: "hashed_password",
+        syncStatus: "pending",
+      }),
+    );
+  });
 
   it("handles database errors when saving", async () => {
     const { addTeacher } = await import("./teacher");
@@ -165,13 +192,13 @@ describe("Teacher Service", () => {
   });
 
   describe("deleteTeacher", () => {
-    it("returns true on successful deletion", async () => {
+    it("returns success on successful deletion", async () => {
       const { deleteTeacher } = await import("./teacher");
-      mockDb.where.mockResolvedValue(undefined);
+      selectResults.push([{ id: "teacher-id" }], [], [], []);
 
       const result = await deleteTeacher("some-id");
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ success: true });
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -183,13 +210,39 @@ describe("Teacher Service", () => {
       );
     }, 20000);
 
-    it("returns false on failure", async () => {
+    it("blocks deletion when direct schedule rows still reference the teacher", async () => {
       const { deleteTeacher } = await import("./teacher");
-      mockDb.where.mockRejectedValue(new Error("Delete failed"));
+      selectResults.push(
+        [{ id: "teacher-id" }],
+        [],
+        [{ id: "schedule-id" }],
+        [],
+      );
 
       const result = await deleteTeacher("some-id");
 
-      expect(result).toBe(false);
+      expect(result).toEqual({
+        success: false,
+        error:
+          "Guru masih dipakai assignment atau jadwal. Lepaskan relasi tersebut terlebih dahulu sebelum menghapus guru.",
+        code: "TEACHER_IN_USE",
+      });
+      expect(mockDb.update).not.toHaveBeenCalled();
+    }, 20000);
+
+    it("returns error result on failure", async () => {
+      const { deleteTeacher } = await import("./teacher");
+      mockDb.select.mockImplementation(() => {
+        throw new Error("Delete failed");
+      });
+
+      const result = await deleteTeacher("some-id");
+
+      expect(result).toEqual({
+        success: false,
+        error: "Gagal menghapus guru. Kesalahan sistem.",
+        code: "INTERNAL_ERROR",
+      });
     }, 20000);
   });
 });

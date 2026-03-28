@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { AuthRole } from "@/core/auth/roles";
+import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
+import { DASHBOARD_ROLE_DEFAULT_PATH } from "@/lib/auth/dashboard-access";
+import { getRuntimeDefaultDashboardPath } from "@/lib/runtime/desktop-dashboard";
+import { useStore } from "@/lib/store/use-store";
 
 // --- SENSORY UTILS (Fitur Baru) ---
 const triggerErrorHaptic = () => {
@@ -73,6 +78,18 @@ export function LoginForm() {
     return value;
   }
 
+  function resolveDesktopDefaultUrl() {
+    const currentRole = useStore.getState().user?.role as AuthRole | undefined;
+    if (!currentRole) {
+      return "/dashboard/settings";
+    }
+
+    return getRuntimeDefaultDashboardPath(
+      currentRole,
+      DASHBOARD_ROLE_DEFAULT_PATH[currentRole],
+    );
+  }
+
   async function onSubmit(event: React.SyntheticEvent) {
     event.preventDefault();
     setIsLoading(true);
@@ -91,7 +108,9 @@ export function LoginForm() {
 
       if (result.success) {
         playSuccessSound();
-        router.replace(resolveCallbackUrl());
+        router.replace(
+          isTauri() ? resolveDesktopDefaultUrl() : resolveCallbackUrl(),
+        );
       } else {
         triggerErrorHaptic();
         setError(result.error);

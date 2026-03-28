@@ -38,6 +38,8 @@ import {
   type TeacherOption,
 } from "./schemas";
 
+const NO_HOMEROOM_VALUE = "__none__";
+
 export function EditClassDialog({
   classData,
   onSuccess,
@@ -69,9 +71,7 @@ export function EditClassDialog({
   useEffect(() => {
     if (!open) return;
 
-    void apiGet<TeacherOption[]>(
-      "/api/teachers?role=teacher&sortBy=fullName&sortOrder=asc",
-    )
+    void apiGet<TeacherOption[]>("/api/teachers?view=options")
       .then((data) => {
         setTeachers(data || []);
       })
@@ -88,7 +88,7 @@ export function EditClassDialog({
       await apiPatch<{ updated: true }>(`/api/classes/${classData.id}`, {
         name: values.name,
         academicYear: values.academicYear,
-        homeroomTeacherId: values.homeroomTeacherId,
+        homeroomTeacherId: values.homeroomTeacherId || undefined,
       });
       setOpen(false);
       onSuccess();
@@ -170,13 +170,21 @@ export function EditClassDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Homeroom Teacher</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select
+                      value={field.value || NO_HOMEROOM_VALUE}
+                      onValueChange={(value) =>
+                        field.onChange(value === NO_HOMEROOM_VALUE ? "" : value)
+                      }
+                    >
                       <FormControl>
                         <SelectTrigger className="bg-zinc-950 border-zinc-700">
                           <SelectValue placeholder="Select teacher" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value={NO_HOMEROOM_VALUE}>
+                          Tanpa wali kelas
+                        </SelectItem>
                         {teachers.map((teacher) => (
                           <SelectItem key={teacher.id} value={teacher.id}>
                             {teacher.fullName}

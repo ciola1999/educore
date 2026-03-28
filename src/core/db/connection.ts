@@ -22,10 +22,36 @@ export interface DatabaseConnection {
   ): Promise<{ rowsAffected: number; insertId: number | string }>;
 }
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
-let _sqliteRemote: Database | null = null;
-let _initializing: Promise<ReturnType<typeof drizzle<typeof schema>>> | null =
-  null;
+type DrizzleDatabase = ReturnType<typeof drizzle<typeof schema>>;
+
+type GlobalDatabaseCache = {
+  db: DrizzleDatabase | null;
+  sqliteRemote: Database | null;
+  initializing: Promise<DrizzleDatabase> | null;
+  webMigrations: Promise<void> | null;
+  tauriMigrations: Promise<void> | null;
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __educoreDbCache__: GlobalDatabaseCache | undefined;
+}
+
+if (!globalThis.__educoreDbCache__) {
+  globalThis.__educoreDbCache__ = {
+    db: null,
+    sqliteRemote: null,
+    initializing: null,
+    webMigrations: null,
+    tauriMigrations: null,
+  };
+}
+
+const globalCache = globalThis.__educoreDbCache__;
+
+let _db = globalCache.db;
+let _sqliteRemote = globalCache.sqliteRemote;
+let _initializing = globalCache.initializing;
 
 export interface DatabaseInitOptions extends MigrationOptions {}
 
@@ -87,6 +113,79 @@ function resolveBrowserDatabaseConfig() {
   };
 }
 
+function syncGlobalCache() {
+  globalCache.db = _db;
+  globalCache.sqliteRemote = _sqliteRemote;
+  globalCache.initializing = _initializing;
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function isNextBuildPhase(): boolean {
+  return (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.npm_lifecycle_event === "build"
+  );
+}
+
+function shouldRunServerMigrations(options?: DatabaseInitOptions): boolean {
+  if (options?.seedData === false) {
+    return true;
+  }
+
+  if (isTruthyEnv(process.env.EDUCORE_FORCE_SERVER_MIGRATIONS)) {
+    return true;
+  }
+
+  return !isNextBuildPhase();
+}
+
+function shouldLogDatabaseDebug(): boolean {
+  return isTruthyEnv(process.env.EDUCORE_DB_DEBUG);
+}
+
+function logDatabaseDebug(message: string, ...args: unknown[]) {
+  if (shouldLogDatabaseDebug()) {
+    console.info(message, ...args);
+  }
+}
+
+async function ensureWebMigrations(
+  dbLike: DatabaseLike,
+  options?: DatabaseInitOptions,
+) {
+  if (!globalCache.webMigrations) {
+    globalCache.webMigrations = runMigrations(dbLike, options).catch(
+      (error) => {
+        globalCache.webMigrations = null;
+        throw error;
+      },
+    );
+  }
+
+  await globalCache.webMigrations;
+}
+
+async function ensureTauriMigrations(
+  dbLike: DatabaseLike,
+  options?: DatabaseInitOptions,
+) {
+  if (!globalCache.tauriMigrations) {
+    globalCache.tauriMigrations = runMigrations(dbLike, options).catch(
+      (error) => {
+        globalCache.tauriMigrations = null;
+        throw error;
+      },
+    );
+  }
+
+  await globalCache.tauriMigrations;
+}
+
 /**
  * Initialize and get the database instance
  */
@@ -101,6 +200,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
       // Desktop: Native SQLite via Tauri Plugin SQL
       const { default: Database } = await import("@tauri-apps/plugin-sql");
       _sqliteRemote = await Database.load("sqlite:educore.db");
+      syncGlobalCache();
 
       // Set encryption key for SQLCipher (if provided)
       const key = process.env.TAURI_DB_KEY;
@@ -119,9 +219,9 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
       await _sqliteRemote.execute("PRAGMA journal_mode = WAL");
 
       // Ensure schema exists before any query execution
-      console.info("⚡ [DB] Starting migrations...");
-      await runMigrations(_sqliteRemote, options);
-      console.info("✅ [DB] Migrations completed successfully.");
+      logDatabaseDebug("⚡ [DB] Starting migrations...");
+      await ensureTauriMigrations(_sqliteRemote, options);
+      logDatabaseDebug("✅ [DB] Migrations completed successfully.");
 
       const drizzleDb = drizzle(
         async (sql, params, method) => {
@@ -163,6 +263,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
 
       if (useSharedCache) {
         _db = drizzleDb;
+        syncGlobalCache();
       }
 
       return drizzleDb;
@@ -174,7 +275,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
           ? resolveServerDatabaseConfig()
           : resolveBrowserDatabaseConfig();
 
-        console.info(
+        logDatabaseDebug(
           `🌐 [DB] Connecting to libSQL at: ${dbConfig.url} (runtime: ${
             isServerRuntime ? "server" : "browser"
           }, token: ${dbConfig.authToken ? "present" : "missing"})`,
@@ -190,7 +291,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
               authToken: dbConfig.authToken,
             });
 
-        console.info("🌐 [DB] libSQL client created");
+        logDatabaseDebug("🌐 [DB] libSQL client created");
 
         const drizzleDb = drizzle(
           async (sql, params, method) => {
@@ -226,9 +327,9 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
 
         if (useSharedCache) {
           _db = drizzleDb;
+          syncGlobalCache();
         }
 
-        // Run migrations for web too
         const dbLike: DatabaseLike = {
           execute: async (sql, params) => {
             const res = await client.execute({
@@ -250,12 +351,18 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
           },
         };
 
-        try {
-          await runMigrations(dbLike, options);
-        } catch (migrationError) {
-          console.error(
-            "❌ [DB_MIGRATION_WEB_ERROR] Could not run migrations on web.",
-            migrationError,
+        if (isServerRuntime && shouldRunServerMigrations(options)) {
+          try {
+            await ensureWebMigrations(dbLike, options);
+          } catch (migrationError) {
+            console.error(
+              "❌ [DB_MIGRATION_WEB_ERROR] Could not run migrations on web.",
+              migrationError,
+            );
+          }
+        } else if (isServerRuntime && shouldLogDatabaseDebug()) {
+          console.info(
+            "ℹ️ [DB] Skipping server migrations during build/read-only runtime.",
           );
         }
 
@@ -270,6 +377,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
 
   if (useSharedCache) {
     _initializing = initialize;
+    syncGlobalCache();
   }
 
   try {
@@ -283,6 +391,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
   } finally {
     if (useSharedCache) {
       _initializing = null;
+      syncGlobalCache();
     }
   }
 };

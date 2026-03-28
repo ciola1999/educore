@@ -15,12 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 function TeachersContent() {
   const teacherOutlineButtonClass = `inline-flex h-11 items-center gap-1 rounded-xl px-3 text-sm transition ${outlineButtonStyles.neutral}`;
   const { user } = useAuth();
+  const desktopRuntime = isTauri();
   const [refreshToken, setRefreshToken] = useState(0);
   const [search, setSearch] = useQueryState(
     "q",
@@ -63,9 +65,11 @@ function TeachersContent() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImportTeachersExcelDialog
-            onSuccess={() => setRefreshToken((value) => value + 1)}
-          />
+          {!desktopRuntime ? (
+            <ImportTeachersExcelDialog
+              onSuccess={() => setRefreshToken((value) => value + 1)}
+            />
+          ) : null}
           <AddTeacherDialog
             onSuccess={() => setRefreshToken((value) => value + 1)}
           />
@@ -76,6 +80,15 @@ function TeachersContent() {
         Kelola akun admin, guru, dan staf secara konsisten di web maupun
         desktop.
       </div>
+
+      {desktopRuntime ? (
+        <InlineState
+          title="Desktop runtime aktif"
+          description="CRUD user dan opsi wali kelas memakai local desktop path. Import Excel tetap dibatasi ke runtime web karena masih memakai upload route server."
+          variant="info"
+          className="text-sm"
+        />
+      ) : null}
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

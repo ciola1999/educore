@@ -35,10 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
-import type {
-  AttendanceTodaySnapshot,
-  StudentListItem,
-} from "@/hooks/use-student-list";
+import type { StudentListItem } from "@/hooks/use-student-list";
 import { useStudentList } from "@/hooks/use-student-list";
 import { apiGet } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
@@ -166,40 +163,6 @@ function buildStudentExportRows(students: StudentListItem[]) {
   }));
 }
 
-async function attachAttendanceSnapshots(students: StudentListItem[]) {
-  if (students.length === 0) {
-    return students;
-  }
-
-  const date = getTodayDateString();
-  const attendanceMap = new Map<string, StudentListItem["attendanceToday"]>();
-  const chunkSize = 100;
-
-  for (let index = 0; index < students.length; index += chunkSize) {
-    const chunk = students.slice(index, index + chunkSize);
-    const ids = chunk.map((student) => student.id).join(",");
-    if (!ids) {
-      continue;
-    }
-
-    try {
-      const attendanceRows = await apiGet<AttendanceTodaySnapshot[]>(
-        `/api/students/attendance-today?date=${date}&ids=${encodeURIComponent(ids)}`,
-      );
-      for (const row of attendanceRows) {
-        attendanceMap.set(row.studentId, row);
-      }
-    } catch {
-      // Keep export usable even if attendance snapshot is temporarily unavailable.
-    }
-  }
-
-  return students.map((student) => ({
-    ...student,
-    attendanceToday: attendanceMap.get(student.id) ?? null,
-  }));
-}
-
 export function StudentList() {
   const today = getTodayDateString();
   const [selectedStudent, setSelectedStudent] =
@@ -238,12 +201,14 @@ export function StudentList() {
     totalCount,
     stats,
     error,
+    listError,
+    statsError,
     sortBy,
     setSortBy,
     sortDir,
     setSortDir,
-    fetchStudents,
-    fetchStats,
+    refreshList,
+    refreshAll,
   } = useStudentList();
 
   const visibleStudents = students.filter((student) => {
@@ -284,6 +249,8 @@ export function StudentList() {
           limit: "50",
           sortBy,
           sortDir,
+          includeAttendanceToday: "1",
+          date: today,
         });
         if (searchQuery.trim()) {
           baseParams.set("search", searchQuery.trim());
@@ -304,7 +271,6 @@ export function StudentList() {
         exportStudents = collected.filter((student) =>
           matchesAccountFilter(student, accountFilter),
         );
-        exportStudents = await attachAttendanceSnapshots(exportStudents);
       }
 
       if (exportStudents.length === 0) {
@@ -359,11 +325,10 @@ export function StudentList() {
       {error ? (
         <InlineState
           title="Data siswa tidak tersedia"
-          description={error}
+          description={listError ?? statsError ?? error}
           actionLabel="Coba Lagi"
           onAction={() => {
-            void fetchStats();
-            void fetchStudents();
+            void refreshAll();
           }}
           variant="error"
         />
@@ -488,13 +453,7 @@ export function StudentList() {
                         type="button"
                         variant="outline"
                         onClick={() => {
-                          void fetchStats();
-                          void fetchStudents(
-                            currentPage,
-                            searchQuery,
-                            sortBy,
-                            sortDir,
-                          );
+                          void refreshAll();
                         }}
                         className={`flex-1 transition-colors sm:flex-none ${studentOutlineButtonClass}`}
                       >
@@ -505,13 +464,7 @@ export function StudentList() {
                         <div className="flex-1 sm:flex-none">
                           <AddStudentDialog
                             onSuccess={() => {
-                              void fetchStats();
-                              void fetchStudents(
-                                currentPage,
-                                searchQuery,
-                                sortBy,
-                                sortDir,
-                              );
+                              void refreshAll();
                             }}
                           />
                         </div>
@@ -520,13 +473,7 @@ export function StudentList() {
                         <div className="flex-1 sm:flex-none">
                           <ImportStudentsExcelDialog
                             onSuccess={() => {
-                              void fetchStats();
-                              void fetchStudents(
-                                currentPage,
-                                searchQuery,
-                                sortBy,
-                                sortDir,
-                              );
+                              void refreshAll();
                             }}
                           />
                         </div>
@@ -570,12 +517,7 @@ export function StudentList() {
                         students={students}
                         visibleStudents={visibleStudents}
                         onSuccess={() => {
-                          void fetchStudents(
-                            currentPage,
-                            searchQuery,
-                            sortBy,
-                            sortDir,
-                          );
+                          void refreshList();
                         }}
                       />
                     </div>
@@ -583,13 +525,7 @@ export function StudentList() {
                       <BulkRepairStudentClassesDialog
                         students={students}
                         onSuccess={() => {
-                          void fetchStudents(
-                            currentPage,
-                            searchQuery,
-                            sortBy,
-                            sortDir,
-                          );
-                          void fetchStats();
+                          void refreshAll();
                         }}
                       />
                     </div>
@@ -598,12 +534,7 @@ export function StudentList() {
                         students={students}
                         visibleStudents={visibleStudents}
                         onSuccess={() => {
-                          void fetchStudents(
-                            currentPage,
-                            searchQuery,
-                            sortBy,
-                            sortDir,
-                          );
+                          void refreshList();
                         }}
                       />
                     </div>
@@ -617,8 +548,7 @@ export function StudentList() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  void fetchStats();
-                  void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+                  void refreshAll();
                 }}
                 className={`transition-colors ${studentOutlineButtonClass}`}
               >
@@ -852,7 +782,6 @@ export function StudentList() {
               onClick={() => {
                 const nextPage = Math.max(1, currentPage - 1);
                 setCurrentPage(nextPage);
-                void fetchStudents(nextPage, searchQuery, sortBy, sortDir);
               }}
               className={studentOutlineButtonClass}
             >
@@ -866,7 +795,6 @@ export function StudentList() {
               onClick={() => {
                 const nextPage = Math.min(totalPages, currentPage + 1);
                 setCurrentPage(nextPage);
-                void fetchStudents(nextPage, searchQuery, sortBy, sortDir);
               }}
               className={studentOutlineButtonClass}
             >
@@ -1055,8 +983,7 @@ export function StudentList() {
         open={editOpen}
         onOpenChange={setEditOpen}
         onSuccess={() => {
-          void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
-          void fetchStats();
+          void refreshAll();
         }}
       />
 
@@ -1065,8 +992,7 @@ export function StudentList() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         onSuccess={() => {
-          void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
-          void fetchStats();
+          void refreshAll();
         }}
       />
 
@@ -1075,7 +1001,7 @@ export function StudentList() {
         open={accountOpen}
         onOpenChange={setAccountOpen}
         onSuccess={() => {
-          void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
+          void refreshList();
         }}
       />
     </div>

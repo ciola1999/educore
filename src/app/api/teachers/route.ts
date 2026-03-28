@@ -1,16 +1,32 @@
-import { requireRole } from "@/lib/api/authz";
+import { requirePermission, requireRole } from "@/lib/api/authz";
 import { apiCreated, apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { addTeacher, getTeachers } from "@/lib/services/teacher";
+import {
+  addTeacher,
+  getTeacherOptions,
+  getTeachers,
+} from "@/lib/services/teacher";
 
 export async function GET(request: Request) {
   const session = await auth();
+  const { searchParams } = new URL(request.url);
+  const view = searchParams.get("view");
+
+  if (view === "options") {
+    const guard = requirePermission(session, "academic:write");
+    if (guard) {
+      return guard;
+    }
+
+    const teachers = await getTeacherOptions();
+    return apiOk(teachers);
+  }
+
   const guard = requireRole(session, ["admin", "super_admin"]);
   if (guard) {
     return guard;
   }
 
-  const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") || undefined;
   const roleFilter = searchParams.get("role") || undefined;
   const sortBy = searchParams.get("sortBy") || undefined;
@@ -44,9 +60,11 @@ export async function POST(request: Request) {
   if (!result.success) {
     return apiError(
       result.error,
-      result.code === "EMAIL_EXISTS" || result.code === "VALIDATION_ERROR"
+      result.code === "VALIDATION_ERROR"
         ? 400
-        : 500,
+        : result.code === "EMAIL_EXISTS"
+          ? 409
+          : 500,
       result.code,
     );
   }

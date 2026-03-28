@@ -1,7 +1,11 @@
 import { and, asc, desc, eq, inArray, isNull, like, or } from "drizzle-orm";
 import { hashPassword } from "@/lib/auth/hash";
 import { getDb } from "@/lib/db";
-import { classes, users } from "@/lib/db/schema";
+import { classes, guruMapel, users } from "@/lib/db/schema";
+import {
+  findTeacherScheduleUsage,
+  hasAnyScheduleUsage,
+} from "@/lib/services/schedule-usage";
 import {
   type UserInsertInput,
   type UserUpdateInput,
@@ -30,6 +34,11 @@ export type TeacherListItem = {
   isHomeroomTeacher: boolean;
 };
 
+export type TeacherOption = {
+  id: string;
+  fullName: string;
+};
+
 export interface TeacherFilter {
   search?: string;
   role?: "teacher" | "staff" | "admin" | "super_admin";
@@ -37,9 +46,20 @@ export interface TeacherFilter {
   sortOrder?: "asc" | "desc";
 }
 
-type TeacherUpdateResult =
+export type TeacherUpdateResult =
   | { success: true }
   | { success: false; error: string; code?: string };
+
+export type TeacherDeleteResult =
+  | { success: true }
+  | { success: false; error: string; code?: string };
+
+function isUniqueConstraintError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("unique constraint failed")
+  );
+}
 
 // --- CORE SERVICES ---
 
@@ -51,33 +71,24 @@ export async function getTeachers(filter: TeacherFilter = {}) {
     const db = await getDb();
     const { search, role, sortBy = "fullName", sortOrder = "asc" } = filter;
 
-    // Default: User management scope for phase 1
-    let conditions = inArray(users.role, [
-      "teacher",
-      "staff",
-      "admin",
-      "super_admin",
-    ]);
+    const conditions = [
+      isNull(users.deletedAt),
+      role
+        ? eq(users.role, role)
+        : inArray(users.role, ["teacher", "staff", "admin", "super_admin"]),
+    ];
 
-    // Override jika role spesifik diminta
-    if (role) {
-      conditions = eq(users.role, role);
-    }
-
-    // Apply Search
     if (search) {
       const searchLower = `%${search}%`;
-      const mergedCondition = and(
-        conditions,
-        or(like(users.fullName, searchLower), like(users.email, searchLower)),
+      const searchCondition = or(
+        like(users.fullName, searchLower),
+        like(users.email, searchLower),
       );
-      if (mergedCondition) {
-        conditions = mergedCondition;
+      if (searchCondition) {
+        conditions.push(searchCondition);
       }
     }
 
-    // Build Query
-    // Note: Drizzle Query Builder is mutable, but we construct cleanly here
     const query = db
       .select({
         id: users.id,
@@ -93,7 +104,7 @@ export async function getTeachers(filter: TeacherFilter = {}) {
         isActive: users.isActive,
       })
       .from(users)
-      .where(conditions);
+      .where(and(...conditions));
 
     // Apply Sorting
     const sortFn = sortOrder === "desc" ? desc : asc;
@@ -164,15 +175,19 @@ export async function addTeacher(
     }
 
     const validated = validation.data;
+    const normalizedEmail = validated.email.trim().toLowerCase();
 
-    // 2. Check for existing email manually
     const existingUser = await db
-      .select({ id: users.id })
+      .select({
+        id: users.id,
+        deletedAt: users.deletedAt,
+        role: users.role,
+      })
       .from(users)
-      .where(eq(users.email, validated.email))
+      .where(eq(users.email, normalizedEmail))
       .limit(1);
 
-    if (existingUser.length > 0) {
+    if (existingUser[0]?.deletedAt === null) {
       return {
         success: false,
         error: "Email ini sudah terdaftar.",
@@ -180,17 +195,53 @@ export async function addTeacher(
       };
     }
 
-    // 3. Prepare data
-    const id = validated.id || crypto.randomUUID(); // ✅ Always Generate ID manually for SQLite Proxy
-    const passwordHash = await hashPassword(validated.password);
+    if (
+      existingUser[0]?.role === "student" ||
+      existingUser[0]?.role === "parent"
+    ) {
+      return {
+        success: false,
+        error: `Email ini sudah dipakai data role ${existingUser[0].role}.`,
+        code: "EMAIL_EXISTS",
+      };
+    }
 
-    // 4. Insert
+    const passwordHash = await hashPassword(validated.password);
+    const now = new Date();
+
+    if (existingUser[0]) {
+      const id = existingUser[0].id;
+      await db
+        .update(users)
+        .set({
+          fullName: validated.fullName,
+          email: normalizedEmail,
+          role: validated.role || "teacher",
+          passwordHash,
+          nip: validated.nip ?? null,
+          jenisKelamin: validated.jenisKelamin ?? null,
+          tempatLahir: validated.tempatLahir ?? null,
+          tanggalLahir: validated.tanggalLahir ?? null,
+          alamat: validated.alamat ?? null,
+          noTelepon: validated.noTelepon ?? null,
+          foto: validated.foto ?? null,
+          isActive: validated.isActive ?? true,
+          deletedAt: null,
+          syncStatus: "pending",
+          updatedAt: now,
+        })
+        .where(eq(users.id, id));
+
+      return { success: true, id };
+    }
+
+    const id = validated.id || crypto.randomUUID();
     await db.insert(users).values({
-      id: id,
+      id,
       fullName: validated.fullName,
-      email: validated.email,
+      email: normalizedEmail,
       role: validated.role || "teacher",
-      passwordHash: passwordHash,
+      passwordHash,
       nip: validated.nip ?? null,
       jenisKelamin: validated.jenisKelamin ?? null,
       tempatLahir: validated.tempatLahir ?? null,
@@ -200,17 +251,15 @@ export async function addTeacher(
       foto: validated.foto ?? null,
       isActive: validated.isActive ?? true,
       syncStatus: "pending",
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     });
 
     return { success: true, id };
   } catch (error: unknown) {
     console.error("[SERVICE_ERROR] addTeacher:", error);
 
-    // Handle SQLite Unique Constraint Error
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("UNIQUE constraint failed")) {
+    if (isUniqueConstraintError(error)) {
       return {
         success: false,
         error: "Email sudah digunakan oleh user lain.",
@@ -247,7 +296,7 @@ export async function updateTeacher(
     const existing = await db
       .select({ id: users.id, email: users.email })
       .from(users)
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), isNull(users.deletedAt)))
       .limit(1);
     if (existing.length === 0) {
       return {
@@ -258,16 +307,40 @@ export async function updateTeacher(
     }
 
     if (payload.email && payload.email !== existing[0]?.email) {
+      const normalizedEmail = payload.email.trim().toLowerCase();
       const emailExists = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.email, payload.email))
+        .where(eq(users.email, normalizedEmail))
         .limit(1);
       if (emailExists.length > 0) {
         return {
           success: false,
           error: "Email ini sudah terdaftar.",
           code: "EMAIL_EXISTS",
+        };
+      }
+    }
+
+    if (payload.role && payload.role !== "teacher") {
+      const [hasTeachingAssignments, scheduleUsage] = await Promise.all([
+        db
+          .select({ id: guruMapel.id })
+          .from(guruMapel)
+          .where(and(eq(guruMapel.guruId, id), isNull(guruMapel.deletedAt)))
+          .limit(1),
+        findTeacherScheduleUsage(id),
+      ]);
+
+      if (
+        hasTeachingAssignments.length > 0 ||
+        hasAnyScheduleUsage(scheduleUsage)
+      ) {
+        return {
+          success: false,
+          error:
+            "Guru masih dipakai assignment atau jadwal. Lepaskan relasi tersebut terlebih dahulu sebelum mengubah role.",
+          code: "TEACHER_IN_USE",
         };
       }
     }
@@ -280,7 +353,7 @@ export async function updateTeacher(
       .update(users)
       .set({
         fullName: payload.fullName,
-        email: payload.email,
+        email: payload.email?.trim().toLowerCase(),
         role: payload.role,
         passwordHash,
         nip: payload.nip ?? undefined,
@@ -296,6 +369,19 @@ export async function updateTeacher(
       })
       .where(eq(users.id, id));
 
+    if (payload.role && payload.role !== "teacher") {
+      await db
+        .update(classes)
+        .set({
+          homeroomTeacherId: null,
+          syncStatus: "pending",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(classes.homeroomTeacherId, id), isNull(classes.deletedAt)),
+        );
+    }
+
     return { success: true };
   } catch (error: unknown) {
     console.error("[SERVICE_ERROR] updateTeacher:", error);
@@ -310,9 +396,50 @@ export async function updateTeacher(
 /**
  * Delete a teacher by ID
  */
-export async function deleteTeacher(id: string): Promise<boolean> {
+export async function deleteTeacher(id: string): Promise<TeacherDeleteResult> {
   try {
     const db = await getDb();
+    const existingTeacher = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, id), isNull(users.deletedAt)))
+      .limit(1);
+
+    if (existingTeacher.length === 0) {
+      return {
+        success: false,
+        error: "Data guru tidak ditemukan",
+        code: "NOT_FOUND",
+      };
+    }
+
+    const [teachingAssignments, scheduleUsage] = await Promise.all([
+      db
+        .select({ id: guruMapel.id })
+        .from(guruMapel)
+        .where(and(eq(guruMapel.guruId, id), isNull(guruMapel.deletedAt)))
+        .limit(1),
+      findTeacherScheduleUsage(id),
+    ]);
+
+    if (teachingAssignments.length > 0 || hasAnyScheduleUsage(scheduleUsage)) {
+      return {
+        success: false,
+        error:
+          "Guru masih dipakai assignment atau jadwal. Lepaskan relasi tersebut terlebih dahulu sebelum menghapus guru.",
+        code: "TEACHER_IN_USE",
+      };
+    }
+
+    await db
+      .update(classes)
+      .set({
+        homeroomTeacherId: null,
+        syncStatus: "pending",
+        updatedAt: new Date(),
+      })
+      .where(and(eq(classes.homeroomTeacherId, id), isNull(classes.deletedAt)));
+
     await db
       .update(users)
       .set({
@@ -322,9 +449,32 @@ export async function deleteTeacher(id: string): Promise<boolean> {
         updatedAt: new Date(),
       })
       .where(eq(users.id, id));
-    return true;
+
+    return { success: true };
   } catch (error) {
     console.error("[SERVICE_ERROR] deleteTeacher:", error);
-    return false;
+    return {
+      success: false,
+      error: "Gagal menghapus guru. Kesalahan sistem.",
+      code: "INTERNAL_ERROR",
+    };
   }
+}
+
+export async function getTeacherOptions(): Promise<TeacherOption[]> {
+  const db = await getDb();
+  return db
+    .select({
+      id: users.id,
+      fullName: users.fullName,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.role, "teacher"),
+        eq(users.isActive, true),
+        isNull(users.deletedAt),
+      ),
+    )
+    .orderBy(asc(users.fullName));
 }

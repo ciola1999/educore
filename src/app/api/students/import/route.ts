@@ -406,9 +406,13 @@ export async function POST(request: Request) {
   );
 
   const existingStudents = await db
-    .select({ id: students.id, nis: students.nis })
+    .select({
+      id: students.id,
+      nis: students.nis,
+      deletedAt: students.deletedAt,
+    })
     .from(students)
-    .where(and(inArray(students.nis, nisList), isNull(students.deletedAt)));
+    .where(inArray(students.nis, nisList));
   const existingStudentByNis = new Map(
     existingStudents.map((row) => [row.nis, row]),
   );
@@ -469,6 +473,7 @@ export async function POST(request: Request) {
           tempatLahir: row.tempatLahir,
           tanggalLahir: row.tanggalLahir,
           alamat: row.alamat,
+          deletedAt: null,
           syncStatus: "pending",
           updatedAt: now,
         })

@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPatch } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
+import { ensureAppWarmup, scheduleIdleTask } from "@/lib/runtime/app-bootstrap";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 type RiskNotification = {
@@ -67,6 +68,10 @@ type RiskInsightsResponse = {
   period: {
     startDate: string;
     endDate: string;
+  };
+  meta?: {
+    includeStudents?: boolean;
+    includeAssignmentSummary?: boolean;
   };
 };
 
@@ -191,6 +196,7 @@ const dashboardSkyOutlineButtonClass = outlineButtonStyles.sky;
 const dashboardEmeraldOutlineButtonClass = outlineButtonStyles.emerald;
 const dashboardVioletOutlineButtonClass = outlineButtonStyles.violet;
 const dashboardAmberOutlineButtonClass = outlineButtonStyles.amber;
+const RISK_INSIGHTS_TIMEOUT_MS = 45_000;
 
 export function AttendanceRiskInsights() {
   const { user } = useAuth();
@@ -202,6 +208,7 @@ export function AttendanceRiskInsights() {
   const [classOptions, setClassOptions] = useState<ClassOption[]>([]);
   const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
   const [assigneeFilter, setAssigneeFilter] = useState("all");
@@ -250,28 +257,53 @@ export function AttendanceRiskInsights() {
   const [compareAssigneeA, setCompareAssigneeA] = useState("none");
   const [compareAssigneeB, setCompareAssigneeB] = useState("none");
 
-  const buildRiskInsightsQueryString = useCallback(() => {
-    const params = new URLSearchParams();
-    if (classFilter !== "all") {
-      params.set("className", classFilter);
-    }
-    if (assigneeFilter !== "all") {
-      params.set("assigneeUserId", assigneeFilter);
-    }
+  const buildRiskInsightsQueryString = useCallback(
+    (options?: {
+      includeStudents?: boolean;
+      includeAssignmentSummary?: boolean;
+    }) => {
+      const params = new URLSearchParams();
+      if (classFilter !== "all") {
+        params.set("className", classFilter);
+      }
+      if (assigneeFilter !== "all") {
+        params.set("assigneeUserId", assigneeFilter);
+      }
 
-    return params.size > 0 ? `?${params.toString()}` : "";
-  }, [assigneeFilter, classFilter]);
+      if (options?.includeStudents === false) {
+        params.set("includeStudents", "0");
+      }
+      if (options?.includeAssignmentSummary === false) {
+        params.set("includeAssignmentSummary", "0");
+      }
 
-  const refreshRiskInsights = useCallback(async () => {
-    const queryString = buildRiskInsightsQueryString();
-    return apiGet<RiskInsightsResponse>(
-      `/api/attendance/risk-insights${queryString}`,
-    )
-      .then(setData)
-      .catch(() => {
+      return params.size > 0 ? `?${params.toString()}` : "";
+    },
+    [assigneeFilter, classFilter],
+  );
+
+  const refreshRiskInsights = useCallback(
+    async (options?: {
+      includeStudents?: boolean;
+      includeAssignmentSummary?: boolean;
+    }) => {
+      await ensureAppWarmup();
+      const queryString = buildRiskInsightsQueryString(options);
+
+      try {
+        const nextData = await apiGet<RiskInsightsResponse>(
+          `/api/attendance/risk-insights${queryString}`,
+          { timeoutMs: RISK_INSIGHTS_TIMEOUT_MS },
+        );
+        setData(nextData);
+        return nextData;
+      } catch {
         setData(null);
-      });
-  }, [buildRiskInsightsQueryString]);
+        return null;
+      }
+    },
+    [buildRiskInsightsQueryString],
+  );
 
   function invalidateAuditTrail(notificationIds: string[]) {
     if (notificationIds.length === 0) {
@@ -295,9 +327,33 @@ export function AttendanceRiskInsights() {
   }
 
   useEffect(() => {
-    void refreshRiskInsights().finally(() => {
-      setLoading(false);
-    });
+    const cancel = scheduleIdleTask(() => {
+      void refreshRiskInsights({
+        includeStudents: false,
+        includeAssignmentSummary: false,
+      })
+        .then((baseData) => {
+          setData(baseData);
+          setLoading(false);
+          setDetailsLoading(true);
+
+          return refreshRiskInsights()
+            .then((fullData) => {
+              setData(fullData);
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              setDetailsLoading(false);
+            });
+        })
+        .catch(() => {
+          setData(null);
+          setLoading(false);
+          setDetailsLoading(false);
+        });
+    }, 250);
+
+    return cancel;
   }, [refreshRiskInsights]);
 
   useEffect(() => {
@@ -519,6 +575,10 @@ export function AttendanceRiskInsights() {
     return null;
   }
 
+  const stagedDetailsPending =
+    detailsLoading ||
+    data.meta?.includeStudents === false ||
+    data.meta?.includeAssignmentSummary === false;
   const today = new Date().toISOString().slice(0, 10);
   const periodNotifications = data.notifications.filter((notification) => {
     const createdDate = new Date(notification.createdAt);
@@ -1727,1361 +1787,118 @@ export function AttendanceRiskInsights() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.05fr_1.2fr]">
-      <Card className={dashboardPanelClass}>
-        <CardHeader className="space-y-3">
-          <CardTitle className="flex items-center gap-2 text-zinc-100">
-            <AlertTriangle className="h-4 w-4 text-red-400" />
-            Attendance Risk
-          </CardTitle>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 font-semibold uppercase tracking-[0.16em] text-red-200">
-              Period Active
-            </span>
-            <span className="rounded-full border border-zinc-700 bg-zinc-950/70 px-2.5 py-1 text-zinc-400">
-              {data.period.startDate} s/d {data.period.endDate}
-            </span>
-          </div>
-          <p className="text-sm leading-6 text-zinc-400">
-            Prioritas siswa berisiko yang perlu ditindaklanjuti berdasarkan
-            kelas dan assignee aktif.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className={dashboardToolbarPanelClass}>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Filter Kelas
-              </p>
-              <Select
-                value={classFilter}
-                onValueChange={(value) => {
-                  setClassFilter(value);
-                  setVisibleCount(10);
-                }}
-              >
-                <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                  <SelectValue placeholder="Semua kelas" />
-                </SelectTrigger>
-                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                  <SelectItem value="all">Semua Kelas</SelectItem>
-                  {classOptions.map((item) => (
-                    <SelectItem key={item.id} value={item.name}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+    <div className="space-y-4">
+      {stagedDetailsPending ? (
+        <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-100">
+          Detail ranking siswa dan assignment follow-up sedang dimuat bertahap
+          untuk menghindari timeout saat cold-start pertama.
+        </div>
+      ) : null}
+      <div className="grid gap-6 xl:grid-cols-[1.05fr_1.2fr]">
+        <Card className={dashboardPanelClass}>
+          <CardHeader className="space-y-3">
+            <CardTitle className="flex items-center gap-2 text-zinc-100">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              Attendance Risk
+            </CardTitle>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 font-semibold uppercase tracking-[0.16em] text-red-200">
+                Period Active
+              </span>
+              <span className="rounded-full border border-zinc-700 bg-zinc-950/70 px-2.5 py-1 text-zinc-400">
+                {data.period.startDate} s/d {data.period.endDate}
+              </span>
             </div>
-
-            <div className={dashboardToolbarPanelClass}>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Filter Assignee
-              </p>
-              <Select
-                value={assigneeFilter}
-                onValueChange={(value) => {
-                  setAssigneeFilter(value);
-                  setVisibleCount(10);
-                }}
-              >
-                <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
-                  <SelectValue placeholder="Semua assignee" />
-                </SelectTrigger>
-                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                  <SelectItem value="all">Semua Assignee</SelectItem>
-                  {data.assignmentSummary.map((item) => (
-                    <SelectItem key={item.userId} value={item.userId}>
-                      {item.assigneeName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {data.students.length > 0 ? (
-            <div className="grid gap-3">
-              {data.students.map((student) => (
-                <div
-                  key={student.studentId}
-                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-3"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {student.studentName}
-                      </p>
-                      <p className="text-xs text-zinc-500">
-                        {student.nis} • {student.className}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
-                        Rate {student.attendanceRate}%
-                      </span>
-                      <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-200">
-                        {student.absent} alpha
-                      </span>
-                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-200">
-                        {student.late} terlambat
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {student.riskFlags.map((flag) => (
-                      <span
-                        key={`${student.studentId}-${flag}`}
-                        className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-100"
-                      >
-                        {flag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-5">
-              <p className="text-sm font-medium text-zinc-300">
-                Tidak ada siswa berisiko pada periode aktif.
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">
-                Filter aktif tidak menemukan prioritas attendance risk baru.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className={dashboardPanelClass}>
-        <CardHeader className="space-y-3">
-          <CardTitle className="flex items-center gap-2 text-zinc-100">
-            <BellRing className="h-4 w-4 text-sky-400" />
-            Internal Notifications
-          </CardTitle>
-          <p className="text-sm leading-6 text-zinc-400">
-            Follow-up attendance terbaru, KPI penyelesaian, reminder, dan aksi
-            operasional dalam satu workspace.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Total
-              </p>
-              <p className="mt-1 text-xl font-semibold text-zinc-100">
-                {visibleNotificationSummary.total}
-              </p>
-            </div>
-            <div className={`${dashboardInsetCardClass} border-amber-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Pending
-              </p>
-              <p className="mt-1 text-xl font-semibold text-amber-300">
-                {visibleNotificationSummary.pending}
-              </p>
-            </div>
-            <div className={`${dashboardInsetCardClass} border-emerald-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Selesai
-              </p>
-              <p className="mt-1 text-xl font-semibold text-emerald-300">
-                {visibleNotificationSummary.done}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-4">
-            <div className={`${dashboardInsetCardClass} border-emerald-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                KPI 7 Hari
-              </p>
-              <p className="mt-2 text-lg font-semibold text-zinc-100">
-                {weeklyNotifications.length} follow-up
-              </p>
-              <p className="text-sm text-emerald-300">
-                Completion rate {weeklyCompletionRate}%
-              </p>
-            </div>
-            <div className={`${dashboardInsetCardClass} border-emerald-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                KPI Bulan Ini
-              </p>
-              <p className="mt-2 text-lg font-semibold text-zinc-100">
-                {monthlyNotifications.length} follow-up
-              </p>
-              <p className="text-sm text-emerald-300">
-                Completion rate {monthlyCompletionRate}%
-              </p>
-            </div>
-            <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Completed Today
-              </p>
-              <p className="mt-2 text-lg font-semibold text-zinc-100">
-                {completedTodayCount}
-              </p>
-              <p className="text-sm text-emerald-300">
-                Follow-up selesai hari ini
-              </p>
-            </div>
-            <div className={`${dashboardInsetCardClass} border-red-500/20`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                SLA Breach
-              </p>
-              <p className="mt-2 text-lg font-semibold text-red-300">
-                {slaBreachCount}
-              </p>
-              <p className="text-sm text-red-300">Pending melewati deadline</p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-sky-200">
-              Snapshot Kepala Sekolah
+            <p className="text-sm leading-6 text-zinc-400">
+              Prioritas siswa berisiko yang perlu ditindaklanjuti berdasarkan
+              kelas dan assignee aktif.
             </p>
-            <div className="mt-3 grid gap-3 md:grid-cols-4">
-              <div>
-                <p className="text-xs text-sky-100/70">Total Follow-up</p>
-                <p className="text-lg font-semibold text-white">
-                  {executiveSnapshot.totalFollowUps}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className={dashboardToolbarPanelClass}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Filter Kelas
                 </p>
-              </div>
-              <div>
-                <p className="text-xs text-sky-100/70">Completion Rate</p>
-                <p className="text-lg font-semibold text-white">
-                  {executiveSnapshot.completionRate}%
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-sky-100/70">Top Class</p>
-                <p className="text-lg font-semibold text-white">
-                  {executiveSnapshot.topClass}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-sky-100/70">Top Assignee</p>
-                <p className="text-lg font-semibold text-white">
-                  {executiveSnapshot.topAssignee}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-sky-100/70">Overdue</p>
-                <p className="text-lg font-semibold text-red-100">
-                  {executiveSnapshot.overdue}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-sky-100/70">Due Today</p>
-                <p className="text-lg font-semibold text-amber-100">
-                  {executiveSnapshot.dueToday}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="sticky top-2 z-10 grid gap-3 rounded-[1.5rem] border border-zinc-800/80 bg-zinc-900/85 p-2.5 backdrop-blur md:top-4 md:rounded-[1.75rem] md:p-3 xl:grid-cols-[minmax(0,220px)_1fr]">
-            <div className={dashboardToolbarPanelClass}>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Periode Dashboard
-              </p>
-              <Select
-                value={periodFilter}
-                onValueChange={(value) =>
-                  setPeriodFilter(value as "7d" | "30d" | "month")
-                }
-              >
-                <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
-                  <SelectValue placeholder="Periode dashboard" />
-                </SelectTrigger>
-                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                  <SelectItem value="7d">7 Hari</SelectItem>
-                  <SelectItem value="30d">30 Hari</SelectItem>
-                  <SelectItem value="month">Bulan Ini</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div
-              className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
-            >
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={printingDashboard}
-                onClick={() => {
-                  void handlePrintDashboardReport();
-                }}
-                className={dashboardOutlineButtonClass}
-              >
-                {printingDashboard ? "Memproses..." : "Print Dashboard"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleToggleReminderCards}
-                className={dashboardOutlineButtonClass}
-              >
-                {hideReminderCards
-                  ? "Tampilkan Reminder"
-                  : "Sembunyikan Reminder"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleResetDashboardUiState}
-                className={dashboardOutlineButtonClass}
-              >
-                Reset Tampilan
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={exportingDashboardPack}
-                onClick={() => {
-                  void handleExportDashboardPack();
-                }}
-                className={dashboardEmeraldOutlineButtonClass}
-              >
-                {exportingDashboardPack
-                  ? "Memproses..."
-                  : "Export Dashboard Pack"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={exportingAnalytics}
-                onClick={() => {
-                  void handleExportAnalytics();
-                }}
-                className={dashboardVioletOutlineButtonClass}
-              >
-                {exportingAnalytics ? "Memproses..." : "Export Analytics"}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={exportingKpi}
-                onClick={() => {
-                  void handleExportKpiDashboard();
-                }}
-                className={dashboardSkyOutlineButtonClass}
-              >
-                {exportingKpi ? "Memproses..." : "Export KPI"}
-              </Button>
-              <div className="hidden min-w-[11rem] items-center rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[11px] leading-5 text-zinc-500 lg:ml-auto lg:flex">
-                Toolbar tetap terlihat saat scroll supaya filter dan export
-                lebih cepat diakses.
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                    Tren Completion 7 Hari
-                  </p>
-                  <p className="mt-1 text-sm text-zinc-400">
-                    Total follow-up vs follow-up selesai per hari
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-7 gap-2">
-                {trendBuckets.map((item) => (
-                  <div
-                    key={item.date}
-                    className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 p-2 shadow-[0_16px_40px_-32px_rgba(59,130,246,0.6)]"
-                  >
-                    <p className="text-[11px] text-zinc-500">{item.label}</p>
-                    <div className="mt-2 flex h-28 items-end gap-1">
-                      <div className="flex-1 rounded-t bg-zinc-700/70">
-                        <div
-                          className="rounded-t bg-zinc-500/70"
-                          style={{
-                            height: `${Math.max(
-                              8,
-                              (item.total / maxTrendTotal) * 100,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="flex-1 rounded-t bg-emerald-900/50">
-                        <div
-                          className="rounded-t bg-emerald-400"
-                          style={{
-                            height: `${Math.max(
-                              8,
-                              (item.completed / maxTrendTotal) * 100,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <p className="mt-2 text-[11px] text-zinc-400">
-                      {item.completed}/{item.total} selesai
-                    </p>
-                    <p className="text-[11px] text-emerald-300">
-                      Rate {item.rate}%
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Aging Bucket
-              </p>
-              <p className="mt-1 text-sm text-zinc-400">
-                Umur follow-up pending
-              </p>
-              <div className="mt-4 space-y-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAgingFilter("0-3");
-                    setVisibleCount(10);
-                  }}
-                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
-                >
-                  <p className="text-sm text-zinc-100">0-3 Hari</p>
-                  <p className="mt-1 text-lg font-semibold text-zinc-100">
-                    {agingBuckets.zeroToThree}
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAgingFilter("4-7");
-                    setVisibleCount(10);
-                  }}
-                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
-                >
-                  <p className="text-sm text-zinc-100">4-7 Hari</p>
-                  <p className="mt-1 text-lg font-semibold text-amber-300">
-                    {agingBuckets.fourToSeven}
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAgingFilter("8+");
-                    setVisibleCount(10);
-                  }}
-                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
-                >
-                  <p className="text-sm text-zinc-100">&gt; 7 Hari</p>
-                  <p className="mt-1 text-lg font-semibold text-red-300">
-                    {agingBuckets.overSeven}
-                  </p>
-                </button>
-                {agingFilter !== "all" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAgingFilter("all")}
-                    className={`w-full ${dashboardOutlineButtonClass}`}
-                  >
-                    Reset Aging Filter
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Heatmap Overdue
-              </p>
-              <p className="mt-1 text-sm text-zinc-400">
-                Snapshot overdue pending per hari dalam 21 hari terakhir
-              </p>
-              <div className="mt-4 grid grid-cols-7 gap-2">
-                {overdueHeatmap.map((item) => {
-                  const intensity = Math.max(
-                    0.18,
-                    item.total / maxOverdueHeat || 0.18,
-                  );
-
-                  return (
-                    <button
-                      type="button"
-                      key={`overdue-heat-${item.date}`}
-                      onClick={() => {
-                        setNotificationFilter("overdue");
-                        setVisibleCount(10);
-                      }}
-                      className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 px-2 py-3 text-center transition hover:scale-[1.02] hover:border-red-500/25"
-                      style={{
-                        backgroundColor: `rgba(239, 68, 68, ${intensity})`,
-                      }}
-                    >
-                      <p className="text-[11px] text-zinc-100">{item.label}</p>
-                      <p className="mt-1 text-sm font-semibold text-white">
-                        {item.total}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Scheduled Reminder Summary
-              </p>
-              <p className="mt-1 text-sm text-zinc-400">
-                Ringkasan reminder tindak lanjut
-              </p>
-              <div className="mt-4 space-y-3">
-                <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-3">
-                  <p className="text-sm text-zinc-100">Due Today</p>
-                  <p className="mt-1 text-lg font-semibold text-sky-300">
-                    {scheduledReminderSummary.dueToday}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3">
-                  <p className="text-sm text-zinc-100">Due Tomorrow</p>
-                  <p className="mt-1 text-lg font-semibold text-amber-300">
-                    {scheduledReminderSummary.dueTomorrow}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3">
-                  <p className="text-sm text-zinc-100">Overdue</p>
-                  <p className="mt-1 text-lg font-semibold text-red-300">
-                    {scheduledReminderSummary.overdue}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                  Top Assignee Performance
-                </p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Ranking berdasarkan completion rate follow-up
-                </p>
-              </div>
-              <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
-                {topAssigneePerformance.length} assignee aktif
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 md:hidden">
-              {topAssigneePerformance.map((item) => (
-                <button
-                  key={`performance-mobile-top-${item.userId}`}
-                  type="button"
-                  onClick={() => {
-                    setAssigneeFilter(item.userId);
-                    setVisibleCount(10);
-                  }}
-                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {item.assigneeName}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Ringkasan follow-up per assignee
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
-                      {item.completionRate}% complete
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                        Total
-                      </p>
-                      <p className="mt-1 font-semibold text-zinc-100">
-                        {item.total}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
-                        Pending
-                      </p>
-                      <p className="mt-1 font-semibold text-amber-100">
-                        {item.pending}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
-                        Done
-                      </p>
-                      <p className="mt-1 font-semibold text-emerald-100">
-                        {item.done}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                        Overdue
-                      </p>
-                      <p className="mt-1 font-semibold text-red-100">
-                        {item.overdue}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-zinc-500 md:hidden">
-              Geser tabel ke samping untuk melihat semua kolom.
-            </p>
-            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-zinc-500">
-                  <tr className="border-b border-zinc-800">
-                    <th className="pb-2 pr-4 font-medium">Assignee</th>
-                    <th className="pb-2 pr-4 font-medium">Total</th>
-                    <th className="pb-2 pr-4 font-medium">Done</th>
-                    <th className="pb-2 pr-4 font-medium">Pending</th>
-                    <th className="pb-2 font-medium">Completion Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topAssigneePerformance.map((item) => (
-                    <tr
-                      key={`performance-${item.userId}`}
-                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
-                    >
-                      <td className="py-3 pr-4 font-medium text-zinc-100">
-                        {item.assigneeName}
-                      </td>
-                      <td className="py-3 pr-4">{item.total}</td>
-                      <td className="py-3 pr-4 text-emerald-300">
-                        {item.done}
-                      </td>
-                      <td className="py-3 pr-4 text-amber-300">
-                        {item.pending}
-                      </td>
-                      <td className="py-3 font-semibold text-zinc-100">
-                        {item.completionRate}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                  Dashboard Summary per Kelas
-                </p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Ringkasan follow-up berdasarkan kelas
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={exportingClassSummary}
-                onClick={() => {
-                  void handleExportClassSummary();
-                }}
-                className={dashboardSkyOutlineButtonClass}
-              >
-                {exportingClassSummary
-                  ? "Memproses..."
-                  : "Export Summary Kelas"}
-              </Button>
-            </div>
-            <div className="mt-4 grid gap-3 md:hidden">
-              {classRecoveryLeaderboard.map((item) => (
-                <div
-                  key={`class-recovery-mobile-${item.className}`}
-                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {item.className}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Recovery leaderboard kelas
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-200">
-                      {item.recoveryRate}%
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
-                        Done
-                      </p>
-                      <p className="mt-1 font-semibold text-emerald-100">
-                        {item.done}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
-                        Pending
-                      </p>
-                      <p className="mt-1 font-semibold text-amber-100">
-                        {item.pending}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                        Overdue
-                      </p>
-                      <p className="mt-1 font-semibold text-red-100">
-                        {item.overdue}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-zinc-500 md:hidden">
-              Geser tabel ke samping untuk melihat semua kolom.
-            </p>
-            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-zinc-500">
-                  <tr className="border-b border-zinc-800">
-                    <th className="pb-2 pr-4 font-medium">Kelas</th>
-                    <th className="pb-2 pr-4 font-medium">Total</th>
-                    <th className="pb-2 pr-4 font-medium">Done</th>
-                    <th className="pb-2 pr-4 font-medium">Pending</th>
-                    <th className="pb-2 font-medium">Overdue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classSummaryRows.map((item) => (
-                    <tr
-                      key={`class-summary-${item.className}`}
-                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
-                    >
-                      <td className="py-3 pr-4 font-medium text-zinc-100">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setClassFilter(item.className);
-                            setVisibleCount(10);
-                          }}
-                          className="text-left underline-offset-4 hover:underline"
-                        >
-                          {item.className}
-                        </button>
-                      </td>
-                      <td className="py-3 pr-4">{item.total}</td>
-                      <td className="py-3 pr-4 text-emerald-300">
-                        {item.done}
-                      </td>
-                      <td className="py-3 pr-4 text-amber-300">
-                        {item.pending}
-                      </td>
-                      <td className="py-3 text-red-300">{item.overdue}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                  Leaderboard Recovery per Kelas
-                </p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Ranking kelas dengan recovery follow-up terbaik
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={exportingClassLeaderboard}
-                onClick={() => {
-                  void handleExportClassLeaderboard();
-                }}
-                className={dashboardSkyOutlineButtonClass}
-              >
-                {exportingClassLeaderboard
-                  ? "Memproses..."
-                  : "Export Leaderboard"}
-              </Button>
-            </div>
-            <p className="mt-4 text-xs text-zinc-500 md:hidden">
-              Geser tabel ke samping untuk melihat semua kolom.
-            </p>
-            <div className="mt-4 grid gap-3 md:hidden">
-              {topAssigneePerformance.map((item) => (
-                <button
-                  key={`performance-mobile-${item.userId}`}
-                  type="button"
-                  onClick={() => {
-                    setAssigneeFilter(item.userId);
-                    setVisibleCount(10);
-                  }}
-                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {item.assigneeName}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Ranking completion rate follow-up
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-200">
-                      {item.completionRate}%
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                        Total
-                      </p>
-                      <p className="mt-1 font-semibold text-zinc-100">
-                        {item.total}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
-                        Done
-                      </p>
-                      <p className="mt-1 font-semibold text-emerald-100">
-                        {item.done}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
-                        Pending
-                      </p>
-                      <p className="mt-1 font-semibold text-amber-100">
-                        {item.pending}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-zinc-500 md:hidden">
-              Geser tabel ke samping untuk melihat semua kolom.
-            </p>
-            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-zinc-500">
-                  <tr className="border-b border-zinc-800">
-                    <th className="pb-2 pr-4 font-medium">Kelas</th>
-                    <th className="pb-2 pr-4 font-medium">Done</th>
-                    <th className="pb-2 pr-4 font-medium">Pending</th>
-                    <th className="pb-2 pr-4 font-medium">Overdue</th>
-                    <th className="pb-2 font-medium">Recovery Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classRecoveryLeaderboard.map((item) => (
-                    <tr
-                      key={`class-recovery-${item.className}`}
-                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
-                    >
-                      <td className="py-3 pr-4 font-medium text-zinc-100">
-                        {item.className}
-                      </td>
-                      <td className="py-3 pr-4 text-emerald-300">
-                        {item.done}
-                      </td>
-                      <td className="py-3 pr-4 text-amber-300">
-                        {item.pending}
-                      </td>
-                      <td className="py-3 pr-4 text-red-300">{item.overdue}</td>
-                      <td className="py-3 font-semibold text-zinc-100">
-                        {item.recoveryRate}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                  Leaderboard Recovery Rate
-                </p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Ranking assignee yang paling baik menyelesaikan follow-up
-                </p>
-              </div>
-              <div className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
-                Fokus recovery rate
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 md:hidden">
-              {recoveryLeaderboard.map((item) => (
-                <button
-                  key={`recovery-mobile-${item.userId}`}
-                  type="button"
-                  onClick={() => {
-                    setAssigneeFilter(item.userId);
-                    setVisibleCount(10);
-                  }}
-                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-100">
-                        {item.assigneeName}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Ranking recovery rate follow-up
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-200">
-                      {item.recoveryRate}%
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
-                        Done
-                      </p>
-                      <p className="mt-1 font-semibold text-emerald-100">
-                        {item.done}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                        Overdue
-                      </p>
-                      <p className="mt-1 font-semibold text-red-100">
-                        {item.overdue}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-zinc-500 md:hidden">
-              Geser tabel ke samping untuk melihat semua kolom.
-            </p>
-            <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-zinc-500">
-                  <tr className="border-b border-zinc-800">
-                    <th className="pb-2 pr-4 font-medium">Assignee</th>
-                    <th className="pb-2 pr-4 font-medium">Done</th>
-                    <th className="pb-2 pr-4 font-medium">Overdue</th>
-                    <th className="pb-2 font-medium">Recovery Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recoveryLeaderboard.map((item) => (
-                    <tr
-                      key={`recovery-${item.userId}`}
-                      className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
-                    >
-                      <td className="py-3 pr-4 font-medium text-zinc-100">
-                        {item.assigneeName}
-                      </td>
-                      <td className="py-3 pr-4 text-emerald-300">
-                        {item.done}
-                      </td>
-                      <td className="py-3 pr-4 text-red-300">{item.overdue}</td>
-                      <td className="py-3 font-semibold text-zinc-100">
-                        {item.recoveryRate}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                  Compare Assignee
-                </p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Bandingkan performa dua assignee
-                </p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-2">
-                <div className={dashboardToolbarPanelClass}>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                    Assignee A
-                  </p>
-                  <Select
-                    value={compareAssigneeA}
-                    onValueChange={setCompareAssigneeA}
-                  >
-                    <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-900 text-zinc-200">
-                      <SelectValue placeholder="Assignee A" />
-                    </SelectTrigger>
-                    <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                      <SelectItem value="none">Pilih Assignee A</SelectItem>
-                      {data.assignmentSummary.map((item) => (
-                        <SelectItem
-                          key={`compare-a-${item.userId}`}
-                          value={item.userId}
-                        >
-                          {item.assigneeName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className={dashboardToolbarPanelClass}>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                    Assignee B
-                  </p>
-                  <Select
-                    value={compareAssigneeB}
-                    onValueChange={setCompareAssigneeB}
-                  >
-                    <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-900 text-zinc-200">
-                      <SelectValue placeholder="Assignee B" />
-                    </SelectTrigger>
-                    <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                      <SelectItem value="none">Pilih Assignee B</SelectItem>
-                      {data.assignmentSummary.map((item) => (
-                        <SelectItem
-                          key={`compare-b-${item.userId}`}
-                          value={item.userId}
-                        >
-                          {item.assigneeName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {compareAssigneeItemA && compareAssigneeItemB ? (
-              <div className="mt-4 space-y-3">
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={exportingCompare}
-                    onClick={() => {
-                      void handleExportCompareAssignee();
-                    }}
-                    className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
-                  >
-                    {exportingCompare ? "Memproses..." : "Export Compare"}
-                  </Button>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {[compareAssigneeItemA, compareAssigneeItemB].map((item) => (
-                    <div
-                      key={`compare-card-${item.userId}`}
-                      className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 via-zinc-900/75 to-sky-950/20 px-4 py-4 shadow-[0_22px_60px_-44px_rgba(14,165,233,0.7)]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm font-semibold text-zinc-100">
-                          {item.assigneeName}
-                        </p>
-                        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200">
-                          {item.completionRate}% complete
-                        </span>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-zinc-500">Total</p>
-                          <p className="font-medium text-zinc-100">
-                            {item.total}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-zinc-500">Done</p>
-                          <p className="font-medium text-emerald-300">
-                            {item.done}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-zinc-500">Pending</p>
-                          <p className="font-medium text-amber-300">
-                            {item.pending}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-zinc-500">Completion</p>
-                          <p className="font-medium text-zinc-100">
-                            {item.completionRate}%
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="mt-4 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-4 text-sm text-zinc-500">
-                Pilih dua assignee untuk membandingkan performanya.
-              </p>
-            )}
-          </div>
-
-          {showOverdueBanner ? (
-            <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-red-200">
-                    Ada follow-up overdue baru
-                  </p>
-                  <p className="mt-1 text-sm text-red-100/90">
-                    Saat ini ada {overdueNotifications.length} follow-up overdue
-                    pada filter aktif. Prioritaskan tindak lanjut.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDismissOverdueBanner}
-                  className="border-red-400/50 bg-red-950/30 text-red-100 hover:border-red-300/60 hover:bg-red-500/15"
-                >
-                  Tutup
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          {!hideReminderCards && automaticReminders.length > 0 ? (
-            <div className="grid gap-2">
-              {automaticReminders.map((message) => (
-                <div
-                  key={message}
-                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-                >
-                  {message}
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div
-            className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
-          >
-            {[
-              ["all", "Semua"],
-              ["pending", "Pending"],
-              ["done", "Selesai"],
-              ["overdue", "Overdue"],
-              ["dueToday", "Due Today"],
-            ].map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setNotificationFilter(
-                    value as
-                      | "all"
-                      | "pending"
-                      | "done"
-                      | "overdue"
-                      | "dueToday",
-                  );
-                  setVisibleCount(10);
-                }}
-                className={
-                  notificationFilter === value
-                    ? "min-h-9 border-sky-500 bg-sky-500/10 text-sky-200"
-                    : `min-h-9 ${dashboardOutlineButtonClass}`
-                }
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-
-          <div
-            className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
-          >
-            <Select
-              value={sortBy}
-              onValueChange={(value) => {
-                setSortBy(value as "latest" | "deadline" | "overdue");
-                setVisibleCount(10);
-              }}
-            >
-              <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
-                <SelectValue placeholder="Urutkan notifikasi" />
-              </SelectTrigger>
-              <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                <SelectItem value="latest">Terbaru</SelectItem>
-                <SelectItem value="deadline">Deadline Terdekat</SelectItem>
-                <SelectItem value="overdue">Overdue Dulu</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setVisibleCount(10);
-              }}
-              placeholder="Cari siswa, kelas, atau isi follow-up..."
-              className="w-full min-w-[240px] border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-sm"
-            />
-          </div>
-
-          <div
-            className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
-          >
-            <Input
-              type="date"
-              value={bulkDeadline}
-              onChange={(event) => setBulkDeadline(event.target.value)}
-              className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs"
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={
-                bulkSavingDeadline ||
-                !bulkDeadline ||
-                filteredNotifications.every(
-                  (notification) => notification.isRead,
-                )
-              }
-              onClick={() => {
-                void handleBulkUpdateDeadline();
-              }}
-              className={`min-h-9 ${dashboardAmberOutlineButtonClass}`}
-            >
-              {bulkSavingDeadline ? "Memproses..." : "Bulk Set Deadline"}
-            </Button>
-            {canManageAssignees ? (
-              <>
                 <Select
-                  value={bulkAssigneeId}
-                  onValueChange={setBulkAssigneeId}
+                  value={classFilter}
+                  onValueChange={(value) => {
+                    setClassFilter(value);
+                    setVisibleCount(10);
+                  }}
                 >
-                  <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
-                    <SelectValue placeholder="Bulk reassign assignee" />
+                  <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
+                    <SelectValue placeholder="Semua kelas" />
                   </SelectTrigger>
                   <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                    <SelectItem value="none">Pilih assignee baru</SelectItem>
-                    {assigneeOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.fullName} • {option.role}
+                    <SelectItem value="all">Semua Kelas</SelectItem>
+                    {classOptions.map((item) => (
+                      <SelectItem key={item.id} value={item.name}>
+                        {item.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={
-                    bulkReassigning ||
-                    bulkAssigneeId === "none" ||
-                    filteredNotifications.every(
-                      (notification) => notification.isRead,
-                    )
-                  }
-                  onClick={() => {
-                    void handleBulkReassign();
-                  }}
-                  className={`min-h-9 ${dashboardVioletOutlineButtonClass}`}
-                >
-                  {bulkReassigning ? "Memproses..." : "Bulk Reassign"}
-                </Button>
-              </>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={
-                bulkMarkingDone ||
-                filteredNotifications.every(
-                  (notification) => notification.isRead,
-                )
-              }
-              onClick={() => {
-                void handleBulkMarkDone();
-              }}
-              className={`min-h-9 ${dashboardEmeraldOutlineButtonClass}`}
-            >
-              {bulkMarkingDone ? "Memproses..." : "Bulk Tandai Selesai"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={exportingReport || filteredNotifications.length === 0}
-              onClick={() => {
-                void handleExportFollowUpReport();
-              }}
-              className={`min-h-9 ${dashboardSkyOutlineButtonClass}`}
-            >
-              {exportingReport ? "Memproses..." : "Export Follow-up"}
-            </Button>
-          </div>
+              </div>
 
-          {visibleNotifications.length > 0 ? (
-            visibleNotifications.map((notification) => (
-              <div
-                key={notification.id}
-                className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-4"
-              >
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-100">
-                      {notification.judul}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      {notification.className || "-"}
-                      {notification.deadline
-                        ? ` • Deadline ${notification.deadline}`
-                        : ""}
-                    </p>
-                    {!notification.isRead &&
-                    notification.deadline &&
-                    notification.deadline < today ? (
-                      <p className="mt-1 inline-flex rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-red-300">
-                        Overdue
-                      </p>
-                    ) : null}
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">
-                      {notification.pesan}
-                    </p>
+              <div className={dashboardToolbarPanelClass}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Filter Assignee
+                </p>
+                <Select
+                  value={assigneeFilter}
+                  onValueChange={(value) => {
+                    setAssigneeFilter(value);
+                    setVisibleCount(10);
+                  }}
+                >
+                  <SelectTrigger className="border-zinc-800 bg-zinc-950 text-zinc-200">
+                    <SelectValue placeholder="Semua assignee" />
+                  </SelectTrigger>
+                  <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                    <SelectItem value="all">Semua Assignee</SelectItem>
+                    {data.assignmentSummary.map((item) => (
+                      <SelectItem key={item.userId} value={item.userId}>
+                        {item.assigneeName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {data.students.length > 0 ? (
+              <div className="grid gap-3">
+                {data.students.map((student) => (
+                  <div
+                    key={student.studentId}
+                    className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-3"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {student.studentName}
+                        </p>
+                        <p className="text-xs text-zinc-500">
+                          {student.nis} • {student.className}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                          Rate {student.attendanceRate}%
+                        </span>
+                        <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-200">
+                          {student.absent} alpha
+                        </span>
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-200">
+                          {student.late} terlambat
+                        </span>
+                      </div>
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
-                        {notification.isRead ? "Selesai" : "Pending"}
-                      </span>
-                      {notification.riskFlags.map((flag) => (
+                      {student.riskFlags.map((flag) => (
                         <span
-                          key={`${notification.id}-${flag}`}
+                          key={`${student.studentId}-${flag}`}
                           className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-100"
                         >
                           {flag}
@@ -3089,228 +1906,462 @@ export function AttendanceRiskInsights() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 xl:w-[12rem] xl:flex-col">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEditingId(notification.id);
-                        setEditingNote(notification.note || "");
-                        setEditingDeadline(notification.deadline || "");
-                        setEditingAssigneeId("keep");
-                      }}
-                      className={dashboardOutlineButtonClass}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        void handleToggleAudit(notification.id);
-                      }}
-                      className={dashboardOutlineButtonClass}
-                    >
-                      Riwayat
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        notification.isRead || markingId === notification.id
-                      }
-                      onClick={() => {
-                        void handleMarkDone(notification.id);
-                      }}
-                      className={dashboardOutlineButtonClass}
-                    >
-                      {notification.isRead ? "Selesai" : "Tandai Selesai"}
-                    </Button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-5">
+                <p className="text-sm font-medium text-zinc-300">
+                  Tidak ada siswa berisiko pada periode aktif.
+                </p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Filter aktif tidak menemukan prioritas attendance risk baru.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={dashboardPanelClass}>
+          <CardHeader className="space-y-3">
+            <CardTitle className="flex items-center gap-2 text-zinc-100">
+              <BellRing className="h-4 w-4 text-sky-400" />
+              Internal Notifications
+            </CardTitle>
+            <p className="text-sm leading-6 text-zinc-400">
+              Follow-up attendance terbaru, KPI penyelesaian, reminder, dan aksi
+              operasional dalam satu workspace.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Total
+                </p>
+                <p className="mt-1 text-xl font-semibold text-zinc-100">
+                  {visibleNotificationSummary.total}
+                </p>
+              </div>
+              <div className={`${dashboardInsetCardClass} border-amber-500/20`}>
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Pending
+                </p>
+                <p className="mt-1 text-xl font-semibold text-amber-300">
+                  {visibleNotificationSummary.pending}
+                </p>
+              </div>
+              <div
+                className={`${dashboardInsetCardClass} border-emerald-500/20`}
+              >
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Selesai
+                </p>
+                <p className="mt-1 text-xl font-semibold text-emerald-300">
+                  {visibleNotificationSummary.done}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-4">
+              <div
+                className={`${dashboardInsetCardClass} border-emerald-500/20`}
+              >
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  KPI 7 Hari
+                </p>
+                <p className="mt-2 text-lg font-semibold text-zinc-100">
+                  {weeklyNotifications.length} follow-up
+                </p>
+                <p className="text-sm text-emerald-300">
+                  Completion rate {weeklyCompletionRate}%
+                </p>
+              </div>
+              <div
+                className={`${dashboardInsetCardClass} border-emerald-500/20`}
+              >
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  KPI Bulan Ini
+                </p>
+                <p className="mt-2 text-lg font-semibold text-zinc-100">
+                  {monthlyNotifications.length} follow-up
+                </p>
+                <p className="text-sm text-emerald-300">
+                  Completion rate {monthlyCompletionRate}%
+                </p>
+              </div>
+              <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Completed Today
+                </p>
+                <p className="mt-2 text-lg font-semibold text-zinc-100">
+                  {completedTodayCount}
+                </p>
+                <p className="text-sm text-emerald-300">
+                  Follow-up selesai hari ini
+                </p>
+              </div>
+              <div className={`${dashboardInsetCardClass} border-red-500/20`}>
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  SLA Breach
+                </p>
+                <p className="mt-2 text-lg font-semibold text-red-300">
+                  {slaBreachCount}
+                </p>
+                <p className="text-sm text-red-300">
+                  Pending melewati deadline
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-sky-200">
+                Snapshot Kepala Sekolah
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-4">
+                <div>
+                  <p className="text-xs text-sky-100/70">Total Follow-up</p>
+                  <p className="text-lg font-semibold text-white">
+                    {executiveSnapshot.totalFollowUps}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-100/70">Completion Rate</p>
+                  <p className="text-lg font-semibold text-white">
+                    {executiveSnapshot.completionRate}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-100/70">Top Class</p>
+                  <p className="text-lg font-semibold text-white">
+                    {executiveSnapshot.topClass}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-100/70">Top Assignee</p>
+                  <p className="text-lg font-semibold text-white">
+                    {executiveSnapshot.topAssignee}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-100/70">Overdue</p>
+                  <p className="text-lg font-semibold text-red-100">
+                    {executiveSnapshot.overdue}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-100/70">Due Today</p>
+                  <p className="text-lg font-semibold text-amber-100">
+                    {executiveSnapshot.dueToday}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky top-2 z-10 grid gap-3 rounded-[1.5rem] border border-zinc-800/80 bg-zinc-900/85 p-2.5 backdrop-blur md:top-4 md:rounded-[1.75rem] md:p-3 xl:grid-cols-[minmax(0,220px)_1fr]">
+              <div className={dashboardToolbarPanelClass}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Periode Dashboard
+                </p>
+                <Select
+                  value={periodFilter}
+                  onValueChange={(value) =>
+                    setPeriodFilter(value as "7d" | "30d" | "month")
+                  }
+                >
+                  <SelectTrigger className="w-full border-zinc-800 bg-zinc-950 text-zinc-200">
+                    <SelectValue placeholder="Periode dashboard" />
+                  </SelectTrigger>
+                  <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                    <SelectItem value="7d">7 Hari</SelectItem>
+                    <SelectItem value="30d">30 Hari</SelectItem>
+                    <SelectItem value="month">Bulan Ini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div
+                className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+              >
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={printingDashboard}
+                  onClick={() => {
+                    void handlePrintDashboardReport();
+                  }}
+                  className={dashboardOutlineButtonClass}
+                >
+                  {printingDashboard ? "Memproses..." : "Print Dashboard"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleToggleReminderCards}
+                  className={dashboardOutlineButtonClass}
+                >
+                  {hideReminderCards
+                    ? "Tampilkan Reminder"
+                    : "Sembunyikan Reminder"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResetDashboardUiState}
+                  className={dashboardOutlineButtonClass}
+                >
+                  Reset Tampilan
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={exportingDashboardPack}
+                  onClick={() => {
+                    void handleExportDashboardPack();
+                  }}
+                  className={dashboardEmeraldOutlineButtonClass}
+                >
+                  {exportingDashboardPack
+                    ? "Memproses..."
+                    : "Export Dashboard Pack"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={exportingAnalytics}
+                  onClick={() => {
+                    void handleExportAnalytics();
+                  }}
+                  className={dashboardVioletOutlineButtonClass}
+                >
+                  {exportingAnalytics ? "Memproses..." : "Export Analytics"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={exportingKpi}
+                  onClick={() => {
+                    void handleExportKpiDashboard();
+                  }}
+                  className={dashboardSkyOutlineButtonClass}
+                >
+                  {exportingKpi ? "Memproses..." : "Export KPI"}
+                </Button>
+                <div className="hidden min-w-[11rem] items-center rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[11px] leading-5 text-zinc-500 lg:ml-auto lg:flex">
+                  Toolbar tetap terlihat saat scroll supaya filter dan export
+                  lebih cepat diakses.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                      Tren Completion 7 Hari
+                    </p>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      Total follow-up vs follow-up selesai per hari
+                    </p>
                   </div>
                 </div>
-
-                {editingId === notification.id ? (
-                  <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_auto_auto]">
-                    <Input
-                      value={editingNote}
-                      maxLength={300}
-                      onChange={(event) => setEditingNote(event.target.value)}
-                      placeholder="Catatan follow-up"
-                      className="border-zinc-800 bg-zinc-900 text-zinc-200"
-                    />
-                    <Input
-                      type="date"
-                      value={editingDeadline}
-                      onChange={(event) =>
-                        setEditingDeadline(event.target.value)
-                      }
-                      className="border-zinc-800 bg-zinc-900 text-zinc-200"
-                    />
-                    {canManageAssignees ? (
-                      <Select
-                        value={editingAssigneeId}
-                        onValueChange={setEditingAssigneeId}
-                      >
-                        <SelectTrigger className="border-zinc-800 bg-zinc-900 text-zinc-200">
-                          <SelectValue placeholder="Reassign assignee" />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
-                          <SelectItem value="keep">
-                            Tetap assignee saat ini
-                          </SelectItem>
-                          {assigneeOptions.map((option) => (
-                            <SelectItem key={option.id} value={option.id}>
-                              {option.fullName} • {option.role}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={savingEditId === notification.id}
-                      onClick={() => {
-                        void handleSaveEdit(notification.id);
-                      }}
-                      className="bg-sky-600 text-white hover:bg-sky-500"
+                <div className="mt-4 grid grid-cols-7 gap-2">
+                  {trendBuckets.map((item) => (
+                    <div
+                      key={item.date}
+                      className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 p-2 shadow-[0_16px_40px_-32px_rgba(59,130,246,0.6)]"
                     >
-                      Simpan
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingId(null);
-                        setEditingNote("");
-                        setEditingDeadline("");
-                        setEditingAssigneeId("keep");
-                      }}
-                      className={dashboardOutlineButtonClass}
-                    >
-                      Batal
-                    </Button>
-                  </div>
-                ) : null}
-
-                {auditOpenId === notification.id ? (
-                  <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                      Riwayat Perubahan
-                    </p>
-                    {auditLoadingId === notification.id ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="h-3 w-28 animate-pulse rounded bg-zinc-800" />
-                        <div className="h-3 w-full animate-pulse rounded bg-zinc-800/80" />
-                        <div className="h-3 w-4/5 animate-pulse rounded bg-zinc-800/70" />
-                      </div>
-                    ) : auditTrail[notification.id]?.length ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="flex justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              void handleExportAuditTrail(
-                                notification,
-                                auditTrail[notification.id],
-                              );
-                            }}
-                            className={dashboardSkyOutlineButtonClass}
-                          >
-                            Export Audit Trail
-                          </Button>
-                        </div>
-                        {auditTrail[notification.id].map((item) => (
+                      <p className="text-[11px] text-zinc-500">{item.label}</p>
+                      <div className="mt-2 flex h-28 items-end gap-1">
+                        <div className="flex-1 rounded-t bg-zinc-700/70">
                           <div
-                            key={item.id}
-                            className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2"
-                          >
-                            <p className="text-xs text-zinc-300">
-                              {item.pesan}
-                            </p>
-                            <p className="mt-1 text-[11px] text-zinc-500">
-                              {new Date(item.createdAt).toLocaleString("id-ID")}
-                            </p>
-                          </div>
-                        ))}
+                            className="rounded-t bg-zinc-500/70"
+                            style={{
+                              height: `${Math.max(
+                                8,
+                                (item.total / maxTrendTotal) * 100,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 rounded-t bg-emerald-900/50">
+                          <div
+                            className="rounded-t bg-emerald-400"
+                            style={{
+                              height: `${Math.max(
+                                8,
+                                (item.completed / maxTrendTotal) * 100,
+                              )}%`,
+                            }}
+                          />
+                        </div>
                       </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-zinc-500">
-                        Belum ada riwayat perubahan.
+                      <p className="mt-2 text-[11px] text-zinc-400">
+                        {item.completed}/{item.total} selesai
                       </p>
-                    )}
-                  </div>
-                ) : null}
+                      <p className="text-[11px] text-emerald-300">
+                        Rate {item.rate}%
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))
-          ) : (
-            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-5">
-              <p className="text-sm font-medium text-zinc-300">
-                Belum ada notifikasi internal attendance.
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">
-                Coba ubah filter periode, status, atau pencarian untuk melihat
-                follow-up lain.
-              </p>
-            </div>
-          )}
 
-          {hasMoreNotifications ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setVisibleCount((current) => current + 10)}
-                className={dashboardOutlineButtonClass}
-              >
-                Load More Follow-up
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className={`${dashboardPanelClass} xl:col-span-2`}>
-        <CardHeader className="space-y-2">
-          <CardTitle className="text-zinc-100">
-            Follow-up per Wali Kelas / Guru
-          </CardTitle>
-          <p className="text-xs text-zinc-500">
-            Rekap assignment follow-up attendance lintas assignee
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={
-                exportingAssignmentSummary ||
-                data.assignmentSummary.length === 0
-              }
-              onClick={() => {
-                void handleExportAssignmentSummary();
-              }}
-              className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
-            >
-              {exportingAssignmentSummary
-                ? "Memproses..."
-                : "Export Assignment Summary"}
-            </Button>
-          </div>
-          {data.assignmentSummary.length > 0 ? (
-            <>
-              <div className="mb-3 grid gap-3 md:hidden">
-                {data.assignmentSummary.map((item) => (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Aging Bucket
+                </p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Umur follow-up pending
+                </p>
+                <div className="mt-4 space-y-3">
                   <button
-                    key={`assignment-mobile-${item.userId}`}
+                    type="button"
+                    onClick={() => {
+                      setAgingFilter("0-3");
+                      setVisibleCount(10);
+                    }}
+                    className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
+                  >
+                    <p className="text-sm text-zinc-100">0-3 Hari</p>
+                    <p className="mt-1 text-lg font-semibold text-zinc-100">
+                      {agingBuckets.zeroToThree}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAgingFilter("4-7");
+                      setVisibleCount(10);
+                    }}
+                    className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
+                  >
+                    <p className="text-sm text-zinc-100">4-7 Hari</p>
+                    <p className="mt-1 text-lg font-semibold text-amber-300">
+                      {agingBuckets.fourToSeven}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAgingFilter("8+");
+                      setVisibleCount(10);
+                    }}
+                    className="block w-full rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-3 text-left transition hover:border-zinc-700 hover:bg-zinc-900/70"
+                  >
+                    <p className="text-sm text-zinc-100">&gt; 7 Hari</p>
+                    <p className="mt-1 text-lg font-semibold text-red-300">
+                      {agingBuckets.overSeven}
+                    </p>
+                  </button>
+                  {agingFilter !== "all" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAgingFilter("all")}
+                      className={`w-full ${dashboardOutlineButtonClass}`}
+                    >
+                      Reset Aging Filter
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Heatmap Overdue
+                </p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Snapshot overdue pending per hari dalam 21 hari terakhir
+                </p>
+                <div className="mt-4 grid grid-cols-7 gap-2">
+                  {overdueHeatmap.map((item) => {
+                    const intensity = Math.max(
+                      0.18,
+                      item.total / maxOverdueHeat || 0.18,
+                    );
+
+                    return (
+                      <button
+                        type="button"
+                        key={`overdue-heat-${item.date}`}
+                        onClick={() => {
+                          setNotificationFilter("overdue");
+                          setVisibleCount(10);
+                        }}
+                        className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 px-2 py-3 text-center transition hover:scale-[1.02] hover:border-red-500/25"
+                        style={{
+                          backgroundColor: `rgba(239, 68, 68, ${intensity})`,
+                        }}
+                      >
+                        <p className="text-[11px] text-zinc-100">
+                          {item.label}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {item.total}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  Scheduled Reminder Summary
+                </p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Ringkasan reminder tindak lanjut
+                </p>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-3">
+                    <p className="text-sm text-zinc-100">Due Today</p>
+                    <p className="mt-1 text-lg font-semibold text-sky-300">
+                      {scheduledReminderSummary.dueToday}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3">
+                    <p className="text-sm text-zinc-100">Due Tomorrow</p>
+                    <p className="mt-1 text-lg font-semibold text-amber-300">
+                      {scheduledReminderSummary.dueTomorrow}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3">
+                    <p className="text-sm text-zinc-100">Overdue</p>
+                    <p className="mt-1 text-lg font-semibold text-red-300">
+                      {scheduledReminderSummary.overdue}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    Top Assignee Performance
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Ranking berdasarkan completion rate follow-up
+                  </p>
+                </div>
+                <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+                  {topAssigneePerformance.length} assignee aktif
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:hidden">
+                {topAssigneePerformance.map((item) => (
+                  <button
+                    key={`performance-mobile-top-${item.userId}`}
                     type="button"
                     onClick={() => {
                       setAssigneeFilter(item.userId);
@@ -3324,14 +2375,143 @@ export function AttendanceRiskInsights() {
                           {item.assigneeName}
                         </p>
                         <p className="mt-1 text-xs text-zinc-500">
-                          Rekap assignment follow-up
+                          Ringkasan follow-up per assignee
                         </p>
                       </div>
                       <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
-                        Total {item.total}
+                        {item.completionRate}% complete
+                      </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                          Total
+                        </p>
+                        <p className="mt-1 font-semibold text-zinc-100">
+                          {item.total}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                          Pending
+                        </p>
+                        <p className="mt-1 font-semibold text-amber-100">
+                          {item.pending}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                          Done
+                        </p>
+                        <p className="mt-1 font-semibold text-emerald-100">
+                          {item.done}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                          Overdue
+                        </p>
+                        <p className="mt-1 font-semibold text-red-100">
+                          {item.overdue}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-zinc-500 md:hidden">
+                Geser tabel ke samping untuk melihat semua kolom.
+              </p>
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-zinc-500">
+                    <tr className="border-b border-zinc-800">
+                      <th className="pb-2 pr-4 font-medium">Assignee</th>
+                      <th className="pb-2 pr-4 font-medium">Total</th>
+                      <th className="pb-2 pr-4 font-medium">Done</th>
+                      <th className="pb-2 pr-4 font-medium">Pending</th>
+                      <th className="pb-2 font-medium">Completion Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topAssigneePerformance.map((item) => (
+                      <tr
+                        key={`performance-${item.userId}`}
+                        className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
+                      >
+                        <td className="py-3 pr-4 font-medium text-zinc-100">
+                          {item.assigneeName}
+                        </td>
+                        <td className="py-3 pr-4">{item.total}</td>
+                        <td className="py-3 pr-4 text-emerald-300">
+                          {item.done}
+                        </td>
+                        <td className="py-3 pr-4 text-amber-300">
+                          {item.pending}
+                        </td>
+                        <td className="py-3 font-semibold text-zinc-100">
+                          {item.completionRate}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    Dashboard Summary per Kelas
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Ringkasan follow-up berdasarkan kelas
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={exportingClassSummary}
+                  onClick={() => {
+                    void handleExportClassSummary();
+                  }}
+                  className={dashboardSkyOutlineButtonClass}
+                >
+                  {exportingClassSummary
+                    ? "Memproses..."
+                    : "Export Summary Kelas"}
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 md:hidden">
+                {classRecoveryLeaderboard.map((item) => (
+                  <div
+                    key={`class-recovery-mobile-${item.className}`}
+                    className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {item.className}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Recovery leaderboard kelas
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-200">
+                        {item.recoveryRate}%
                       </span>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                          Done
+                        </p>
+                        <p className="mt-1 font-semibold text-emerald-100">
+                          {item.done}
+                        </p>
+                      </div>
                       <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
                           Pending
@@ -3348,6 +2528,118 @@ export function AttendanceRiskInsights() {
                           {item.overdue}
                         </p>
                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-zinc-500 md:hidden">
+                Geser tabel ke samping untuk melihat semua kolom.
+              </p>
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-zinc-500">
+                    <tr className="border-b border-zinc-800">
+                      <th className="pb-2 pr-4 font-medium">Kelas</th>
+                      <th className="pb-2 pr-4 font-medium">Total</th>
+                      <th className="pb-2 pr-4 font-medium">Done</th>
+                      <th className="pb-2 pr-4 font-medium">Pending</th>
+                      <th className="pb-2 font-medium">Overdue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classSummaryRows.map((item) => (
+                      <tr
+                        key={`class-summary-${item.className}`}
+                        className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
+                      >
+                        <td className="py-3 pr-4 font-medium text-zinc-100">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setClassFilter(item.className);
+                              setVisibleCount(10);
+                            }}
+                            className="text-left underline-offset-4 hover:underline"
+                          >
+                            {item.className}
+                          </button>
+                        </td>
+                        <td className="py-3 pr-4">{item.total}</td>
+                        <td className="py-3 pr-4 text-emerald-300">
+                          {item.done}
+                        </td>
+                        <td className="py-3 pr-4 text-amber-300">
+                          {item.pending}
+                        </td>
+                        <td className="py-3 text-red-300">{item.overdue}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    Leaderboard Recovery per Kelas
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Ranking kelas dengan recovery follow-up terbaik
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={exportingClassLeaderboard}
+                  onClick={() => {
+                    void handleExportClassLeaderboard();
+                  }}
+                  className={dashboardSkyOutlineButtonClass}
+                >
+                  {exportingClassLeaderboard
+                    ? "Memproses..."
+                    : "Export Leaderboard"}
+                </Button>
+              </div>
+              <p className="mt-4 text-xs text-zinc-500 md:hidden">
+                Geser tabel ke samping untuk melihat semua kolom.
+              </p>
+              <div className="mt-4 grid gap-3 md:hidden">
+                {topAssigneePerformance.map((item) => (
+                  <button
+                    key={`performance-mobile-${item.userId}`}
+                    type="button"
+                    onClick={() => {
+                      setAssigneeFilter(item.userId);
+                      setVisibleCount(10);
+                    }}
+                    className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {item.assigneeName}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Ranking completion rate follow-up
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-200">
+                        {item.completionRate}%
+                      </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                      <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                          Total
+                        </p>
+                        <p className="mt-1 font-semibold text-zinc-100">
+                          {item.total}
+                        </p>
+                      </div>
                       <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
                           Done
@@ -3356,63 +2648,857 @@ export function AttendanceRiskInsights() {
                           {item.done}
                         </p>
                       </div>
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                          Pending
+                        </p>
+                        <p className="mt-1 font-semibold text-amber-100">
+                          {item.pending}
+                        </p>
+                      </div>
                     </div>
                   </button>
                 ))}
               </div>
-              <p className="mb-2 text-xs text-zinc-500 md:hidden">
+              <p className="mt-4 text-xs text-zinc-500 md:hidden">
                 Geser tabel ke samping untuk melihat semua kolom.
               </p>
-              <div className="hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
                 <table className="min-w-full text-sm">
                   <thead className="text-left text-zinc-500">
                     <tr className="border-b border-zinc-800">
-                      <th className="pb-2 pr-4 font-medium">Assignee</th>
-                      <th className="pb-2 pr-4 font-medium">Total</th>
+                      <th className="pb-2 pr-4 font-medium">Kelas</th>
+                      <th className="pb-2 pr-4 font-medium">Done</th>
                       <th className="pb-2 pr-4 font-medium">Pending</th>
                       <th className="pb-2 pr-4 font-medium">Overdue</th>
-                      <th className="pb-2 font-medium">Selesai</th>
+                      <th className="pb-2 font-medium">Recovery Rate</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.assignmentSummary.map((item) => (
+                    {classRecoveryLeaderboard.map((item) => (
                       <tr
-                        key={item.userId}
+                        key={`class-recovery-${item.className}`}
                         className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
                       >
                         <td className="py-3 pr-4 font-medium text-zinc-100">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAssigneeFilter(item.userId);
-                              setVisibleCount(10);
-                            }}
-                            className="text-left underline-offset-4 hover:underline"
-                          >
-                            {item.assigneeName}
-                          </button>
+                          {item.className}
                         </td>
-                        <td className="py-3 pr-4">{item.total}</td>
+                        <td className="py-3 pr-4 text-emerald-300">
+                          {item.done}
+                        </td>
                         <td className="py-3 pr-4 text-amber-300">
                           {item.pending}
                         </td>
                         <td className="py-3 pr-4 text-red-300">
                           {item.overdue}
                         </td>
-                        <td className="py-3 text-emerald-300">{item.done}</td>
+                        <td className="py-3 font-semibold text-zinc-100">
+                          {item.recoveryRate}%
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </>
-          ) : (
-            <p className="text-sm text-zinc-500">
-              Belum ada assignment follow-up attendance.
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    Leaderboard Recovery Rate
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Ranking assignee yang paling baik menyelesaikan follow-up
+                  </p>
+                </div>
+                <div className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200">
+                  Fokus recovery rate
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:hidden">
+                {recoveryLeaderboard.map((item) => (
+                  <button
+                    key={`recovery-mobile-${item.userId}`}
+                    type="button"
+                    onClick={() => {
+                      setAssigneeFilter(item.userId);
+                      setVisibleCount(10);
+                    }}
+                    className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {item.assigneeName}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Ranking recovery rate follow-up
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-200">
+                        {item.recoveryRate}%
+                      </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                          Done
+                        </p>
+                        <p className="mt-1 font-semibold text-emerald-100">
+                          {item.done}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                          Overdue
+                        </p>
+                        <p className="mt-1 font-semibold text-red-100">
+                          {item.overdue}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-zinc-500 md:hidden">
+                Geser tabel ke samping untuk melihat semua kolom.
+              </p>
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-zinc-500">
+                    <tr className="border-b border-zinc-800">
+                      <th className="pb-2 pr-4 font-medium">Assignee</th>
+                      <th className="pb-2 pr-4 font-medium">Done</th>
+                      <th className="pb-2 pr-4 font-medium">Overdue</th>
+                      <th className="pb-2 font-medium">Recovery Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recoveryLeaderboard.map((item) => (
+                      <tr
+                        key={`recovery-${item.userId}`}
+                        className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
+                      >
+                        <td className="py-3 pr-4 font-medium text-zinc-100">
+                          {item.assigneeName}
+                        </td>
+                        <td className="py-3 pr-4 text-emerald-300">
+                          {item.done}
+                        </td>
+                        <td className="py-3 pr-4 text-red-300">
+                          {item.overdue}
+                        </td>
+                        <td className="py-3 font-semibold text-zinc-100">
+                          {item.recoveryRate}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                    Compare Assignee
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    Bandingkan performa dua assignee
+                  </p>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div className={dashboardToolbarPanelClass}>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                      Assignee A
+                    </p>
+                    <Select
+                      value={compareAssigneeA}
+                      onValueChange={setCompareAssigneeA}
+                    >
+                      <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-900 text-zinc-200">
+                        <SelectValue placeholder="Assignee A" />
+                      </SelectTrigger>
+                      <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                        <SelectItem value="none">Pilih Assignee A</SelectItem>
+                        {data.assignmentSummary.map((item) => (
+                          <SelectItem
+                            key={`compare-a-${item.userId}`}
+                            value={item.userId}
+                          >
+                            {item.assigneeName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className={dashboardToolbarPanelClass}>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                      Assignee B
+                    </p>
+                    <Select
+                      value={compareAssigneeB}
+                      onValueChange={setCompareAssigneeB}
+                    >
+                      <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-900 text-zinc-200">
+                        <SelectValue placeholder="Assignee B" />
+                      </SelectTrigger>
+                      <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                        <SelectItem value="none">Pilih Assignee B</SelectItem>
+                        {data.assignmentSummary.map((item) => (
+                          <SelectItem
+                            key={`compare-b-${item.userId}`}
+                            value={item.userId}
+                          >
+                            {item.assigneeName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {compareAssigneeItemA && compareAssigneeItemB ? (
+                <div className="mt-4 space-y-3">
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={exportingCompare}
+                      onClick={() => {
+                        void handleExportCompareAssignee();
+                      }}
+                      className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
+                    >
+                      {exportingCompare ? "Memproses..." : "Export Compare"}
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {[compareAssigneeItemA, compareAssigneeItemB].map(
+                      (item) => (
+                        <div
+                          key={`compare-card-${item.userId}`}
+                          className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 via-zinc-900/75 to-sky-950/20 px-4 py-4 shadow-[0_22px_60px_-44px_rgba(14,165,233,0.7)]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm font-semibold text-zinc-100">
+                              {item.assigneeName}
+                            </p>
+                            <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200">
+                              {item.completionRate}% complete
+                            </span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <p className="text-zinc-500">Total</p>
+                              <p className="font-medium text-zinc-100">
+                                {item.total}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Done</p>
+                              <p className="font-medium text-emerald-300">
+                                {item.done}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Pending</p>
+                              <p className="font-medium text-amber-300">
+                                {item.pending}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-zinc-500">Completion</p>
+                              <p className="font-medium text-zinc-100">
+                                {item.completionRate}%
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-4 text-sm text-zinc-500">
+                  Pilih dua assignee untuk membandingkan performanya.
+                </p>
+              )}
+            </div>
+
+            {showOverdueBanner ? (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-red-200">
+                      Ada follow-up overdue baru
+                    </p>
+                    <p className="mt-1 text-sm text-red-100/90">
+                      Saat ini ada {overdueNotifications.length} follow-up
+                      overdue pada filter aktif. Prioritaskan tindak lanjut.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDismissOverdueBanner}
+                    className="border-red-400/50 bg-red-950/30 text-red-100 hover:border-red-300/60 hover:bg-red-500/15"
+                  >
+                    Tutup
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {!hideReminderCards && automaticReminders.length > 0 ? (
+              <div className="grid gap-2">
+                {automaticReminders.map((message) => (
+                  <div
+                    key={message}
+                    className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+                  >
+                    {message}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div
+              className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+            >
+              {[
+                ["all", "Semua"],
+                ["pending", "Pending"],
+                ["done", "Selesai"],
+                ["overdue", "Overdue"],
+                ["dueToday", "Due Today"],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setNotificationFilter(
+                      value as
+                        | "all"
+                        | "pending"
+                        | "done"
+                        | "overdue"
+                        | "dueToday",
+                    );
+                    setVisibleCount(10);
+                  }}
+                  className={
+                    notificationFilter === value
+                      ? "min-h-9 border-sky-500 bg-sky-500/10 text-sky-200"
+                      : `min-h-9 ${dashboardOutlineButtonClass}`
+                  }
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            <div
+              className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+            >
+              <Select
+                value={sortBy}
+                onValueChange={(value) => {
+                  setSortBy(value as "latest" | "deadline" | "overdue");
+                  setVisibleCount(10);
+                }}
+              >
+                <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
+                  <SelectValue placeholder="Urutkan notifikasi" />
+                </SelectTrigger>
+                <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                  <SelectItem value="latest">Terbaru</SelectItem>
+                  <SelectItem value="deadline">Deadline Terdekat</SelectItem>
+                  <SelectItem value="overdue">Overdue Dulu</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setVisibleCount(10);
+                }}
+                placeholder="Cari siswa, kelas, atau isi follow-up..."
+                className="w-full min-w-[240px] border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-sm"
+              />
+            </div>
+
+            <div
+              className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+            >
+              <Input
+                type="date"
+                value={bulkDeadline}
+                onChange={(event) => setBulkDeadline(event.target.value)}
+                className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  bulkSavingDeadline ||
+                  !bulkDeadline ||
+                  filteredNotifications.every(
+                    (notification) => notification.isRead,
+                  )
+                }
+                onClick={() => {
+                  void handleBulkUpdateDeadline();
+                }}
+                className={`min-h-9 ${dashboardAmberOutlineButtonClass}`}
+              >
+                {bulkSavingDeadline ? "Memproses..." : "Bulk Set Deadline"}
+              </Button>
+              {canManageAssignees ? (
+                <>
+                  <Select
+                    value={bulkAssigneeId}
+                    onValueChange={setBulkAssigneeId}
+                  >
+                    <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
+                      <SelectValue placeholder="Bulk reassign assignee" />
+                    </SelectTrigger>
+                    <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                      <SelectItem value="none">Pilih assignee baru</SelectItem>
+                      {assigneeOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.fullName} • {option.role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      bulkReassigning ||
+                      bulkAssigneeId === "none" ||
+                      filteredNotifications.every(
+                        (notification) => notification.isRead,
+                      )
+                    }
+                    onClick={() => {
+                      void handleBulkReassign();
+                    }}
+                    className={`min-h-9 ${dashboardVioletOutlineButtonClass}`}
+                  >
+                    {bulkReassigning ? "Memproses..." : "Bulk Reassign"}
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  bulkMarkingDone ||
+                  filteredNotifications.every(
+                    (notification) => notification.isRead,
+                  )
+                }
+                onClick={() => {
+                  void handleBulkMarkDone();
+                }}
+                className={`min-h-9 ${dashboardEmeraldOutlineButtonClass}`}
+              >
+                {bulkMarkingDone ? "Memproses..." : "Bulk Tandai Selesai"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={exportingReport || filteredNotifications.length === 0}
+                onClick={() => {
+                  void handleExportFollowUpReport();
+                }}
+                className={`min-h-9 ${dashboardSkyOutlineButtonClass}`}
+              >
+                {exportingReport ? "Memproses..." : "Export Follow-up"}
+              </Button>
+            </div>
+
+            {visibleNotifications.length > 0 ? (
+              visibleNotifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-4"
+                >
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {notification.judul}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {notification.className || "-"}
+                        {notification.deadline
+                          ? ` • Deadline ${notification.deadline}`
+                          : ""}
+                      </p>
+                      {!notification.isRead &&
+                      notification.deadline &&
+                      notification.deadline < today ? (
+                        <p className="mt-1 inline-flex rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-red-300">
+                          Overdue
+                        </p>
+                      ) : null}
+                      <p className="mt-2 text-sm leading-6 text-zinc-400">
+                        {notification.pesan}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                          {notification.isRead ? "Selesai" : "Pending"}
+                        </span>
+                        {notification.riskFlags.map((flag) => (
+                          <span
+                            key={`${notification.id}-${flag}`}
+                            className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-100"
+                          >
+                            {flag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 xl:w-[12rem] xl:flex-col">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingId(notification.id);
+                          setEditingNote(notification.note || "");
+                          setEditingDeadline(notification.deadline || "");
+                          setEditingAssigneeId("keep");
+                        }}
+                        className={dashboardOutlineButtonClass}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          void handleToggleAudit(notification.id);
+                        }}
+                        className={dashboardOutlineButtonClass}
+                      >
+                        Riwayat
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          notification.isRead || markingId === notification.id
+                        }
+                        onClick={() => {
+                          void handleMarkDone(notification.id);
+                        }}
+                        className={dashboardOutlineButtonClass}
+                      >
+                        {notification.isRead ? "Selesai" : "Tandai Selesai"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {editingId === notification.id ? (
+                    <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_auto_auto]">
+                      <Input
+                        value={editingNote}
+                        maxLength={300}
+                        onChange={(event) => setEditingNote(event.target.value)}
+                        placeholder="Catatan follow-up"
+                        className="border-zinc-800 bg-zinc-900 text-zinc-200"
+                      />
+                      <Input
+                        type="date"
+                        value={editingDeadline}
+                        onChange={(event) =>
+                          setEditingDeadline(event.target.value)
+                        }
+                        className="border-zinc-800 bg-zinc-900 text-zinc-200"
+                      />
+                      {canManageAssignees ? (
+                        <Select
+                          value={editingAssigneeId}
+                          onValueChange={setEditingAssigneeId}
+                        >
+                          <SelectTrigger className="border-zinc-800 bg-zinc-900 text-zinc-200">
+                            <SelectValue placeholder="Reassign assignee" />
+                          </SelectTrigger>
+                          <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                            <SelectItem value="keep">
+                              Tetap assignee saat ini
+                            </SelectItem>
+                            {assigneeOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.fullName} • {option.role}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={savingEditId === notification.id}
+                        onClick={() => {
+                          void handleSaveEdit(notification.id);
+                        }}
+                        className="bg-sky-600 text-white hover:bg-sky-500"
+                      >
+                        Simpan
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditingNote("");
+                          setEditingDeadline("");
+                          setEditingAssigneeId("keep");
+                        }}
+                        className={dashboardOutlineButtonClass}
+                      >
+                        Batal
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {auditOpenId === notification.id ? (
+                    <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                        Riwayat Perubahan
+                      </p>
+                      {auditLoadingId === notification.id ? (
+                        <div className="mt-3 space-y-2">
+                          <div className="h-3 w-28 animate-pulse rounded bg-zinc-800" />
+                          <div className="h-3 w-full animate-pulse rounded bg-zinc-800/80" />
+                          <div className="h-3 w-4/5 animate-pulse rounded bg-zinc-800/70" />
+                        </div>
+                      ) : auditTrail[notification.id]?.length ? (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                void handleExportAuditTrail(
+                                  notification,
+                                  auditTrail[notification.id],
+                                );
+                              }}
+                              className={dashboardSkyOutlineButtonClass}
+                            >
+                              Export Audit Trail
+                            </Button>
+                          </div>
+                          {auditTrail[notification.id].map((item) => (
+                            <div
+                              key={item.id}
+                              className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2"
+                            >
+                              <p className="text-xs text-zinc-300">
+                                {item.pesan}
+                              </p>
+                              <p className="mt-1 text-[11px] text-zinc-500">
+                                {new Date(item.createdAt).toLocaleString(
+                                  "id-ID",
+                                )}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-zinc-500">
+                          Belum ada riwayat perubahan.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 px-4 py-5">
+                <p className="text-sm font-medium text-zinc-300">
+                  Belum ada notifikasi internal attendance.
+                </p>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Coba ubah filter periode, status, atau pencarian untuk melihat
+                  follow-up lain.
+                </p>
+              </div>
+            )}
+
+            {hasMoreNotifications ? (
+              <div className="flex justify-center pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setVisibleCount((current) => current + 10)}
+                  className={dashboardOutlineButtonClass}
+                >
+                  Load More Follow-up
+                </Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className={`${dashboardPanelClass} xl:col-span-2`}>
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-zinc-100">
+              Follow-up per Wali Kelas / Guru
+            </CardTitle>
+            <p className="text-xs text-zinc-500">
+              Rekap assignment follow-up attendance lintas assignee
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  exportingAssignmentSummary ||
+                  data.assignmentSummary.length === 0
+                }
+                onClick={() => {
+                  void handleExportAssignmentSummary();
+                }}
+                className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
+              >
+                {exportingAssignmentSummary
+                  ? "Memproses..."
+                  : "Export Assignment Summary"}
+              </Button>
+            </div>
+            {data.assignmentSummary.length > 0 ? (
+              <>
+                <div className="mb-3 grid gap-3 md:hidden">
+                  {data.assignmentSummary.map((item) => (
+                    <button
+                      key={`assignment-mobile-${item.userId}`}
+                      type="button"
+                      onClick={() => {
+                        setAssigneeFilter(item.userId);
+                        setVisibleCount(10);
+                      }}
+                      className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/90 to-zinc-900/70 p-4 text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-zinc-100">
+                            {item.assigneeName}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            Rekap assignment follow-up
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
+                          Total {item.total}
+                        </span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-amber-200">
+                            Pending
+                          </p>
+                          <p className="mt-1 font-semibold text-amber-100">
+                            {item.pending}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
+                            Overdue
+                          </p>
+                          <p className="mt-1 font-semibold text-red-100">
+                            {item.overdue}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-200">
+                            Done
+                          </p>
+                          <p className="mt-1 font-semibold text-emerald-100">
+                            {item.done}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="mb-2 text-xs text-zinc-500 md:hidden">
+                  Geser tabel ke samping untuk melihat semua kolom.
+                </p>
+                <div className="hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
+                  <table className="min-w-full text-sm">
+                    <thead className="text-left text-zinc-500">
+                      <tr className="border-b border-zinc-800">
+                        <th className="pb-2 pr-4 font-medium">Assignee</th>
+                        <th className="pb-2 pr-4 font-medium">Total</th>
+                        <th className="pb-2 pr-4 font-medium">Pending</th>
+                        <th className="pb-2 pr-4 font-medium">Overdue</th>
+                        <th className="pb-2 font-medium">Selesai</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.assignmentSummary.map((item) => (
+                        <tr
+                          key={item.userId}
+                          className="border-b border-zinc-900/80 text-zinc-200 transition-colors hover:bg-zinc-900/40"
+                        >
+                          <td className="py-3 pr-4 font-medium text-zinc-100">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAssigneeFilter(item.userId);
+                                setVisibleCount(10);
+                              }}
+                              className="text-left underline-offset-4 hover:underline"
+                            >
+                              {item.assigneeName}
+                            </button>
+                          </td>
+                          <td className="py-3 pr-4">{item.total}</td>
+                          <td className="py-3 pr-4 text-amber-300">
+                            {item.pending}
+                          </td>
+                          <td className="py-3 pr-4 text-red-300">
+                            {item.overdue}
+                          </td>
+                          <td className="py-3 text-emerald-300">{item.done}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">
+                Belum ada assignment follow-up attendance.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

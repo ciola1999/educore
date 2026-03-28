@@ -1,9 +1,11 @@
 "use client";
 
 import type { Session } from "next-auth";
-import { getSession, signIn, signOut, useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { getSession, signIn, signOut } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { useAuthSessionRuntime } from "@/components/providers/auth-session-provider";
 import { isTauri } from "@/core/env";
+import { apiPost } from "@/lib/api/request";
 import { type UserSession, useStore } from "@/lib/store/use-store";
 
 type SessionRole = UserSession["role"];
@@ -51,22 +53,34 @@ function buildUserSession(
  * Auth hook for managing user authentication state
  */
 export function useAuth() {
-  const { data: session, status } = useSession();
+  const [hasMounted, setHasMounted] = useState(false);
+  const runtimeSession = useAuthSessionRuntime();
   const user = useStore((state) => state.user);
   const setUser = useStore((state) => state.login);
   const clearUser = useStore((state) => state.logout);
+  const desktopRuntime = hasMounted && isTauri();
+  const session = runtimeSession.session;
+  const status = runtimeSession.status;
   const sessionUser = session?.user ? buildUserSession(session.user) : null;
-  const desktopRuntime = isTauri();
-  const isLoading = status === "loading";
-  const resolvedUser = sessionUser ?? user;
+  const isLoading = !hasMounted || (!desktopRuntime && status === "loading");
+  const resolvedUser = hasMounted ? (sessionUser ?? user) : null;
   const isAuthenticated = resolvedUser !== null;
-  const authSource: AuthSource = sessionUser
-    ? "next-auth"
-    : user
-      ? "desktop-store"
-      : "none";
+  const authSource: AuthSource =
+    hasMounted && sessionUser
+      ? "next-auth"
+      : hasMounted && user
+        ? "desktop-store"
+        : "none";
 
   useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasMounted) {
+      return;
+    }
+
     if (status === "loading") {
       return;
     }
@@ -93,13 +107,40 @@ export function useAuth() {
     if (user && !desktopRuntime) {
       clearUser();
     }
-  }, [status, sessionUser, user, setUser, clearUser, desktopRuntime]);
+  }, [
+    status,
+    sessionUser,
+    user,
+    setUser,
+    clearUser,
+    desktopRuntime,
+    hasMounted,
+  ]);
 
   /**
    * Login with email and password
    */
   async function login(email: string, password: string) {
     const identifier = email.trim();
+
+    if (desktopRuntime) {
+      try {
+        await apiPost<{ user: UserSession }>("/api/auth/login", {
+          email: identifier,
+          password,
+        });
+        return { success: true as const };
+      } catch (error) {
+        return {
+          success: false as const,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Email atau password salah",
+        };
+      }
+    }
+
     const result = await signIn("credentials", {
       email: identifier,
       password,
@@ -139,14 +180,22 @@ export function useAuth() {
    */
   async function logout() {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      if (!desktopRuntime) {
+        await fetch("/api/auth/logout", { method: "POST" });
+      }
     } finally {
-      await signOut({ redirect: false });
+      if (!desktopRuntime) {
+        await signOut({ redirect: false });
+      }
       clearUser();
     }
   }
 
   async function refreshSession() {
+    if (desktopRuntime) {
+      return Boolean(useStore.getState().user);
+    }
+
     const latestSession = await getSession();
 
     if (!latestSession?.user?.id) {

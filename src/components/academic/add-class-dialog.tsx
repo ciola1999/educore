@@ -38,6 +38,8 @@ import {
   type TeacherOption,
 } from "./schemas";
 
+const NO_HOMEROOM_VALUE = "__none__";
+
 export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
   const [loadingTeachers, setLoadingTeachers] = useState(false);
@@ -60,7 +62,7 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
         setLoadingTeachers(true);
         try {
           const data = await apiGet<TeacherOption[]>(
-            "/api/teachers?role=teacher&sortBy=fullName&sortOrder=asc",
+            "/api/teachers?view=options",
           );
           setTeachers(data || []);
         } catch (error) {
@@ -82,7 +84,7 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
       await apiPost<{ id: string }>("/api/classes", {
         name: values.name,
         academicYear: values.academicYear,
-        homeroomTeacherId: values.homeroomTeacherId,
+        homeroomTeacherId: values.homeroomTeacherId || undefined,
       });
 
       toast.success("Kelas berhasil dibuat", {
@@ -163,8 +165,10 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
                 <FormItem>
                   <FormLabel>Wali Kelas</FormLabel>
                   <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value || NO_HOMEROOM_VALUE}
+                    onValueChange={(value) =>
+                      field.onChange(value === NO_HOMEROOM_VALUE ? "" : value)
+                    }
                     disabled={loadingTeachers}
                   >
                     <FormControl>
@@ -179,6 +183,9 @@ export function AddClassDialog({ onSuccess }: { onSuccess: () => void }) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value={NO_HOMEROOM_VALUE}>
+                        Tanpa wali kelas
+                      </SelectItem>
                       {teachers.map((teacher) => (
                         <SelectItem key={teacher.id} value={teacher.id}>
                           {teacher.fullName}

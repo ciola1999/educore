@@ -14,7 +14,26 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 export async function readApiResponse<T>(
   response: Response,
 ): Promise<ApiResponse<T>> {
-  return (await response.json()) as ApiResponse<T>;
+  const raw = await response.text();
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return {
+      success: false,
+      error: "Server mengembalikan respons kosong.",
+      code: "EMPTY_RESPONSE",
+    };
+  }
+
+  try {
+    return JSON.parse(trimmed) as ApiResponse<T>;
+  } catch {
+    return {
+      success: false,
+      error: "Server mengembalikan respons yang tidak valid.",
+      code: "INVALID_RESPONSE_FORMAT",
+    };
+  }
 }
 
 export function getApiErrorMessage(
@@ -24,11 +43,28 @@ export function getApiErrorMessage(
 ) {
   const rawMessage = payload?.error?.trim();
   const normalizedMessage = rawMessage?.toLowerCase();
+  const code = payload?.code?.trim().toUpperCase();
+  const isGenericUnauthorizedMessage =
+    normalizedMessage === "unauthorized" ||
+    normalizedMessage === "unauthenticated";
+
+  if (response.status === 401 && code === "INVALID_CREDENTIALS") {
+    return rawMessage || "Email atau password salah";
+  }
+
+  if (
+    response.status === 401 &&
+    rawMessage &&
+    !isGenericUnauthorizedMessage &&
+    code !== "UNAUTHORIZED"
+  ) {
+    return rawMessage;
+  }
 
   if (
     response.status === 401 ||
-    normalizedMessage === "unauthorized" ||
-    normalizedMessage === "unauthenticated"
+    isGenericUnauthorizedMessage ||
+    code === "UNAUTHORIZED"
   ) {
     return "Sesi login berakhir. Silakan login kembali.";
   }

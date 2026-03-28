@@ -167,28 +167,107 @@ export type SubjectInsert = z.infer<typeof subjectInsertSchema>;
 export type SubjectSelect = z.infer<typeof subjectSelectSchema>;
 
 // ================================
-// 7. SCHEDULE SCHEMA
+// 7. ACADEMIC YEAR / SEMESTER / TEACHING ASSIGNMENT
 // ================================
-export const scheduleInsertSchema = z.object({
+export const academicYearInsertSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    nama: z.string().regex(/^\d{4}\/\d{4}$/, "Format: 2025/2026"),
+    tanggalMulai: z.coerce.date(),
+    tanggalSelesai: z.coerce.date(),
+    isActive: z.boolean().optional().default(false),
+  })
+  .refine((value) => value.tanggalSelesai >= value.tanggalMulai, {
+    message: "Tanggal selesai harus setelah atau sama dengan tanggal mulai",
+    path: ["tanggalSelesai"],
+  });
+
+export const semesterInsertSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    tahunAjaranId: z.string().uuid(),
+    nama: z.string().min(3, "Nama semester minimal 3 karakter"),
+    tanggalMulai: z.coerce.date(),
+    tanggalSelesai: z.coerce.date(),
+    isActive: z.boolean().optional().default(false),
+  })
+  .refine((value) => value.tanggalSelesai >= value.tanggalMulai, {
+    message: "Tanggal selesai harus setelah atau sama dengan tanggal mulai",
+    path: ["tanggalSelesai"],
+  });
+
+export const teacherSubjectInsertSchema = z.object({
   id: z.string().uuid().optional(),
-  classId: z.string().uuid(),
-  subjectId: z.string().uuid(),
-  teacherId: z.string().uuid(),
-  dayOfWeek: z.number().min(0).max(6),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Format: HH:MM"),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Format: HH:MM"),
+  guruId: z.string().uuid(),
+  mataPelajaranId: z.string().uuid(),
+  kelasId: z.string().uuid(),
+  semesterId: z.string().uuid(),
 });
 
-export const scheduleSelectSchema = scheduleInsertSchema.extend({
+export type AcademicYearInsert = z.infer<typeof academicYearInsertSchema>;
+export type SemesterInsert = z.infer<typeof semesterInsertSchema>;
+export type TeacherSubjectInsert = z.infer<typeof teacherSubjectInsertSchema>;
+
+// ================================
+// 8. SCHEDULE SCHEMA
+// ================================
+// Canonical Phase 2.2 schedule model follows `jadwal` and references
+// `guruMapel` so class/subject/teacher/semester truth stays derived from
+// stable master data 2.1 instead of duplicated flat fields.
+export const jadwalInsertSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    guruMapelId: z.string().uuid(),
+    hari: z.number().int().min(0).max(6),
+    jamMulai: z.string().regex(/^\d{2}:\d{2}$/, "Format: HH:MM"),
+    jamSelesai: z.string().regex(/^\d{2}:\d{2}$/, "Format: HH:MM"),
+    ruangan: z.string().trim().max(100).optional().nullable(),
+  })
+  .refine((value) => value.jamSelesai > value.jamMulai, {
+    message: "Jam selesai harus setelah jam mulai",
+    path: ["jamSelesai"],
+  });
+
+export const jadwalSelectSchema = jadwalInsertSchema.safeExtend({
   id: z.string(),
   updatedAt: z.number().nullable(),
 });
 
+export type JadwalInsert = z.infer<typeof jadwalInsertSchema>;
+export type JadwalSelect = z.infer<typeof jadwalSelectSchema>;
+
+// Legacy flat schedule schema kept only for compatibility audit paths and
+// old data access. Do not use this as new source of truth for Phase 2.2.
+export const scheduleInsertSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    classId: z.string().uuid(),
+    subjectId: z.string().uuid(),
+    teacherId: z.string().uuid(),
+    dayOfWeek: z.number().min(0).max(6),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/, "Format: HH:MM"),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/, "Format: HH:MM"),
+  })
+  .superRefine((_value, context) => {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Legacy schedule flat sudah deprecated. Gunakan jadwal canonical berbasis guruMapelId.",
+    });
+  });
+
+export const scheduleSelectSchema = scheduleInsertSchema.safeExtend({
+  id: z.string(),
+  updatedAt: z.number().nullable(),
+});
+
+/** @deprecated Prefer `JadwalInsert` based on `guruMapelId`. */
 export type ScheduleInsert = z.infer<typeof scheduleInsertSchema>;
+/** @deprecated Prefer `JadwalSelect` based on `guruMapelId`. */
 export type ScheduleSelect = z.infer<typeof scheduleSelectSchema>;
 
 // ================================
-// 8. ATTENDANCE SCANNER
+// 9. ATTENDANCE SCANNER
 // ================================
 export const scanSchema = z.object({
   nis: z.string().min(3).max(50).trim(),
@@ -197,7 +276,7 @@ export const scanSchema = z.object({
 export type ScanInput = z.infer<typeof scanSchema>;
 
 // ================================
-// 9. ATTENDANCE MANUAL/JURNAL
+// 10. ATTENDANCE MANUAL/JURNAL
 // ================================
 export const attendanceInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -220,7 +299,7 @@ export type AttendanceInsertInput = z.input<typeof attendanceInsertSchema>;
 export type AttendanceSelect = z.infer<typeof attendanceSelectSchema>;
 
 // ================================
-// 10. ATTENDANCE SETTINGS
+// 11. ATTENDANCE SETTINGS
 // ================================
 export const attendanceSettingsSchema = z.object({
   id: z.string().optional(),
@@ -264,7 +343,7 @@ export type AttendanceHistoryFilter = z.infer<
 >;
 
 // ================================
-// 11. BULK OPERATIONS
+// 12. BULK OPERATIONS
 // ================================
 export const bulkAttendanceSchema = z.object({
   classId: z.string().uuid(),

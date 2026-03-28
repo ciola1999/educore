@@ -98,7 +98,7 @@ export async function PATCH(
   const duplicateNis = await db
     .select({ id: students.id })
     .from(students)
-    .where(and(eq(students.nis, normalizedNis), isNull(students.deletedAt)))
+    .where(eq(students.nis, normalizedNis))
     .limit(1);
 
   if (duplicateNis.length > 0 && duplicateNis[0]?.id !== id) {
@@ -189,7 +189,7 @@ export async function PATCH(
       const duplicateEmail = await db
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.email, normalizedEmail), isNull(users.deletedAt)))
+        .where(eq(users.email, normalizedEmail))
         .limit(1);
 
       if (duplicateEmail.length > 0 && duplicateEmail[0]?.id !== id) {

@@ -25,10 +25,19 @@ export async function POST(request: Request) {
   const result = (await addSubject(body)) as {
     success: boolean;
     error?: string;
+    code?: string;
   };
 
   if (!result.success) {
-    return apiError(result.error || "Gagal membuat mata pelajaran", 400);
+    return apiError(
+      result.error || "Gagal membuat mata pelajaran",
+      result.code === "SUBJECT_CODE_EXISTS"
+        ? 409
+        : result.code === "VALIDATION_ERROR"
+          ? 400
+          : 500,
+      result.code,
+    );
   }
 
   return apiCreated({ created: true });

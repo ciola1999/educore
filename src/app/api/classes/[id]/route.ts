@@ -18,10 +18,22 @@ export async function PATCH(
   const result = (await updateClass(id, body)) as {
     success: boolean;
     error?: string;
+    code?: string;
   };
 
   if (!result.success) {
-    return apiError(result.error || "Gagal memperbarui kelas", 400);
+    return apiError(
+      result.error || "Gagal memperbarui kelas",
+      result.code === "NOT_FOUND"
+        ? 404
+        : result.code === "CLASS_EXISTS"
+          ? 409
+          : result.code === "VALIDATION_ERROR" ||
+              result.code === "INVALID_HOMEROOM_TEACHER"
+            ? 400
+            : 500,
+      result.code,
+    );
   }
 
   return apiOk({ updated: true });
@@ -41,10 +53,19 @@ export async function DELETE(
   const result = (await deleteClass(id)) as {
     success: boolean;
     error?: string;
+    code?: string;
   };
 
   if (!result.success) {
-    return apiError(result.error || "Gagal menghapus kelas", 400);
+    return apiError(
+      result.error || "Gagal menghapus kelas",
+      result.code === "NOT_FOUND"
+        ? 404
+        : result.code === "CLASS_IN_USE"
+          ? 409
+          : 500,
+      result.code,
+    );
   }
 
   return apiOk({ deleted: true });

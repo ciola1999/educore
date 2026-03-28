@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { apiGet, apiPost } from "@/lib/api/request";
 import { ensureAppWarmup, scheduleIdleTask } from "@/lib/runtime/app-bootstrap";
 
@@ -49,6 +55,7 @@ type StudentListResponse = {
   total: number;
   page: number;
   totalPages: number;
+  stats?: StudentStats | null;
 };
 
 function getTodayDateString() {
@@ -67,19 +74,39 @@ export function useStudentList() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState<StudentStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const listRequestRef = useRef(0);
+  const statsRequestRef = useRef(0);
+
+  const resolveListParams = useCallback(
+    (
+      page = currentPage,
+      search = deferredSearchQuery,
+      nextSortBy = sortBy,
+      nextSortDir = sortDir,
+    ) => ({
+      page,
+      search,
+      sortBy: nextSortBy,
+      sortDir: nextSortDir,
+    }),
+    [currentPage, deferredSearchQuery, sortBy, sortDir],
+  );
 
   const fetchStudents = useCallback(
     async (
       page = currentPage,
-      search = searchQuery,
+      search = deferredSearchQuery,
       nextSortBy = sortBy,
       nextSortDir = sortDir,
     ) => {
+      const requestId = ++listRequestRef.current;
       setLoading(true);
-      setError(null);
+      setListError(null);
       try {
         await ensureAppWarmup();
 
@@ -88,6 +115,9 @@ export function useStudentList() {
           limit: "12",
           sortBy: nextSortBy,
           sortDir: nextSortDir,
+          includeStats: "1",
+          includeAttendanceToday: "1",
+          date: getTodayDateString(),
         });
         if (search.trim()) {
           params.set("search", search.trim());
@@ -98,73 +128,88 @@ export function useStudentList() {
           { timeoutMs: 20_000 },
         );
 
-        const date = getTodayDateString();
-        const ids = result.data.map((student) => student.id).join(",");
-        let attendanceMap = new Map<string, AttendanceTodaySnapshot>();
-
-        if (ids) {
-          try {
-            const attendanceRows = await apiGet<AttendanceTodaySnapshot[]>(
-              `/api/students/attendance-today?date=${date}&ids=${encodeURIComponent(ids)}`,
-              { timeoutMs: 20_000 },
-            );
-            attendanceMap = new Map(
-              attendanceRows.map((row) => [row.studentId, row]),
-            );
-          } catch {
-            attendanceMap = new Map();
-          }
+        if (requestId !== listRequestRef.current) {
+          return;
         }
 
-        setStudents(
-          result.data.map((student) => ({
-            ...student,
-            attendanceToday: attendanceMap.get(student.id) ?? null,
-          })),
-        );
+        setStudents(result.data);
         setTotalPages(result.totalPages);
         setTotalCount(result.total);
         setCurrentPage(result.page);
+        if (result.stats) {
+          setStats(result.stats);
+          setStatsError(null);
+        }
       } catch (err) {
+        if (requestId !== listRequestRef.current) {
+          return;
+        }
         setStudents([]);
         setTotalPages(1);
         setTotalCount(0);
-        setError(
+        setListError(
           err instanceof Error ? err.message : "Gagal memuat data siswa",
         );
       } finally {
-        setLoading(false);
+        if (requestId === listRequestRef.current) {
+          setLoading(false);
+        }
       }
     },
-    [currentPage, searchQuery, sortBy, sortDir],
+    [currentPage, deferredSearchQuery, sortBy, sortDir],
   );
 
   const fetchStats = useCallback(async () => {
+    const requestId = ++statsRequestRef.current;
     setStatsLoading(true);
-    setError(null);
+    setStatsError(null);
     try {
       await ensureAppWarmup();
       const result = await apiGet<StudentStats>("/api/students/stats", {
         timeoutMs: 20_000,
       });
+      if (requestId !== statsRequestRef.current) {
+        return;
+      }
       setStats(result);
     } catch (err) {
+      if (requestId !== statsRequestRef.current) {
+        return;
+      }
       setStats(null);
-      setError(
+      setStatsError(
         err instanceof Error ? err.message : "Gagal memuat ringkasan siswa",
       );
     } finally {
-      setStatsLoading(false);
+      if (requestId === statsRequestRef.current) {
+        setStatsLoading(false);
+      }
     }
   }, []);
 
-  useEffect(() => {
-    void fetchStudents(currentPage, searchQuery, sortBy, sortDir);
-  }, [currentPage, fetchStudents, searchQuery, sortBy, sortDir]);
+  const refreshList = useCallback(async () => {
+    const params = resolveListParams();
+    await fetchStudents(
+      params.page,
+      params.search,
+      params.sortBy,
+      params.sortDir,
+    );
+  }, [fetchStudents, resolveListParams]);
+
+  const refreshAll = useCallback(async () => {
+    await refreshList();
+  }, [refreshList]);
 
   useEffect(() => {
-    void fetchStats();
-  }, [fetchStats]);
+    const params = resolveListParams();
+    void fetchStudents(
+      params.page,
+      params.search,
+      params.sortBy,
+      params.sortDir,
+    );
+  }, [fetchStudents, resolveListParams]);
 
   useEffect(() => {
     const key = "students_projection_last_sync";
@@ -210,12 +255,16 @@ export function useStudentList() {
     totalPages,
     totalCount,
     stats,
-    error,
+    error: listError ?? statsError,
+    listError,
+    statsError,
     sortBy,
     setSortBy,
     sortDir,
     setSortDir,
     fetchStudents,
     fetchStats,
+    refreshList,
+    refreshAll,
   };
 }

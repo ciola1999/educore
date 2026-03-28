@@ -56,7 +56,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { studentIds, emailDomain, password } = validation.data;
+  const { emailDomain, password } = validation.data;
+  const studentIds = Array.from(new Set(validation.data.studentIds));
   const db = await getDb();
   const studentRows = await db
     .select({
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   const existingAccounts = await db
-    .select({ id: users.id })
+    .select({ id: users.id, deletedAt: users.deletedAt })
     .from(users)
     .where(
       and(
@@ -87,14 +88,21 @@ export async function POST(request: Request) {
           studentRows.map((student) => student.id),
         ),
         eq(users.role, "student"),
-        eq(users.isActive, true),
-        isNull(users.deletedAt),
       ),
     );
-  const existingAccountSet = new Set(existingAccounts.map((item) => item.id));
+  const activeAccountSet = new Set(
+    existingAccounts
+      .filter((item) => item.deletedAt === null)
+      .map((item) => item.id),
+  );
+  const deletedAccountSet = new Set(
+    existingAccounts
+      .filter((item) => item.deletedAt !== null)
+      .map((item) => item.id),
+  );
 
   const candidates = studentRows.filter(
-    (student) => !existingAccountSet.has(student.id),
+    (student) => !activeAccountSet.has(student.id),
   );
 
   if (candidates.length === 0) {
@@ -109,10 +117,11 @@ export async function POST(request: Request) {
     (student) => `${normalizeEmailLocalPart(student.nis)}@${emailDomain}`,
   );
   const existingEmailRows = await db
-    .select({ email: users.email })
+    .select({ id: users.id, email: users.email, deletedAt: users.deletedAt })
     .from(users)
-    .where(and(inArray(users.email, candidateEmails), isNull(users.deletedAt)));
-  const existingEmailSet = new Set(existingEmailRows.map((item) => item.email));
+    .where(inArray(users.email, candidateEmails));
+  const now = new Date();
+  const passwordHash = await hashPassword(password);
   const rawGradeIds = Array.from(
     new Set(
       candidates
@@ -160,48 +169,39 @@ export async function POST(request: Request) {
   const missingClassNames = classNames.filter(
     (className) => !classIdByName.has(className),
   );
-  const now = new Date();
-
-  if (missingClassNames.length > 0) {
-    const academicYear = getAcademicYearLabel();
-    for (const className of missingClassNames) {
-      const id = crypto.randomUUID();
-      await db.insert(classes).values({
-        id,
-        name: className,
-        academicYear,
-        isActive: true,
-        syncStatus: "pending",
-        createdAt: now,
-        updatedAt: now,
-      });
-      classIdByName.set(className, id);
-    }
-  }
   let created = 0;
   let skipped = studentRows.length - candidates.length;
 
-  for (const student of candidates) {
-    const email = `${normalizeEmailLocalPart(student.nis)}@${emailDomain}`;
-    if (existingEmailSet.has(email)) {
-      skipped += 1;
-      continue;
+  await db.transaction(async (tx) => {
+    if (missingClassNames.length > 0) {
+      const academicYear = getAcademicYearLabel();
+      for (const className of missingClassNames) {
+        const id = crypto.randomUUID();
+        await tx.insert(classes).values({
+          id,
+          name: className,
+          academicYear,
+          isActive: true,
+          syncStatus: "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+        classIdByName.set(className, id);
+      }
     }
 
-    const passwordHash = await hashPassword(password);
-    await db.insert(users).values({
-      id: student.id,
-      fullName: student.fullName,
-      email,
-      role: "student",
-      passwordHash,
-      nis: student.nis,
-      nisn: student.nisn,
-      tempatLahir: student.tempatLahir,
-      tanggalLahir: student.tanggalLahir,
-      jenisKelamin: student.gender,
-      alamat: student.alamat,
-      kelasId: (() => {
+    for (const student of candidates) {
+      const email = `${normalizeEmailLocalPart(student.nis)}@${emailDomain}`;
+      const emailOwner = existingEmailRows.find((item) => item.email === email);
+      if (
+        emailOwner &&
+        (emailOwner.deletedAt === null || emailOwner.id !== student.id)
+      ) {
+        skipped += 1;
+        continue;
+      }
+
+      const kelasId = (() => {
         const grade = sanitizeClassDisplayName(
           student.grade,
           student.grade ? classNameById.get(student.grade.trim()) : null,
@@ -210,14 +210,52 @@ export async function POST(request: Request) {
           return null;
         }
         return classIdByName.get(grade) ?? null;
-      })(),
-      isActive: true,
-      syncStatus: "pending",
-      createdAt: now,
-      updatedAt: now,
-    });
-    created += 1;
-  }
+      })();
+
+      if (deletedAccountSet.has(student.id)) {
+        await tx
+          .update(users)
+          .set({
+            fullName: student.fullName,
+            email,
+            role: "student",
+            passwordHash,
+            nis: student.nis,
+            nisn: student.nisn,
+            tempatLahir: student.tempatLahir,
+            tanggalLahir: student.tanggalLahir,
+            jenisKelamin: student.gender,
+            alamat: student.alamat,
+            kelasId,
+            isActive: true,
+            deletedAt: null,
+            syncStatus: "pending",
+            updatedAt: now,
+          })
+          .where(eq(users.id, student.id));
+      } else {
+        await tx.insert(users).values({
+          id: student.id,
+          fullName: student.fullName,
+          email,
+          role: "student",
+          passwordHash,
+          nis: student.nis,
+          nisn: student.nisn,
+          tempatLahir: student.tempatLahir,
+          tanggalLahir: student.tanggalLahir,
+          jenisKelamin: student.gender,
+          alamat: student.alamat,
+          kelasId,
+          isActive: true,
+          syncStatus: "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      created += 1;
+    }
+  });
 
   return apiOk({
     created,

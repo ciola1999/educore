@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "bun run scripts/run-next-build.ts",
+    "build:web": "bun run build",
+    "build:desktop": "bun run scripts/run-desktop-build.ts",
     "start": "next start",
     "tauri": "tauri",
     "desktop": "tauri dev",

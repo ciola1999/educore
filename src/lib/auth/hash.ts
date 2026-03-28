@@ -15,8 +15,25 @@ function isNodeRuntime(): boolean {
   );
 }
 
+async function loadArgon2() {
+  // Keep argon2 as a runtime-only dependency so browser/edge bundles do not
+  // attempt to resolve native Node modules during compilation.
+  const runtimeImport = new Function(
+    "specifier",
+    "return import(specifier);",
+  ) as (specifier: string) => Promise<{
+    hash: (
+      password: string,
+      options: typeof PASSWORD_HASH_OPTIONS,
+    ) => Promise<string>;
+    verify: (hash: string, password: string) => Promise<boolean>;
+  }>;
+
+  return runtimeImport("argon2");
+}
+
 async function hashPasswordNode(password: string): Promise<string> {
-  const argon2 = await import("argon2");
+  const argon2 = await loadArgon2();
   return argon2.hash(password, PASSWORD_HASH_OPTIONS);
 }
 
@@ -24,7 +41,7 @@ async function verifyPasswordNode(
   password: string,
   hash: string,
 ): Promise<boolean> {
-  const argon2 = await import("argon2");
+  const argon2 = await loadArgon2();
   try {
     return await argon2.verify(hash, password);
   } catch {

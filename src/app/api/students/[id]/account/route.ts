@@ -74,12 +74,16 @@ export async function POST(
   const normalizedEmail = validation.data.email.trim().toLowerCase();
 
   const existingUserByEmail = await db
-    .select({ id: users.id })
+    .select({ id: users.id, deletedAt: users.deletedAt })
     .from(users)
-    .where(and(eq(users.email, normalizedEmail), isNull(users.deletedAt)))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
-  if (existingUserByEmail.length > 0 && existingUserByEmail[0]?.id !== id) {
+  if (
+    existingUserByEmail[0] &&
+    (existingUserByEmail[0].deletedAt === null ||
+      existingUserByEmail[0].id !== id)
+  ) {
     return apiError("Email akun siswa sudah terdaftar", 409, "EMAIL_EXISTS");
   }
 

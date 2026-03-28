@@ -154,6 +154,9 @@ export const guruMapel = sqliteTable("guru_mapel", {
   ...syncMetadata,
 });
 
+// Canonical Phase 2.2 schedule model.
+// Keep schedule truth attached to guru_mapel so class, subject, teacher,
+// and semester remain derived from stable master data relations.
 export const jadwal = sqliteTable("jadwal", {
   id: text("id").primaryKey().$defaultFn(generateId),
   guruMapelId: text("guru_mapel_id")
@@ -166,6 +169,9 @@ export const jadwal = sqliteTable("jadwal", {
   ...syncMetadata,
 });
 
+// Legacy flattened schedule model kept only for compatibility with older
+// flows. New Phase 2.2 work should prefer `jadwal` above to avoid drift
+// against guru_mapel / semester source of truth.
 export const schedule = sqliteTable("schedule", {
   id: text("id").primaryKey().$defaultFn(generateId),
   classId: text("class_id")
@@ -691,6 +697,10 @@ export type Class = typeof classes.$inferSelect;
 export type NewClass = typeof classes.$inferInsert;
 export type Subject = typeof subjects.$inferSelect;
 export type NewSubject = typeof subjects.$inferInsert;
+export type Jadwal = typeof jadwal.$inferSelect;
+export type NewJadwal = typeof jadwal.$inferInsert;
+export type LegacySchedule = typeof schedule.$inferSelect;
+export type NewLegacySchedule = typeof schedule.$inferInsert;
 export type AttendanceSetting = typeof attendanceSettings.$inferSelect;
 export type NewAttendanceSetting = typeof attendanceSettings.$inferInsert;
 export type Holiday = typeof holidays.$inferSelect;

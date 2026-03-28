@@ -7,13 +7,17 @@ import {
   attendance,
   attendanceSettings,
   classes,
+  guruMapel,
   holidays,
+  jadwal,
   permissions,
   rolePermissions,
   roles,
+  semester,
   studentDailyAttendance,
   students,
   subjects,
+  tahunAjaran,
   userRoles,
   users,
 } from "../db/schema";
@@ -201,9 +205,42 @@ export function generateUpsertSql(
 
 const SYNC_TABLES: SyncTableConfig[] = [
   { name: "users", table: users, conflictKey: "email", logicalKey: "email" },
-  { name: "students", table: students, conflictKey: "id", logicalKey: "nis" },
-  { name: "classes", table: classes, conflictKey: "id" },
+  { name: "roles", table: roles, conflictKey: "id", logicalKey: "name" },
+  {
+    name: "permissions",
+    table: permissions,
+    conflictKey: "id",
+    logicalKey: "name",
+  },
+  { name: "user_roles", table: userRoles, conflictKey: "id" },
+  { name: "role_permissions", table: rolePermissions, conflictKey: "id" },
+  {
+    name: "tahun_ajaran",
+    table: tahunAjaran,
+    conflictKey: "id",
+    logicalKey: "nama",
+  },
+  {
+    name: "semester",
+    table: semester,
+    conflictKey: "id",
+    logicalKey: ["tahunAjaranId", "nama"],
+  },
   { name: "subjects", table: subjects, conflictKey: "id", logicalKey: "code" },
+  { name: "classes", table: classes, conflictKey: "id" },
+  {
+    name: "guru_mapel",
+    table: guruMapel,
+    conflictKey: "id",
+    logicalKey: ["guruId", "mataPelajaranId", "kelasId", "semesterId"],
+  },
+  {
+    name: "jadwal",
+    table: jadwal,
+    conflictKey: "id",
+    logicalKey: ["guruMapelId", "hari", "jamMulai", "jamSelesai"],
+  },
+  { name: "students", table: students, conflictKey: "id", logicalKey: "nis" },
   { name: "attendance", table: attendance, conflictKey: "id" },
   {
     name: "attendance_settings",
@@ -217,16 +254,9 @@ const SYNC_TABLES: SyncTableConfig[] = [
     conflictKey: "id",
     logicalKey: ["studentId", "date"],
   },
-  { name: "roles", table: roles, conflictKey: "id", logicalKey: "name" },
-  {
-    name: "permissions",
-    table: permissions,
-    conflictKey: "id",
-    logicalKey: "name",
-  },
-  { name: "user_roles", table: userRoles, conflictKey: "id" },
-  { name: "role_permissions", table: rolePermissions, conflictKey: "id" },
 ];
+
+export const SYNC_TABLE_NAMES = SYNC_TABLES.map((table) => table.name);
 
 /**
  * Push pending local data to Turso Cloud

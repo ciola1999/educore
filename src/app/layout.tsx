@@ -1,21 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "sonner";
 import { AuthSessionProvider } from "@/components/providers/auth-session-provider";
 import { primeServerRuntimeWarmup } from "@/lib/runtime/server-warmup";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Educore - School Management System",
@@ -43,7 +32,7 @@ export default function RootLayout({
           content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.libsql.org https://*.turso.io tauri://localhost ipc: http://ipc.localhost ws://localhost:* http://localhost:*;"
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className="font-sans antialiased">
         <AuthSessionProvider>
           <NuqsAdapter>{children}</NuqsAdapter>
         </AuthSessionProvider>
@@ -59,8 +48,8 @@ export default function RootLayout({
                   typeof window !== 'undefined' &&
                   (window.location.pathname === '/' ||
                     window.location.pathname === '/login' ||
-                    window.location.pathname.indexOf('/dashboard') === 0 ||
-                    isTauriRuntime);
+                    window.location.pathname.indexOf('/dashboard') === 0) &&
+                  !isTauriRuntime;
 
                 if (!shouldWarm) {
                   return;

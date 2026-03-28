@@ -22,6 +22,11 @@ import {
 } from "@/lib/auth/dashboard-access";
 import { checkPermission } from "@/lib/auth/rbac";
 import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
+import {
+  getRuntimeDefaultDashboardPath,
+  getRuntimeSupportedDashboardPaths,
+  isDesktopDashboardConstrainedRuntime,
+} from "@/lib/runtime/desktop-dashboard";
 
 type QuickLink = {
   href: string;
@@ -99,8 +104,11 @@ export function DashboardHomeClient() {
     currentRole === "teacher" ||
     currentRole === "staff";
   const allowedPaths = currentRole
-    ? DASHBOARD_ROLE_ALLOWED_PATHS[currentRole]
+    ? getRuntimeSupportedDashboardPaths(
+        DASHBOARD_ROLE_ALLOWED_PATHS[currentRole],
+      )
     : [];
+  const desktopConstrainedRuntime = isDesktopDashboardConstrainedRuntime();
   const visibleQuickLinks = quickLinks.filter((item) =>
     allowedPaths.includes(item.href),
   );
@@ -177,12 +185,37 @@ export function DashboardHomeClient() {
                 Redirect Default
               </p>
               <p className="mt-2 truncate text-sm font-medium text-zinc-100">
-                {currentRole ? DASHBOARD_ROLE_DEFAULT_PATH[currentRole] : "/"}
+                {currentRole
+                  ? getRuntimeDefaultDashboardPath(
+                      currentRole,
+                      DASHBOARD_ROLE_DEFAULT_PATH[currentRole],
+                    )
+                  : "/"}
               </p>
             </div>
           </div>
         </div>
       </section>
+
+      {desktopConstrainedRuntime ? (
+        <Card className="border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
+          <CardHeader>
+            <CardTitle className="text-zinc-100">
+              Desktop Production Safe Mode
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-zinc-400">
+            <p>
+              Overview ringkas, attendance analytics, dan roster siswa penuh
+              masih dipertahankan di runtime web.
+            </p>
+            <p>
+              Jalur yang sudah disiapkan untuk desktop production saat ini: User
+              Management, Academic, dan Settings.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <Card className="border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-50px_rgba(56,189,248,0.45)]">
@@ -242,7 +275,7 @@ export function DashboardHomeClient() {
         </Card>
       </section>
 
-      {canOperateDashboard ? (
+      {canOperateDashboard && !desktopConstrainedRuntime ? (
         <section className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -273,7 +306,7 @@ export function DashboardHomeClient() {
         </section>
       ) : null}
 
-      {canOperateDashboard ? (
+      {canOperateDashboard && !desktopConstrainedRuntime ? (
         startupReady ? (
           <AttendanceRiskInsights />
         ) : (
@@ -297,7 +330,7 @@ export function DashboardHomeClient() {
             </CardContent>
           </Card>
         )
-      ) : (
+      ) : !desktopConstrainedRuntime ? (
         <Card className="overflow-hidden border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
           <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-zinc-800 via-sky-500/20 to-zinc-800" />
           <CardHeader>
@@ -334,7 +367,7 @@ export function DashboardHomeClient() {
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }

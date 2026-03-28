@@ -51,6 +51,207 @@ function isUuidLikeClassValue(value: string | null | undefined): boolean {
   return UUID_LIKE_PATTERN.test((value || "").trim());
 }
 
+type LegacyScheduleRow = {
+  id: string;
+  class_id: string;
+  subject_id: string;
+  teacher_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  room: string | null;
+  created_at: number | null;
+  updated_at: number | null;
+  deleted_at: number | null;
+  version: number | null;
+  hlc: string | null;
+  sync_status: string | null;
+};
+
+type GuruMapelMatchRow = {
+  id: string;
+};
+
+type LegacyScheduleBackfillSummary = {
+  inserted: number;
+  skippedExisting: number;
+  skippedAmbiguous: number;
+  skippedMissingAssignment: number;
+};
+
+function isMissingLegacyScheduleTableError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("no such table") &&
+    error.message.toLowerCase().includes("schedule")
+  );
+}
+
+async function backfillLegacyScheduleToJadwal(
+  db: DatabaseLike,
+): Promise<LegacyScheduleBackfillSummary> {
+  const summary: LegacyScheduleBackfillSummary = {
+    inserted: 0,
+    skippedExisting: 0,
+    skippedAmbiguous: 0,
+    skippedMissingAssignment: 0,
+  };
+
+  let legacyRows: LegacyScheduleRow[] = [];
+  try {
+    legacyRows = await db.select<LegacyScheduleRow>(
+      `SELECT
+         id,
+         class_id,
+         subject_id,
+         teacher_id,
+         day_of_week,
+         start_time,
+         end_time,
+         room,
+         created_at,
+         updated_at,
+         deleted_at,
+         version,
+         hlc,
+         sync_status
+       FROM schedule
+       WHERE deleted_at IS NULL`,
+    );
+  } catch (error) {
+    if (isMissingLegacyScheduleTableError(error)) {
+      return summary;
+    }
+    throw error;
+  }
+
+  for (const legacy of legacyRows) {
+    const existingCanonical = await db.select<{ id: string }>(
+      `SELECT j.id
+       FROM jadwal j
+       INNER JOIN guru_mapel gm ON gm.id = j.guru_mapel_id
+       WHERE j.deleted_at IS NULL
+         AND gm.deleted_at IS NULL
+         AND gm.kelas_id = ?
+         AND gm.mata_pelajaran_id = ?
+         AND gm.guru_id = ?
+         AND j.hari = ?
+         AND j.jam_mulai = ?
+         AND j.jam_selesai = ?
+       LIMIT 1`,
+      [
+        legacy.class_id,
+        legacy.subject_id,
+        legacy.teacher_id,
+        legacy.day_of_week,
+        legacy.start_time,
+        legacy.end_time,
+      ],
+    );
+
+    if (existingCanonical.length > 0) {
+      summary.skippedExisting++;
+      continue;
+    }
+
+    const matchingAssignments = await db.select<GuruMapelMatchRow>(
+      `SELECT gm.id
+       FROM guru_mapel gm
+       INNER JOIN semester s ON s.id = gm.semester_id
+       INNER JOIN tahun_ajaran ta ON ta.id = s.tahun_ajaran_id
+       WHERE gm.deleted_at IS NULL
+         AND s.deleted_at IS NULL
+         AND ta.deleted_at IS NULL
+         AND gm.kelas_id = ?
+         AND gm.mata_pelajaran_id = ?
+         AND gm.guru_id = ?
+       ORDER BY
+         CASE WHEN s.is_active = 1 THEN 0 ELSE 1 END,
+         CASE WHEN ta.is_active = 1 THEN 0 ELSE 1 END,
+         gm.updated_at DESC,
+         gm.created_at DESC`,
+      [legacy.class_id, legacy.subject_id, legacy.teacher_id],
+    );
+
+    if (matchingAssignments.length === 0) {
+      summary.skippedMissingAssignment++;
+      continue;
+    }
+
+    const primaryMatch = matchingAssignments[0]?.id;
+    const secondaryMatch = matchingAssignments[1]?.id;
+
+    if (!primaryMatch) {
+      summary.skippedMissingAssignment++;
+      continue;
+    }
+
+    if (secondaryMatch) {
+      summary.skippedAmbiguous++;
+      continue;
+    }
+
+    await db.execute(
+      `INSERT INTO jadwal (
+         id,
+         guru_mapel_id,
+         hari,
+         jam_mulai,
+         jam_selesai,
+         ruangan,
+         version,
+         hlc,
+         created_at,
+         updated_at,
+         deleted_at,
+         sync_status
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        crypto.randomUUID(),
+        primaryMatch,
+        legacy.day_of_week,
+        legacy.start_time,
+        legacy.end_time,
+        legacy.room,
+        legacy.version ?? 1,
+        legacy.hlc,
+        legacy.created_at ?? Math.floor(Date.now() / 1000),
+        legacy.updated_at ?? Math.floor(Date.now() / 1000),
+        null,
+        legacy.sync_status ?? "pending",
+      ],
+    );
+
+    summary.inserted++;
+  }
+
+  return summary;
+}
+
+async function retireLegacyScheduleTableIfEmpty(
+  db: DatabaseLike,
+): Promise<boolean> {
+  try {
+    const activeRows = await db.select<{ total: number }>(
+      `SELECT COUNT(*) AS total
+       FROM schedule
+       WHERE deleted_at IS NULL`,
+    );
+
+    if ((activeRows[0]?.total ?? 0) > 0) {
+      return false;
+    }
+
+    await db.execute(`DROP TABLE IF EXISTS schedule`);
+    return true;
+  } catch (error) {
+    if (isMissingLegacyScheduleTableError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function seedClassesFromLegacyData(db: DatabaseLike): Promise<void> {
   const classFromUsers = await db.select<{ kelas_id: string | null }>(
     `SELECT DISTINCT kelas_id
@@ -1895,7 +2096,30 @@ export async function runMigrations(
     console.info("ℹ️ [Migration] Seed phase skipped for read-only inspection.");
   }
 
+  const legacyScheduleBackfill = await backfillLegacyScheduleToJadwal(db);
+  if (
+    legacyScheduleBackfill.inserted > 0 ||
+    legacyScheduleBackfill.skippedAmbiguous > 0 ||
+    legacyScheduleBackfill.skippedMissingAssignment > 0
+  ) {
+    console.info(
+      `ℹ️ [Migration] Legacy schedule backfill -> jadwal: inserted=${legacyScheduleBackfill.inserted}, skippedExisting=${legacyScheduleBackfill.skippedExisting}, skippedAmbiguous=${legacyScheduleBackfill.skippedAmbiguous}, skippedMissingAssignment=${legacyScheduleBackfill.skippedMissingAssignment}`,
+    );
+  }
+
+  const retiredLegacyScheduleTable = await retireLegacyScheduleTableIfEmpty(db);
+  if (retiredLegacyScheduleTable) {
+    console.info(
+      "ℹ️ [Migration] Legacy schedule table retired after canonical cleanup.",
+    );
+  }
+
   await ensureUserStudentProjectionTriggers(db);
 
   console.info("✅ [Migration] Database sync complete!");
 }
+
+export const __test__ = {
+  backfillLegacyScheduleToJadwal,
+  retireLegacyScheduleTableIfEmpty,
+};

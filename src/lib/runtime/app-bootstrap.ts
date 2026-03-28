@@ -1,14 +1,25 @@
 const DEFAULT_API_TIMEOUT_MS = 10_000;
 const STARTUP_API_TIMEOUT_MS = 20_000;
+const STARTUP_STABILIZATION_TIMEOUT_MS = 30_000;
+const STARTUP_STABILIZATION_WINDOW_MS = 45_000;
+const MUTATION_API_TIMEOUT_MS = 30_000;
 const STARTUP_WARMUP_ENDPOINT = "/api/runtime/warmup";
 
 type WarmupState = "idle" | "pending" | "ready" | "failed";
 
 let warmupState: WarmupState = "idle";
 let warmupPromise: Promise<void> | null = null;
+let warmupSettledAt = 0;
 
 function isClientRuntime() {
   return typeof window !== "undefined";
+}
+
+function isDesktopTauriRuntime() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.__TAURI_INTERNALS__ !== "undefined"
+  );
 }
 
 function isApiRoute(input: string) {
@@ -18,20 +29,38 @@ function isApiRoute(input: string) {
 export function getApiTimeoutMs(
   input: string,
   explicitTimeoutMs?: number,
+  method?: string,
 ): number {
   if (explicitTimeoutMs !== undefined) {
     return explicitTimeoutMs;
+  }
+
+  if (isApiRoute(input) && method && method !== "GET") {
+    return MUTATION_API_TIMEOUT_MS;
   }
 
   if (isApiRoute(input) && warmupState === "pending") {
     return STARTUP_API_TIMEOUT_MS;
   }
 
+  if (
+    isApiRoute(input) &&
+    method === "GET" &&
+    warmupSettledAt > 0 &&
+    Date.now() - warmupSettledAt <= STARTUP_STABILIZATION_WINDOW_MS
+  ) {
+    return STARTUP_STABILIZATION_TIMEOUT_MS;
+  }
+
   return DEFAULT_API_TIMEOUT_MS;
 }
 
 export async function ensureAppWarmup(): Promise<void> {
-  if (!isClientRuntime() || warmupState === "ready") {
+  if (
+    !isClientRuntime() ||
+    isDesktopTauriRuntime() ||
+    warmupState === "ready"
+  ) {
     return;
   }
 
@@ -59,6 +88,7 @@ export async function ensureAppWarmup(): Promise<void> {
       console.warn("[BOOTSTRAP] App warmup failed", error);
     })
     .finally(() => {
+      warmupSettledAt = Date.now();
       warmupPromise = null;
     });
 

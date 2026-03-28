@@ -116,60 +116,101 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
       )}
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-zinc-800 hover:bg-zinc-900">
-              <TableHead className="text-zinc-400">Subject Name</TableHead>
-              <TableHead className="text-zinc-400">Code</TableHead>
-              {!readOnly ? (
-                <TableHead className="text-zinc-400 text-right">
-                  Actions
-                </TableHead>
-              ) : null}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={readOnly ? 2 : 3}
-                  className="h-24 text-center text-zinc-500"
-                >
-                  No subjects found.
-                </TableCell>
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-zinc-800 hover:bg-zinc-900">
+                <TableHead className="text-zinc-400">Subject Name</TableHead>
+                <TableHead className="text-zinc-400">Code</TableHead>
+                {!readOnly ? (
+                  <TableHead className="text-zinc-400 text-right">
+                    Actions
+                  </TableHead>
+                ) : null}
               </TableRow>
-            ) : (
-              data.map((item) => (
-                <TableRow
-                  key={item.id}
-                  className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
-                >
-                  <TableCell className="font-medium text-white">
-                    {item.name}
+            </TableHeader>
+            <TableBody>
+              {data.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={readOnly ? 2 : 3}
+                    className="h-24 text-center text-zinc-500"
+                  >
+                    No subjects found.
                   </TableCell>
-                  <TableCell className="font-mono">{item.code}</TableCell>
-                  {!readOnly ? (
-                    <TableCell className="text-right flex justify-end gap-1">
-                      <EditSubjectDialog
-                        subjectData={item}
-                        onSuccess={fetchData}
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-zinc-400 hover:text-red-400"
-                        onClick={() => setDeleteTarget(item)}
-                        type="button"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  ) : null}
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                data.map((item) => (
+                  <TableRow
+                    key={item.id}
+                    className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
+                  >
+                    <TableCell className="font-medium text-white">
+                      {item.name}
+                    </TableCell>
+                    <TableCell className="font-mono">{item.code}</TableCell>
+                    {!readOnly ? (
+                      <TableCell className="flex justify-end gap-1 text-right">
+                        <EditSubjectDialog
+                          subjectData={item}
+                          onSuccess={fetchData}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                          onClick={() => setDeleteTarget(item)}
+                          type="button"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="space-y-3 p-3 md:hidden">
+          {data.length === 0 ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 text-center text-sm text-zinc-500">
+              No subjects found.
+            </div>
+          ) : (
+            data.map((item) => (
+              <article
+                key={item.id}
+                className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {item.name}
+                  </p>
+                  <p className="font-mono text-xs text-zinc-500">{item.code}</p>
+                </div>
+                {!readOnly ? (
+                  <div className="flex justify-end gap-1">
+                    <EditSubjectDialog
+                      subjectData={item}
+                      onSuccess={fetchData}
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                      onClick={() => setDeleteTarget(item)}
+                      type="button"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : null}
+              </article>
+            ))
+          )}
+        </div>
       </div>
 
       {!readOnly ? (
