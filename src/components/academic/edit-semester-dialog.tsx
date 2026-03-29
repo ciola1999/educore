@@ -38,6 +38,28 @@ import {
   semesterFormSchema,
 } from "./schemas";
 
+function toDateInputValue(value: string | Date | number) {
+  const normalizedDate =
+    value instanceof Date
+      ? value
+      : typeof value === "number"
+        ? new Date(value < 10_000_000_000 ? value * 1000 : value)
+        : null;
+
+  if (normalizedDate) {
+    const year = normalizedDate.getFullYear();
+    const month = String(normalizedDate.getMonth() + 1).padStart(2, "0");
+    const day = String(normalizedDate.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  if (typeof value === "string") {
+    return value.slice(0, 10);
+  }
+
+  return "";
+}
+
 export function EditSemesterDialog({
   semester,
   onSuccess,
@@ -53,8 +75,8 @@ export function EditSemesterDialog({
     defaultValues: {
       tahunAjaranId: semester.tahunAjaranId,
       nama: semester.nama,
-      tanggalMulai: semester.tanggalMulai.slice(0, 10),
-      tanggalSelesai: semester.tanggalSelesai.slice(0, 10),
+      tanggalMulai: toDateInputValue(semester.tanggalMulai),
+      tanggalSelesai: toDateInputValue(semester.tanggalSelesai),
       isActive: semester.isActive,
     },
   });
@@ -63,8 +85,8 @@ export function EditSemesterDialog({
     form.reset({
       tahunAjaranId: semester.tahunAjaranId,
       nama: semester.nama,
-      tanggalMulai: semester.tanggalMulai.slice(0, 10),
-      tanggalSelesai: semester.tanggalSelesai.slice(0, 10),
+      tanggalMulai: toDateInputValue(semester.tanggalMulai),
+      tanggalSelesai: toDateInputValue(semester.tanggalSelesai),
       isActive: semester.isActive,
     });
   }, [semester, form]);

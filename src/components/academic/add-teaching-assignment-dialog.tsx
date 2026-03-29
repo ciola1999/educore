@@ -217,23 +217,13 @@ function AssignmentSelect({
       control={control}
       name={name}
       render={({ field }) => {
-        const selectedOption = options.find(
-          (option) => option.value === field.value,
-        );
-
         return (
           <FormItem>
             <FormLabel>{label}</FormLabel>
             <Select value={field.value} onValueChange={field.onChange}>
               <FormControl>
                 <SelectTrigger className="bg-zinc-950 border-zinc-700">
-                  {selectedOption ? (
-                    <span className="block truncate text-left">
-                      {selectedOption.label}
-                    </span>
-                  ) : (
-                    <SelectValue placeholder={placeholder} />
-                  )}
+                  <SelectValue placeholder={placeholder} />
                 </SelectTrigger>
               </FormControl>
               <SelectContent className="bg-zinc-900 border-zinc-800 text-white">

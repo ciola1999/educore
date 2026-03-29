@@ -154,6 +154,51 @@ function logDatabaseDebug(message: string, ...args: unknown[]) {
   }
 }
 
+function collectDatabaseErrorMessages(
+  error: unknown,
+  visited = new Set<unknown>(),
+): string[] {
+  if (!error || visited.has(error)) {
+    return [];
+  }
+
+  visited.add(error);
+
+  if (typeof error === "string") {
+    return [error];
+  }
+
+  if (error instanceof Error) {
+    return [
+      error.message,
+      ...collectDatabaseErrorMessages(
+        (error as Error & { cause?: unknown }).cause,
+        visited,
+      ),
+    ];
+  }
+
+  if (typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    return [
+      typeof record.message === "string" ? record.message : "",
+      ...collectDatabaseErrorMessages(record.cause, visited),
+      ...collectDatabaseErrorMessages(record.proto, visited),
+    ].filter(Boolean);
+  }
+
+  return [];
+}
+
+function isExpectedMissingLegacyScheduleTableError(error: unknown) {
+  return collectDatabaseErrorMessages(error).some((message) => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("no such table") && normalized.includes("schedule")
+    );
+  });
+}
+
 async function ensureWebMigrations(
   dbLike: DatabaseLike,
   options?: DatabaseInitOptions,
@@ -254,7 +299,9 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
             // ALWAYS return array of arrays (values) for Drizzle proxy
             return { rows: rows.map((row) => Object.values(row)) };
           } catch (e) {
-            console.error("❌ [SQL_ERROR_TAURI]", e);
+            if (!isExpectedMissingLegacyScheduleTableError(e)) {
+              console.error("❌ [SQL_ERROR_TAURI]", e);
+            }
             throw e;
           }
         },

@@ -28,6 +28,35 @@ import { AddSemesterDialog } from "./add-semester-dialog";
 import { EditSemesterDialog } from "./edit-semester-dialog";
 import type { SemesterItem } from "./schemas";
 
+function formatSemesterDate(value: string | Date | number) {
+  const normalizedDate =
+    value instanceof Date
+      ? value
+      : typeof value === "number"
+        ? new Date(value < 10_000_000_000 ? value * 1000 : value)
+        : null;
+
+  if (normalizedDate) {
+    const year = normalizedDate.getFullYear();
+    const month = String(normalizedDate.getMonth() + 1).padStart(2, "0");
+    const day = String(normalizedDate.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  if (typeof value === "string") {
+    return value.slice(0, 10);
+  }
+
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  return "-";
+}
+
 export function SemesterList({ readOnly = false }: { readOnly?: boolean }) {
   const [data, setData] = useState<SemesterItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,8 +170,8 @@ export function SemesterList({ readOnly = false }: { readOnly?: boolean }) {
                     </TableCell>
                     <TableCell>{item.tahunAjaranNama || "-"}</TableCell>
                     <TableCell>
-                      {item.tanggalMulai.slice(0, 10)} s/d{" "}
-                      {item.tanggalSelesai.slice(0, 10)}
+                      {formatSemesterDate(item.tanggalMulai)} s/d{" "}
+                      {formatSemesterDate(item.tanggalSelesai)}
                     </TableCell>
                     <TableCell>
                       {item.isActive ? "Aktif" : "Tidak aktif"}
@@ -192,8 +221,8 @@ export function SemesterList({ readOnly = false }: { readOnly?: boolean }) {
                   </p>
                 </div>
                 <p className="text-sm text-zinc-300">
-                  {item.tanggalMulai.slice(0, 10)} s/d{" "}
-                  {item.tanggalSelesai.slice(0, 10)}
+                  {formatSemesterDate(item.tanggalMulai)} s/d{" "}
+                  {formatSemesterDate(item.tanggalSelesai)}
                 </p>
                 <p className="text-sm text-zinc-300">
                   Status: {item.isActive ? "Aktif" : "Tidak aktif"}

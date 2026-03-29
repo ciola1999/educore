@@ -153,8 +153,8 @@ export type SemesterItem = {
   tahunAjaranId: string;
   tahunAjaranNama: string | null;
   nama: string;
-  tanggalMulai: string;
-  tanggalSelesai: string;
+  tanggalMulai: string | Date;
+  tanggalSelesai: string | Date;
   isActive: boolean;
 };
 

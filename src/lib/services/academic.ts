@@ -307,13 +307,15 @@ async function getTeachingAssignmentSnapshot(id: string) {
     .select({
       id: guruMapel.id,
       guruId: guruMapel.guruId,
-      guruName: users.fullName,
+      guruName: sql<string>`${users.fullName}`.as("guru_name"),
       mataPelajaranId: guruMapel.mataPelajaranId,
-      mataPelajaranName: subjects.name,
+      mataPelajaranName: sql<string>`${subjects.name}`.as(
+        "mata_pelajaran_name",
+      ),
       kelasId: guruMapel.kelasId,
-      kelasName: classes.name,
+      kelasName: sql<string>`${classes.name}`.as("kelas_name"),
       semesterId: guruMapel.semesterId,
-      semesterName: semester.nama,
+      semesterName: sql<string>`${semester.nama}`.as("semester_name"),
     })
     .from(guruMapel)
     .innerJoin(users, eq(guruMapel.guruId, users.id))
@@ -384,10 +386,12 @@ async function findJadwalConflicts(
       jamSelesai: jadwal.jamSelesai,
       ruangan: jadwal.ruangan,
       guruId: guruMapel.guruId,
-      guruName: users.fullName,
+      guruName: sql<string>`${users.fullName}`.as("guru_name"),
       kelasId: guruMapel.kelasId,
-      kelasName: classes.name,
-      mataPelajaranName: subjects.name,
+      kelasName: sql<string>`${classes.name}`.as("kelas_name"),
+      mataPelajaranName: sql<string>`${subjects.name}`.as(
+        "mata_pelajaran_name",
+      ),
     })
     .from(jadwal)
     .innerJoin(guruMapel, eq(jadwal.guruMapelId, guruMapel.id))
@@ -1299,10 +1303,12 @@ export async function getSemesters() {
     .select({
       id: semester.id,
       tahunAjaranId: semester.tahunAjaranId,
-      tahunAjaranNama: tahunAjaran.nama,
-      nama: semester.nama,
-      tanggalMulai: semester.tanggalMulai,
-      tanggalSelesai: semester.tanggalSelesai,
+      tahunAjaranNama: sql<string>`${tahunAjaran.nama}`.as("tahun_ajaran_nama"),
+      nama: sql<string>`${semester.nama}`.as("semester_nama"),
+      tanggalMulai: sql<Date>`${semester.tanggalMulai}`.as("tanggal_mulai"),
+      tanggalSelesai: sql<Date>`${semester.tanggalSelesai}`.as(
+        "tanggal_selesai",
+      ),
       isActive: semester.isActive,
     })
     .from(semester)
@@ -1525,15 +1531,19 @@ export async function getTeachingAssignments() {
     .select({
       id: guruMapel.id,
       guruId: guruMapel.guruId,
-      guruName: users.fullName,
+      guruName: sql<string>`${users.fullName}`.as("guru_name"),
       mataPelajaranId: guruMapel.mataPelajaranId,
-      mataPelajaranName: subjects.name,
-      mataPelajaranCode: subjects.code,
+      mataPelajaranName: sql<string>`${subjects.name}`.as(
+        "mata_pelajaran_name",
+      ),
+      mataPelajaranCode: sql<string>`${subjects.code}`.as(
+        "mata_pelajaran_code",
+      ),
       kelasId: guruMapel.kelasId,
-      kelasName: classes.name,
+      kelasName: sql<string>`${classes.name}`.as("kelas_name"),
       semesterId: guruMapel.semesterId,
-      semesterName: semester.nama,
-      tahunAjaranNama: tahunAjaran.nama,
+      semesterName: sql<string>`${semester.nama}`.as("semester_name"),
+      tahunAjaranNama: sql<string>`${tahunAjaran.nama}`.as("tahun_ajaran_nama"),
     })
     .from(guruMapel)
     .innerJoin(users, eq(guruMapel.guruId, users.id))
@@ -1558,11 +1568,13 @@ export async function getTeachingAssignmentScheduleOptions() {
   return db
     .select({
       id: guruMapel.id,
-      guruName: users.fullName,
-      mataPelajaranName: subjects.name,
-      kelasName: classes.name,
-      semesterName: semester.nama,
-      tahunAjaranNama: tahunAjaran.nama,
+      guruName: sql<string>`${users.fullName}`.as("guru_name"),
+      mataPelajaranName: sql<string>`${subjects.name}`.as(
+        "mata_pelajaran_name",
+      ),
+      kelasName: sql<string>`${classes.name}`.as("kelas_name"),
+      semesterName: sql<string>`${semester.nama}`.as("semester_name"),
+      tahunAjaranNama: sql<string>`${tahunAjaran.nama}`.as("tahun_ajaran_nama"),
     })
     .from(guruMapel)
     .innerJoin(users, eq(guruMapel.guruId, users.id))
@@ -1809,12 +1821,16 @@ export async function getSchedules(filters?: {
       jamMulai: jadwal.jamMulai,
       jamSelesai: jadwal.jamSelesai,
       ruangan: jadwal.ruangan,
-      guruName: users.fullName,
-      mataPelajaranName: subjects.name,
-      mataPelajaranCode: subjects.code,
-      kelasName: classes.name,
-      semesterName: semester.nama,
-      tahunAjaranNama: tahunAjaran.nama,
+      guruName: sql<string>`${users.fullName}`.as("guru_name"),
+      mataPelajaranName: sql<string>`${subjects.name}`.as(
+        "mata_pelajaran_name",
+      ),
+      mataPelajaranCode: sql<string>`${subjects.code}`.as(
+        "mata_pelajaran_code",
+      ),
+      kelasName: sql<string>`${classes.name}`.as("kelas_name"),
+      semesterName: sql<string>`${semester.nama}`.as("semester_name"),
+      tahunAjaranNama: sql<string>`${tahunAjaran.nama}`.as("tahun_ajaran_nama"),
     })
     .from(jadwal)
     .innerJoin(guruMapel, eq(jadwal.guruMapelId, guruMapel.id))

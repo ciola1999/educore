@@ -40,6 +40,20 @@ import {
   teachingAssignmentFormSchema,
 } from "./schemas";
 
+function mergeSelectedOption(
+  current: { value: string; label: string },
+  options: Array<{ value: string; label: string }>,
+) {
+  const deduped = new Map<string, { value: string; label: string }>();
+  deduped.set(current.value, current);
+
+  for (const option of options) {
+    deduped.set(option.value, option);
+  }
+
+  return [...deduped.values()];
+}
+
 export function EditTeachingAssignmentDialog({
   assignment,
   onSuccess,
@@ -140,40 +154,66 @@ export function EditTeachingAssignmentDialog({
                 name="guruId"
                 label="Guru"
                 placeholder="Pilih guru"
-                options={teachers.map((item) => ({
-                  value: item.id,
-                  label: item.fullName,
-                }))}
+                options={mergeSelectedOption(
+                  {
+                    value: assignment.guruId,
+                    label: assignment.guruName,
+                  },
+                  teachers.map((item) => ({
+                    value: item.id,
+                    label: item.fullName,
+                  })),
+                )}
               />
               <AssignmentSelect
                 control={form.control}
                 name="mataPelajaranId"
                 label="Mata Pelajaran"
                 placeholder="Pilih mapel"
-                options={subjects.map((item) => ({
-                  value: item.id,
-                  label: `${item.name} (${item.code})`,
-                }))}
+                options={mergeSelectedOption(
+                  {
+                    value: assignment.mataPelajaranId,
+                    label: `${assignment.mataPelajaranName} (${assignment.mataPelajaranCode})`,
+                  },
+                  subjects.map((item) => ({
+                    value: item.id,
+                    label: `${item.name} (${item.code})`,
+                  })),
+                )}
               />
               <AssignmentSelect
                 control={form.control}
                 name="kelasId"
                 label="Kelas"
                 placeholder="Pilih kelas"
-                options={classes.map((item) => ({
-                  value: item.id,
-                  label: `${item.name} - ${item.academicYear}`,
-                }))}
+                options={mergeSelectedOption(
+                  {
+                    value: assignment.kelasId,
+                    label: assignment.kelasName,
+                  },
+                  classes.map((item) => ({
+                    value: item.id,
+                    label: `${item.name} - ${item.academicYear}`,
+                  })),
+                )}
               />
               <AssignmentSelect
                 control={form.control}
                 name="semesterId"
                 label="Semester"
                 placeholder="Pilih semester"
-                options={semesters.map((item) => ({
-                  value: item.id,
-                  label: `${item.nama} - ${item.tahunAjaranNama || "-"}`,
-                }))}
+                options={mergeSelectedOption(
+                  {
+                    value: assignment.semesterId,
+                    label: assignment.tahunAjaranNama
+                      ? `${assignment.semesterName} - ${assignment.tahunAjaranNama}`
+                      : assignment.semesterName,
+                  },
+                  semesters.map((item) => ({
+                    value: item.id,
+                    label: `${item.nama} - ${item.tahunAjaranNama || "-"}`,
+                  })),
+                )}
               />
               <DialogFooter>
                 <Button
@@ -214,23 +254,13 @@ function AssignmentSelect({
       control={control}
       name={name}
       render={({ field }) => {
-        const selectedOption = options.find(
-          (option) => option.value === field.value,
-        );
-
         return (
           <FormItem>
             <FormLabel>{label}</FormLabel>
             <Select value={field.value} onValueChange={field.onChange}>
               <FormControl>
                 <SelectTrigger className="bg-zinc-950 border-zinc-700">
-                  {selectedOption ? (
-                    <span className="block truncate text-left">
-                      {selectedOption.label}
-                    </span>
-                  ) : (
-                    <SelectValue placeholder={placeholder} />
-                  )}
+                  <SelectValue placeholder={placeholder} />
                 </SelectTrigger>
               </FormControl>
               <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
