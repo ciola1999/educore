@@ -1,3 +1,5 @@
+import { getDefaultAdminHash } from "@/lib/auth/hash";
+
 /**
  * Interface that matches both @tauri-apps/plugin-sql and @libsql/client
  */
@@ -816,8 +818,7 @@ async function seedDefaultAdmin(
     console.info(
       `[Seed] 🚀 Creating fresh default admin: ${DEFAULT_ADMIN_EMAIL}`,
     );
-    const passwordHash =
-      "$argon2id$v=19$m=65536,t=3,p=4$9+c59FN6Z2xHL2A3jy+Egg$PN/cvonv7WS47qVhhjqsok+sFRWtDvyl4oHCgyTCVOw";
+    const passwordHash = await getDefaultAdminHash();
     console.info(
       `[Seed] Using password hash (len: ${passwordHash.length}): ${passwordHash.substring(0, 20)}...`,
     );

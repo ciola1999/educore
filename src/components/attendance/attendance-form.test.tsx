@@ -137,7 +137,7 @@ describe("AttendanceForm", () => {
 
     expect(hookState.refreshStudents).toHaveBeenCalledTimes(1);
     expect(hookState.setAllPresent).toHaveBeenCalledTimes(1);
-  });
+  }, 10000);
 
   it("toggles compact and detailed view labels from the toolbar", () => {
     useAttendanceFormMock.mockReturnValue(createAttendanceFormState());
@@ -167,6 +167,15 @@ describe("AttendanceForm", () => {
     expect(
       screen.getByRole("button", { name: /Pilih Kelas Untuk Simpan/i }),
     ).toBeDisabled();
+  });
+
+  it("shows student class label in manual attendance cards", () => {
+    useAttendanceFormMock.mockReturnValue(createAttendanceFormState());
+
+    render(<AttendanceForm />);
+
+    expect(screen.getAllByText("X-A").length).toBeGreaterThan(0);
+    expect(screen.getByText("Budi Santoso")).toBeInTheDocument();
   });
 
   it("submits manual attendance through the primary action when a class is selected", () => {

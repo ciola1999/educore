@@ -39,6 +39,15 @@ describe("POST /api/attendance/projection-sync", () => {
     };
     expect(payload.success).toBe(true);
     expect(payload.data?.studentUpserted).toBe(12);
+    expect(requireAnyPermissionMock).toHaveBeenCalledWith(
+      { user: { id: "user-1", role: "admin" } },
+      [
+        "attendance:read",
+        "attendance:write",
+        "academic:read",
+        "academic:write",
+      ],
+    );
   });
 
   it("returns structured error when projection sync throws", async () => {

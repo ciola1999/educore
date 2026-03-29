@@ -6,11 +6,13 @@ import { InlineState } from "@/components/common/inline-state";
 import { AUTH_ROLES, type AuthRole } from "@/core/auth/roles";
 import { useAuth } from "@/hooks/use-auth";
 import {
+  DASHBOARD_ROLE_ALLOWED_PATHS,
   DASHBOARD_ROLE_DEFAULT_PATH,
   isAllowedDashboardPath,
 } from "@/lib/auth/dashboard-access";
 import {
   getRuntimeDefaultDashboardPath,
+  getRuntimeSupportedDashboardLabels,
   isDesktopDashboardConstrainedRuntime,
   isDesktopStaticRuntime,
   isRuntimeSupportedDashboardPath,
@@ -38,6 +40,11 @@ export function DashboardAccessGate({
   const currentRole = toAuthRole(user?.role);
   const desktopConstrainedRuntime = isDesktopDashboardConstrainedRuntime();
   const runtimeStaticDesktop = isDesktopStaticRuntime();
+  const runtimeSupportedLabels = currentRole
+    ? getRuntimeSupportedDashboardLabels(
+        DASHBOARD_ROLE_ALLOWED_PATHS[currentRole],
+      )
+    : [];
   const defaultPath = currentRole
     ? getRuntimeDefaultDashboardPath(
         currentRole,
@@ -109,7 +116,7 @@ export function DashboardAccessGate({
         }
         description={
           desktopConstrainedRuntime && !runtimeSupported
-            ? "Jalur ini masih bergantung pada runtime web/server. Desktop saat ini diarahkan ke halaman yang sudah aman: Courses, User Management, atau Settings."
+            ? `Jalur ini masih bergantung pada runtime web/server. Desktop saat ini hanya membuka jalur yang sudah local-runtime-safe: ${runtimeSupportedLabels.join(", ")}.`
             : "Role akun ini tidak memiliki izin untuk membuka halaman tersebut."
         }
         actionLabel={

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { getAttendanceRosterStudents } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
@@ -57,14 +57,23 @@ export async function GET(request: Request) {
       studentId: attendance.studentId,
       status: attendance.status,
       notes: attendance.notes,
+      updatedAt: attendance.updatedAt,
+      createdAt: attendance.createdAt,
     })
     .from(attendance)
-    .where(and(...manualAttendanceConditions));
+    .where(and(...manualAttendanceConditions))
+    .orderBy(desc(attendance.updatedAt), desc(attendance.createdAt));
 
   const logMap = new Map(dailyLogs.map((log) => [log.studentId, log]));
-  const manualAttendanceMap = new Map(
-    manualAttendanceRows.map((row) => [row.studentId, row]),
-  );
+  const manualAttendanceMap = new Map<
+    string,
+    (typeof manualAttendanceRows)[number]
+  >();
+  for (const row of manualAttendanceRows) {
+    if (!manualAttendanceMap.has(row.studentId)) {
+      manualAttendanceMap.set(row.studentId, row);
+    }
+  }
   const data = studentResults.map((student) => {
     const log = logMap.get(student.id);
     const manualAttendance = manualAttendanceMap.get(student.id);

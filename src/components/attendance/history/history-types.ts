@@ -3,6 +3,7 @@ export type TodayAttendanceLog = {
   studentId: string;
   snapshotStudentName: string | null;
   snapshotStudentNis: string | null;
+  snapshotStudentNisn?: string | null;
   className?: string | null;
   date: string;
   checkInTime: string | Date | null;

@@ -376,11 +376,12 @@ pub async fn set_sync_config<R: Runtime>(
         keyring_errors.push(format!("sync_auth_token: {error}"));
     }
 
+    let payload = SyncConfigFilePayload {
+        url: request.url.trim().to_string(),
+        auth_token: request.auth_token.trim().to_string(),
+    };
+
     if !keyring_errors.is_empty() {
-        let payload = SyncConfigFilePayload {
-            url: request.url.trim().to_string(),
-            auth_token: request.auth_token.trim().to_string(),
-        };
         write_sync_config_file(&app_handle, &payload).map_err(|file_error| {
             format!(
                 "Gagal simpan ke keyring ({}) dan fallback file: {}",
@@ -388,7 +389,14 @@ pub async fn set_sync_config<R: Runtime>(
                 file_error
             )
         })?;
+
+        return Ok(());
     }
+
+    // Keep a durable local mirror even when keyring succeeds so desktop can
+    // recover cleanly if future keyring reads become unavailable.
+    write_sync_config_file(&app_handle, &payload)
+        .map_err(|file_error| format!("Berhasil simpan ke keyring tetapi gagal memperbarui fallback file: {file_error}"))?;
 
     Ok(())
 }

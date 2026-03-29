@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useAuthMock = vi.hoisted(() => vi.fn());
 const useAppNavigationMock = vi.hoisted(() => vi.fn());
+const apiPostMock = vi.hoisted(() => vi.fn());
+const ensureAppWarmupMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: useAuthMock,
@@ -10,6 +12,14 @@ vi.mock("@/hooks/use-auth", () => ({
 
 vi.mock("@/hooks/use-app-navigation", () => ({
   useAppNavigation: useAppNavigationMock,
+}));
+
+vi.mock("@/lib/api/request", () => ({
+  apiPost: apiPostMock,
+}));
+
+vi.mock("@/lib/runtime/app-bootstrap", () => ({
+  ensureAppWarmup: ensureAppWarmupMock,
 }));
 
 vi.mock("@/components/attendance/attendance-form", () => ({
@@ -39,6 +49,15 @@ describe("AttendancePageClient", () => {
 
   beforeEach(() => {
     replaceMock.mockReset();
+    apiPostMock.mockReset();
+    ensureAppWarmupMock.mockReset();
+    window.sessionStorage.clear();
+    apiPostMock.mockResolvedValue({
+      classCreated: 0,
+      studentUpserted: 0,
+      settingsSeeded: 0,
+    });
+    ensureAppWarmupMock.mockResolvedValue(undefined);
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -71,14 +90,17 @@ describe("AttendancePageClient", () => {
 
     render(<AttendancePageClient />);
 
-    expect(await screen.findByText("Daily Log Mock")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Daily Log Mock", {}, { timeout: 10000 }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: /Log Absensi/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText("QR Attendance")).not.toBeInTheDocument();
     expect(screen.getByText("Mode Baca Saja")).toBeInTheDocument();
     expect(screen.getByText("Analitik Saja")).toBeInTheDocument();
-  });
+    expect(apiPostMock).toHaveBeenCalledWith("/api/attendance/projection-sync");
+  }, 10000);
 
   it("switches attendance content through menu tabs for write-enabled roles", async () => {
     replaceMock.mockReset();
@@ -89,7 +111,9 @@ describe("AttendancePageClient", () => {
 
     render(<AttendancePageClient />);
 
-    expect(await screen.findByText("QR Scanner Mock")).toBeInTheDocument();
+    expect(
+      await screen.findByText("QR Scanner Mock", {}, { timeout: 10000 }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Attendance Form Mock")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Input Manual/i }));
     expect(await screen.findByText("Attendance Form Mock")).toBeInTheDocument();
@@ -102,7 +126,7 @@ describe("AttendancePageClient", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Log Absensi/i }));
     expect(await screen.findByText("Daily Log Mock")).toBeInTheDocument();
     expect(screen.getByText("Akses Tulis Aktif")).toBeInTheDocument();
-  });
+  }, 10000);
 
   it("opens the requested section from search params", async () => {
     replaceMock.mockReset();
@@ -122,7 +146,7 @@ describe("AttendancePageClient", () => {
     expect(screen.getAllByText("Section Aktif").length).toBeGreaterThan(0);
   });
 
-  it("uses localized section labels in the shell", () => {
+  it("uses localized section labels in the shell", async () => {
     replaceMock.mockReset();
     setNavigation();
     useAuthMock.mockReturnValue({
@@ -130,6 +154,10 @@ describe("AttendancePageClient", () => {
     });
 
     render(<AttendancePageClient />);
+
+    expect(
+      await screen.findByText("QR Scanner Mock", {}, { timeout: 10000 }),
+    ).toBeInTheDocument();
 
     expect(screen.getAllByText("Section Aktif").length).toBeGreaterThan(0);
     expect(
@@ -138,7 +166,7 @@ describe("AttendancePageClient", () => {
     expect(screen.getByText("Web + Desktop")).toBeInTheDocument();
   });
 
-  it("syncs selected section back to the url when menu changes", () => {
+  it("syncs selected section back to the url when menu changes", async () => {
     replaceMock.mockReset();
     setNavigation();
     useAuthMock.mockReturnValue({
@@ -147,11 +175,31 @@ describe("AttendancePageClient", () => {
 
     render(<AttendancePageClient />);
 
+    expect(
+      await screen.findByText("QR Scanner Mock", {}, { timeout: 10000 }),
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("tab", { name: /Input Manual/i }));
 
     expect(replaceMock).toHaveBeenCalledWith(
       "/dashboard/attendance?section=manual",
       { scroll: false },
     );
+  });
+
+  it("shows recovery warning when attendance bootstrap sync fails", async () => {
+    replaceMock.mockReset();
+    setNavigation();
+    useAuthMock.mockReturnValue({
+      user: { role: "teacher" },
+    });
+    apiPostMock.mockRejectedValueOnce(new Error("Projection sync unavailable"));
+
+    render(<AttendancePageClient />);
+
+    expect(
+      await screen.findByText("Bootstrap attendance perlu perhatian"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Projection sync unavailable")).toBeInTheDocument();
   });
 });

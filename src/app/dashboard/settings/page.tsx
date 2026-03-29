@@ -42,10 +42,6 @@ import { checkPermission } from "@/lib/auth/rbac";
 import { sendSettingsAuthTelemetry } from "@/lib/observability/settings-auth-telemetry";
 import { runFullSync, runPullSync, runPushSync } from "@/lib/sync/actions";
 import type { SyncResult } from "@/lib/sync/client";
-import {
-  readDesktopSyncStorageConfig,
-  writeDesktopSyncStorageConfig,
-} from "@/lib/sync/storage";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 type DesktopSyncConfig = {
@@ -83,6 +79,39 @@ type TelemetrySummary = {
     desktop: number;
   };
 };
+
+function extractUnknownErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const record = error as Record<string, unknown>;
+    const message = record.message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  }
+
+  return fallback;
+}
+
+function isDesktopSyncConfigMissingMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes(
+      "sync_database_url/turso_database_url belum dikonfigurasi",
+    ) ||
+    normalized.includes(
+      "sync_database_auth_token/turso_auth_token belum dikonfigurasi",
+    ) ||
+    normalized.includes("keyring/file/env")
+  );
+}
 
 const dashboardOutlineButtonClass = outlineButtonStyles.neutral;
 const TRACE_STORAGE_KEY = "settings-auth-trace-v1";
@@ -278,6 +307,15 @@ export default function SettingsPage() {
   }
 
   async function loadTelemetrySummary() {
+    if (desktopRuntime || authSource === "desktop-store") {
+      setTelemetrySummary(null);
+      setTelemetrySummaryError(
+        "Telemetry summary server hanya tersedia untuk runtime web.",
+      );
+      setTelemetrySummaryLoading(false);
+      return;
+    }
+
     setTelemetrySummaryLoading(true);
     setTelemetrySummaryError(null);
     try {
@@ -576,6 +614,15 @@ export default function SettingsPage() {
       return;
     }
 
+    if (desktopRuntime || authSource === "desktop-store") {
+      setTelemetrySummary(null);
+      setTelemetrySummaryError(
+        "Telemetry summary server hanya tersedia untuk runtime web.",
+      );
+      setTelemetrySummaryLoading(false);
+      return;
+    }
+
     setTelemetrySummaryLoading(true);
     setTelemetrySummaryError(null);
     void (async () => {
@@ -594,7 +641,7 @@ export default function SettingsPage() {
         setTelemetrySummaryLoading(false);
       }
     })();
-  }, [user?.id]);
+  }, [user?.id, desktopRuntime, authSource]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -710,14 +757,6 @@ export default function SettingsPage() {
     setConfigLoading(true);
     setConfigError(null);
 
-    const fallback = readDesktopSyncStorageConfig();
-    if (fallback) {
-      setSyncConfig({
-        url: fallback.url,
-        authToken: fallback.authToken,
-      });
-    }
-
     if (!desktopRuntime) {
       setConfigLoading(false);
       appendTrace(
@@ -743,19 +782,22 @@ export default function SettingsPage() {
         "Loaded desktop sync config from native keyring.",
       );
     } catch (error) {
-      if (!fallback) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Gagal memuat konfigurasi sync desktop";
-        setConfigError(message);
-        appendTrace("sync-config-load", "error", message);
-      } else {
+      const message = extractUnknownErrorMessage(
+        error,
+        "Gagal memuat konfigurasi sync desktop",
+      );
+
+      if (isDesktopSyncConfigMissingMessage(message)) {
+        setSyncConfig({ url: "", authToken: "" });
+        setConfigError(null);
         appendTrace(
           "sync-config-load",
-          "warning",
-          "Native keyring read failed, using local fallback.",
+          "info",
+          "Konfigurasi sync desktop belum diisi. Masukkan URL dan token untuk setup awal.",
         );
+      } else {
+        setConfigError(message);
+        appendTrace("sync-config-load", "error", message);
       }
     } finally {
       setConfigLoading(false);
@@ -775,14 +817,6 @@ export default function SettingsPage() {
     setConfigLoading(true);
     setConfigError(null);
 
-    const fallback = readDesktopSyncStorageConfig();
-    if (fallback) {
-      setSyncConfig({
-        url: fallback.url,
-        authToken: fallback.authToken,
-      });
-    }
-
     (async () => {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
@@ -794,11 +828,14 @@ export default function SettingsPage() {
           authToken: result.auth_token || "",
         });
       } catch (error) {
-        if (!fallback) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Gagal memuat konfigurasi sync desktop";
+        const message = extractUnknownErrorMessage(
+          error,
+          "Gagal memuat konfigurasi sync desktop",
+        );
+        if (isDesktopSyncConfigMissingMessage(message)) {
+          setSyncConfig({ url: "", authToken: "" });
+          setConfigError(null);
+        } else {
           setConfigError(message);
         }
       } finally {
@@ -832,11 +869,6 @@ export default function SettingsPage() {
     setConfigSaving(true);
     setConfigError(null);
     try {
-      writeDesktopSyncStorageConfig({
-        url: syncConfig.url.trim(),
-        authToken: syncConfig.authToken.trim(),
-      });
-
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("set_sync_config", {
         request: {
@@ -851,20 +883,20 @@ export default function SettingsPage() {
       );
       toast.success("Konfigurasi sync desktop berhasil disimpan ke keyring.");
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Gagal menyimpan konfigurasi sync desktop";
+      const message = extractUnknownErrorMessage(
+        error,
+        "Gagal menyimpan konfigurasi sync desktop",
+      );
       setConfigError(
-        `${message}. Fallback lokal desktop tetap tersimpan dan akan dipakai saat sync.`,
+        `${message}. Simpan ulang konfigurasi native desktop sebelum menjalankan sync.`,
       );
       appendTrace(
         "sync-config-save",
         "warning",
-        `Native keyring write failed: ${message}. Local fallback active.`,
+        `Native keyring/file write failed: ${message}. Sync tetap diblok sampai konfigurasi valid tersedia.`,
       );
       toast.warning(
-        "Native command gagal, fallback lokal desktop tetap tersimpan.",
+        "Native command gagal. Konfigurasi sync desktop belum siap.",
       );
     } finally {
       setConfigSaving(false);
@@ -915,7 +947,11 @@ export default function SettingsPage() {
     appendTrace("change-password", "info", "Submitting change password.");
     setChangingPassword(true);
     try {
-      await apiPost<{ changed: true }>("/api/auth/change-password", {
+      const result = await apiPost<{
+        changed: true;
+        syncStatus?: "synced" | "pending";
+        syncMessage?: string;
+      }>("/api/auth/change-password", {
         currentPassword,
         newPassword,
         confirmPassword,
@@ -923,21 +959,32 @@ export default function SettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      appendTrace(
-        "change-password",
-        "success",
-        "Password changed successfully.",
-      );
-      toast.success("Password berhasil diperbarui.");
+
+      if (result.syncStatus === "pending") {
+        appendTrace(
+          "change-password",
+          "warning",
+          result.syncMessage ||
+            "Password changed locally, but cloud sync is still pending.",
+        );
+        toast.warning(
+          "Password desktop berubah lokal, tetapi sinkronisasi ke cloud masih pending.",
+        );
+      } else {
+        appendTrace(
+          "change-password",
+          "success",
+          result.syncMessage || "Password changed successfully.",
+        );
+        toast.success("Password berhasil diperbarui.");
+      }
     } catch (error) {
       appendTrace(
         "change-password",
         "error",
-        error instanceof Error ? error.message : "Failed to change password.",
+        extractUnknownErrorMessage(error, "Failed to change password."),
       );
-      toast.error(
-        error instanceof Error ? error.message : "Gagal mengubah password",
-      );
+      toast.error(extractUnknownErrorMessage(error, "Gagal mengubah password"));
     } finally {
       setChangingPassword(false);
     }

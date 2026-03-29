@@ -117,10 +117,6 @@ const HISTORY_ADVANCED_FILTERS_STORAGE_KEY =
 const HISTORY_QUICK_RANGE_STORAGE_KEY =
   "attendance:daily-log:history-quick-range";
 
-type StudentOptionsResponse = {
-  data: StudentOption[];
-};
-
 type DailyLogViewProps = {
   initialTab?: "today" | "history";
   initialStudentId?: string;
@@ -247,7 +243,8 @@ export function DailyLogView({
   const [exportingCompareReport, setExportingCompareReport] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [printingReport, setPrintingReport] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [todayError, setTodayError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const historyRequestKeyRef = useRef("");
   const historyRequestSeqRef = useRef(0);
   const studentOptionsRequestSeqRef = useRef(0);
@@ -274,15 +271,16 @@ export function DailyLogView({
       : selectedHistoryStudentId !== "all"
         ? selectedHistoryStudentId
         : null;
+  const activeTabError = activeTab === "today" ? todayError : historyError;
 
   const loadTodayLogs = useCallback(async () => {
     setLoadingToday(true);
-    setError(null);
+    setTodayError(null);
     try {
       const data = await apiGet<TodayAttendanceLog[]>("/api/attendance/today");
       setTodayLogs(data);
     } catch (err) {
-      setError(
+      setTodayError(
         err instanceof Error
           ? err.message
           : "Gagal memuat log attendance hari ini",
@@ -318,12 +316,14 @@ export function DailyLogView({
       historyRequestSeqRef.current = requestSeq;
 
       setLoadingHistory(true);
-      setError(null);
+      setHistoryError(null);
       try {
         if (dateRangeInvalid) {
           setHistoryLogs([]);
           setHistoryTotal(0);
-          setError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir");
+          setHistoryError(
+            "Tanggal mulai tidak boleh lebih besar dari tanggal akhir",
+          );
           return;
         }
 
@@ -381,7 +381,7 @@ export function DailyLogView({
         setHistoryStudentSummary([]);
         setHistoryTrend([]);
         setHistoryHeatmap([]);
-        setError(
+        setHistoryError(
           err instanceof Error
             ? err.message
             : "Gagal memuat riwayat attendance",
@@ -465,12 +465,14 @@ export function DailyLogView({
         params.set("search", historyStudentSearch.trim());
       }
 
-      void apiGet<StudentOptionsResponse>(`/api/students?${params.toString()}`)
+      void apiGet<StudentOption[]>(
+        `/api/attendance/student-options?${params.toString()}`,
+      )
         .then((result) => {
           if (requestSeq !== studentOptionsRequestSeqRef.current) {
             return;
           }
-          setHistoryStudentOptions(result.data);
+          setHistoryStudentOptions(result);
         })
         .catch(() => {
           if (requestSeq !== studentOptionsRequestSeqRef.current) {
@@ -1371,7 +1373,7 @@ export function DailyLogView({
     }
 
     if (options?.clearError) {
-      setError(null);
+      setHistoryError(null);
     }
   }
 
@@ -1549,13 +1551,17 @@ export function DailyLogView({
 
   return (
     <div className="space-y-5">
-      {error ? (
+      {activeTabError ? (
         <InlineState
           title="Data log absensi tidak tersedia"
-          description={error}
+          description={activeTabError}
           actionLabel="Muat Ulang"
           onAction={() => {
-            void loadTodayLogs();
+            if (activeTab === "today") {
+              void loadTodayLogs();
+              return;
+            }
+
             void loadHistoryLogs({ force: true });
           }}
           variant="error"
@@ -1621,7 +1627,14 @@ export function DailyLogView({
                         {log.snapshotStudentName || "Siswa"}
                       </p>
                       <p className="text-sm text-zinc-400">
-                        {log.snapshotStudentNis || "-"} • {log.status}
+                        Kelas: {log.className?.trim() || "-"} •{" "}
+                        {formatStatusLabel(log.status)}
+                      </p>
+                      <p className="text-sm text-zinc-400">
+                        NIS: {log.snapshotStudentNis || "-"}
+                      </p>
+                      <p className="text-sm text-zinc-400">
+                        NISN: {log.snapshotStudentNisn || "-"}
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-sm text-zinc-300 sm:text-right">
@@ -1673,7 +1686,7 @@ export function DailyLogView({
             historySort={historySort}
             historyStartDate={historyStartDate}
             historyEndDate={historyEndDate}
-            error={error}
+            error={historyError}
             dateRangeInvalid={dateRangeInvalid}
             onHistoryDensityChange={setHistoryDensity}
             onToggleAdvancedFilters={() =>

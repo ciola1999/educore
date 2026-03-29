@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/web/auth";
-import { createAuthDbClient } from "@/lib/auth/web/db";
 
 /**
  * Logout API Route
@@ -12,20 +11,7 @@ import { createAuthDbClient } from "@/lib/auth/web/db";
 
 export async function POST() {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    if (userId) {
-      const client = createAuthDbClient();
-      await client.execute({
-        sql: `UPDATE users
-              SET version = COALESCE(version, 1) + 1,
-                  updated_at = CAST(strftime('%s', 'now') AS INTEGER),
-                  sync_status = 'pending'
-              WHERE id = ?`,
-        args: [userId],
-      });
-    }
+    await auth();
 
     const response = NextResponse.json({
       success: true,

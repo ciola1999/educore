@@ -24,8 +24,10 @@ import { checkPermission } from "@/lib/auth/rbac";
 import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 import {
   getRuntimeDefaultDashboardPath,
+  getRuntimeSupportedDashboardLabels,
   getRuntimeSupportedDashboardPaths,
   isDesktopDashboardConstrainedRuntime,
+  isDesktopStaticRuntime,
 } from "@/lib/runtime/desktop-dashboard";
 
 type QuickLink = {
@@ -108,7 +110,15 @@ export function DashboardHomeClient() {
         DASHBOARD_ROLE_ALLOWED_PATHS[currentRole],
       )
     : [];
+  const runtimeSupportedLabels = currentRole
+    ? getRuntimeSupportedDashboardLabels(
+        DASHBOARD_ROLE_ALLOWED_PATHS[currentRole],
+      )
+    : [];
   const desktopConstrainedRuntime = isDesktopDashboardConstrainedRuntime();
+  const runtimeSafeModeTitle = isDesktopStaticRuntime()
+    ? "Desktop Production Safe Mode"
+    : "Desktop Runtime Safe Mode";
   const visibleQuickLinks = quickLinks.filter((item) =>
     allowedPaths.includes(item.href),
   );
@@ -201,17 +211,18 @@ export function DashboardHomeClient() {
         <Card className="border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
           <CardHeader>
             <CardTitle className="text-zinc-100">
-              Desktop Production Safe Mode
+              {runtimeSafeModeTitle}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-zinc-400">
             <p>
-              Overview ringkas, attendance analytics, dan roster siswa penuh
-              masih dipertahankan di runtime web.
+              Overview desktop hanya membuka alur yang sudah local-runtime-safe.
+              Insight attendance lanjutan dan roster siswa penuh tetap
+              dipertahankan di runtime web sampai jalur desktop-nya siap.
             </p>
             <p>
-              Jalur yang sudah disiapkan untuk desktop production saat ini: User
-              Management, Academic, dan Settings.
+              Menu yang aktif di runtime ini:{" "}
+              {runtimeSupportedLabels.join(", ")}.
             </p>
           </CardContent>
         </Card>
@@ -275,7 +286,7 @@ export function DashboardHomeClient() {
         </Card>
       </section>
 
-      {canOperateDashboard && !desktopConstrainedRuntime ? (
+      {canOperateDashboard ? (
         <section className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>

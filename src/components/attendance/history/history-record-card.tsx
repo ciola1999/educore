@@ -42,8 +42,14 @@ export function HistoryRecordCard({
             {log.snapshotStudentName || "Siswa"}
           </p>
           <p className={identityTextClass}>
-            {log.snapshotStudentNis || "-"} • {log.date} •{" "}
-            {log.source === "qr" ? "QR" : "MANUAL"} • {log.className || "-"}
+            Kelas: {log.className || "-"} • {log.date} •{" "}
+            {log.source === "qr" ? "QR" : "MANUAL"}
+          </p>
+          <p className={identityTextClass}>
+            NIS: {log.snapshotStudentNis || "-"}
+          </p>
+          <p className={identityTextClass}>
+            NISN: {log.snapshotStudentNisn || "-"}
           </p>
         </div>
         <div className={metaTextClass}>

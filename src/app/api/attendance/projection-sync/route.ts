@@ -6,7 +6,9 @@ import { syncUsersToStudentsProjection } from "@/lib/services/student-projection
 export async function POST() {
   const session = await auth();
   const guard = requireAnyPermission(session, [
+    "attendance:read",
     "attendance:write",
+    "academic:read",
     "academic:write",
   ]);
   if (guard) {

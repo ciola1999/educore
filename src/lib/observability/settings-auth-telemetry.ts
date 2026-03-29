@@ -1,5 +1,7 @@
 "use client";
 
+import { isTauri } from "@/core/env";
+
 type TelemetryStatus = "info" | "success" | "warning" | "error";
 type TelemetryAction =
   | "sync"
@@ -147,6 +149,13 @@ export function sendSettingsAuthTelemetry(
   envelope: SettingsAuthTelemetryEnvelope,
 ) {
   if (typeof window === "undefined") {
+    return;
+  }
+
+  // Settings auth telemetry endpoint is web-session backed.
+  // Desktop runtime keeps local auth/session, so posting here only creates
+  // noisy 401s without adding trustworthy server-side observability.
+  if (isTauri() || envelope.authSource === "desktop-store") {
     return;
   }
 

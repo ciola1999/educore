@@ -119,6 +119,10 @@ describe("HistoryFiltersPanel", () => {
   it("updates search fields and admin student selector", () => {
     render(<HistoryFiltersPanel {...baseProps} />);
 
+    expect(
+      screen.getByText("Budi Santoso - X-A • 2324.10.001"),
+    ).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText(/Cari nama atau NIS siswa/i), {
       target: { value: "budi" },
     });

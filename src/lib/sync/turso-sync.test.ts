@@ -24,4 +24,8 @@ describe("turso sync table coverage", () => {
       SYNC_TABLE_NAMES.indexOf("jadwal"),
     );
   });
+
+  it("keeps users table available for scoped auth sync pushes", () => {
+    expect(SYNC_TABLE_NAMES).toContain("users");
+  });
 });

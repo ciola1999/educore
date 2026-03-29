@@ -226,7 +226,7 @@ export function HistoryFiltersPanel({
                 <SelectItem value="all">Semua Siswa</SelectItem>
                 {historyStudentOptions.map((student) => (
                   <SelectItem key={student.id} value={student.id}>
-                    {student.fullName} • {student.nis} • {student.grade}
+                    {student.fullName} - {student.grade} • {student.nis}
                   </SelectItem>
                 ))}
               </SelectContent>

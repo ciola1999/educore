@@ -12,10 +12,11 @@ import {
   SunMoon,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { InlineState } from "@/components/common/inline-state";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { apiPost } from "@/lib/api/request";
 import { checkPermission } from "@/lib/auth/rbac";
 import type { AttendanceSetting, Holiday } from "@/lib/db/schema";
 import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
@@ -35,6 +36,17 @@ type AttendanceSectionTheme = {
   accentClass: string;
   badgeClass: string;
 };
+
+type AttendanceProjectionSyncResult = {
+  classCreated: number;
+  studentUpserted: number;
+  settingsSeeded: number;
+};
+
+type AttendanceBootstrapState = "idle" | "syncing" | "ready" | "failed";
+
+const ATTENDANCE_PROJECTION_LAST_SYNC_KEY = "attendance_projection_last_sync";
+const ATTENDANCE_PROJECTION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
 
 const writeMenuItems: AttendanceMenuItem[] = [
   {
@@ -283,9 +295,16 @@ export function AttendancePageClient({
     useState<AttendanceSection>(defaultSection);
   const [isMenuCollapsed, setIsMenuCollapsed] = useState(true);
   const [startupReady, setStartupReady] = useState(false);
+  const [attendanceBootstrapState, setAttendanceBootstrapState] =
+    useState<AttendanceBootstrapState>("idle");
+  const [attendanceBootstrapError, setAttendanceBootstrapError] = useState<
+    string | null
+  >(null);
   const activeMenuItem = menuItems.find((item) => item.id === activeSection);
   const activeSectionTheme = sectionThemes[activeSection];
   const ActiveSectionIcon = sectionIcons[activeSection];
+  const attendanceRuntimeReady =
+    startupReady && attendanceBootstrapState !== "syncing";
 
   useEffect(() => {
     setActiveSection(defaultSection);
@@ -304,6 +323,58 @@ export function AttendancePageClient({
       active = false;
     };
   }, []);
+
+  const runAttendanceBootstrap = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (typeof window === "undefined" || !canReadAttendance) {
+        setAttendanceBootstrapState("ready");
+        setAttendanceBootstrapError(null);
+        return;
+      }
+
+      const now = Date.now();
+      const lastSyncAt = Number(
+        window.sessionStorage.getItem(ATTENDANCE_PROJECTION_LAST_SYNC_KEY),
+      );
+      const hasRecentSync =
+        !options?.force &&
+        Number.isFinite(lastSyncAt) &&
+        now - lastSyncAt <= ATTENDANCE_PROJECTION_SYNC_COOLDOWN_MS;
+
+      if (hasRecentSync) {
+        setAttendanceBootstrapState("ready");
+        setAttendanceBootstrapError(null);
+        return;
+      }
+
+      setAttendanceBootstrapState("syncing");
+      setAttendanceBootstrapError(null);
+      window.sessionStorage.setItem(
+        ATTENDANCE_PROJECTION_LAST_SYNC_KEY,
+        now.toString(),
+      );
+
+      try {
+        await apiPost<AttendanceProjectionSyncResult>(
+          "/api/attendance/projection-sync",
+        );
+        setAttendanceBootstrapState("ready");
+      } catch (error) {
+        window.sessionStorage.removeItem(ATTENDANCE_PROJECTION_LAST_SYNC_KEY);
+        setAttendanceBootstrapState("failed");
+        setAttendanceBootstrapError(
+          error instanceof Error
+            ? error.message
+            : "Sinkronisasi proyeksi attendance gagal",
+        );
+      }
+    },
+    [canReadAttendance],
+  );
+
+  useEffect(() => {
+    void runAttendanceBootstrap();
+  }, [runAttendanceBootstrap]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -473,6 +544,23 @@ export function AttendancePageClient({
 
       {canReadAttendance ? (
         <section className={attendanceStackClass}>
+          {attendanceBootstrapState === "failed" && attendanceBootstrapError ? (
+            <InlineState
+              title="Bootstrap attendance perlu perhatian"
+              description={attendanceBootstrapError}
+              actionLabel="Sinkronkan Ulang"
+              onAction={() => {
+                void runAttendanceBootstrap({ force: true });
+              }}
+              variant={
+                attendanceBootstrapError.includes("izin") ||
+                attendanceBootstrapError.includes("login")
+                  ? "warning"
+                  : "error"
+              }
+            />
+          ) : null}
+
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-zinc-100">
@@ -668,7 +756,7 @@ export function AttendancePageClient({
             })}
           </div>
 
-          {!startupReady ? (
+          {!attendanceRuntimeReady ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -695,8 +783,9 @@ export function AttendancePageClient({
                       {activeMenuItem?.label || "Attendance"}
                     </h2>
                     <p className={sectionHeaderCopyClass}>
-                      Runtime lokal/web sedang menyelesaikan bootstrap database
-                      agar section aktif tidak timeout saat cold start pertama.
+                      {attendanceBootstrapState === "syncing"
+                        ? "Projection attendance sedang diselaraskan agar QR, log, dan input manual membaca data turunan yang sama."
+                        : "Runtime lokal/web sedang menyelesaikan bootstrap database agar section aktif tidak timeout saat cold start pertama."}
                     </p>
                   </div>
                 </div>
@@ -708,7 +797,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {startupReady && activeSection === "qr" ? (
+          {attendanceRuntimeReady && activeSection === "qr" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -745,7 +834,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {startupReady && activeSection === "manual" ? (
+          {attendanceRuntimeReady && activeSection === "manual" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -786,7 +875,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {startupReady && activeSection === "log" ? (
+          {attendanceRuntimeReady && activeSection === "log" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >
@@ -828,7 +917,7 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {startupReady &&
+          {attendanceRuntimeReady &&
           canWriteAttendance &&
           activeSection === "schedule" ? (
             <section
@@ -869,7 +958,9 @@ export function AttendancePageClient({
             </section>
           ) : null}
 
-          {startupReady && canWriteAttendance && activeSection === "holiday" ? (
+          {attendanceRuntimeReady &&
+          canWriteAttendance &&
+          activeSection === "holiday" ? (
             <section
               className={cn(attendanceStackClass, sectionTransitionClass)}
             >

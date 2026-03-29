@@ -1,6 +1,5 @@
 import { type Client, createClient } from "@libsql/client/web";
 import { isTauri } from "@/core/env";
-import { readDesktopSyncStorageConfig } from "./storage";
 
 type SyncConfig = {
   url: string;
@@ -8,25 +7,24 @@ type SyncConfig = {
 };
 
 async function resolveDesktopSyncConfig(): Promise<SyncConfig> {
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const config = await invoke<{ url: string; auth_token: string }>(
-      "get_sync_config",
-    );
+  const { invoke } = await import("@tauri-apps/api/core");
+  const config = await invoke<{ url: string; auth_token: string }>(
+    "get_sync_config",
+  );
 
-    return {
-      url: config.url,
-      authToken: config.auth_token,
-    };
-  } catch {
-    const fallback = readDesktopSyncStorageConfig();
-    if (fallback) {
-      return fallback;
-    }
+  const url = config.url?.trim() ?? "";
+  const authToken = config.auth_token?.trim() ?? "";
+
+  if (!url || !authToken) {
     throw new Error(
-      "Konfigurasi sync desktop tidak tersedia (native command gagal dan fallback lokal kosong).",
+      "Konfigurasi sync desktop tidak lengkap. Simpan URL dan auth token melalui runtime native desktop.",
     );
   }
+
+  return {
+    url,
+    authToken,
+  };
 }
 
 function resolveWebSyncConfig(): SyncConfig {

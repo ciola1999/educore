@@ -29,11 +29,17 @@ describe("GET /api/attendance/today", () => {
         id: "log-1",
         studentId: "student-1",
         snapshotStudentName: "Aditya",
+        className: "X-A",
+        snapshotStudentNis: "1001",
+        snapshotStudentNisn: "99887766",
       },
       {
         id: "log-2",
         studentId: "student-2",
         snapshotStudentName: "Budi",
+        className: "X-B",
+        snapshotStudentNis: "1002",
+        snapshotStudentNisn: "88776655",
       },
     ]);
 
@@ -42,7 +48,12 @@ describe("GET /api/attendance/today", () => {
 
     const payload = (await response.json()) as {
       success: boolean;
-      data: Array<{ studentId: string }>;
+      data: Array<{
+        studentId: string;
+        className?: string | null;
+        snapshotStudentNis?: string | null;
+        snapshotStudentNisn?: string | null;
+      }>;
     };
 
     expect(payload.success).toBe(true);
@@ -51,6 +62,11 @@ describe("GET /api/attendance/today", () => {
       "student-1",
       "student-2",
     ]);
+    expect(payload.data[0]).toMatchObject({
+      className: "X-A",
+      snapshotStudentNis: "1001",
+      snapshotStudentNisn: "99887766",
+    });
   });
 
   it("filters today logs to the logged-in student for student role", async () => {
@@ -63,11 +79,17 @@ describe("GET /api/attendance/today", () => {
         id: "log-1",
         studentId: "student-1",
         snapshotStudentName: "Aditya",
+        className: "X-A",
+        snapshotStudentNis: "1001",
+        snapshotStudentNisn: "99887766",
       },
       {
         id: "log-2",
         studentId: "student-2",
         snapshotStudentName: "Budi",
+        className: "X-B",
+        snapshotStudentNis: "1002",
+        snapshotStudentNisn: "88776655",
       },
     ]);
 

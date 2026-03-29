@@ -76,10 +76,17 @@ export async function getAttendanceRosterStudents(classId: string): Promise<{
       })
       .from(students)
       .where(isNull(students.deletedAt));
+    const classNameById = await getClassNameByIdMap(
+      db,
+      allStudents.map((student) => student.grade),
+    );
 
     return {
       className: null,
-      students: allStudents,
+      students: allStudents.map((student) => ({
+        ...student,
+        grade: resolveDisplayClassName(classNameById, student.grade),
+      })),
     };
   }
 
@@ -177,8 +184,64 @@ export async function getAttendanceRosterStudents(classId: string): Promise<{
 
   return {
     className: classData[0].name,
-    students: mergedStudents,
+    students: mergedStudents.map((student) => ({
+      ...student,
+      grade: sanitizeClassDisplayName(classData[0].name, student.grade),
+    })),
   };
+}
+
+export async function getAttendanceHistoryStudentOptions(options?: {
+  search?: string;
+  limit?: number;
+}) {
+  const db = await getDb();
+  const limit = Math.min(Math.max(options?.limit ?? 20, 1), 50);
+  const search = options?.search?.trim() || "";
+  const searchCondition = search
+    ? or(
+        like(students.fullName, `%${search}%`),
+        like(students.nis, `%${search}%`),
+        like(students.grade, `%${search}%`),
+      )
+    : undefined;
+
+  const rows = await db
+    .select({
+      id: students.id,
+      fullName: students.fullName,
+      nis: students.nis,
+      grade: students.grade,
+      accountClassName: classes.name,
+    })
+    .from(students)
+    .leftJoin(users, and(eq(users.id, students.id), isNull(users.deletedAt)))
+    .leftJoin(
+      classes,
+      and(eq(users.kelasId, classes.id), isNull(classes.deletedAt)),
+    )
+    .where(
+      searchCondition
+        ? and(isNull(students.deletedAt), searchCondition)
+        : isNull(students.deletedAt),
+    )
+    .orderBy(students.fullName)
+    .limit(limit);
+  const classNameById = await getClassNameByIdMap(
+    db,
+    rows.flatMap((row) => [row.accountClassName, row.grade]),
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    fullName: row.fullName,
+    nis: row.nis,
+    grade: resolveDisplayClassName(
+      classNameById,
+      row.accountClassName,
+      row.grade,
+    ),
+  }));
 }
 
 export type ScanResult = {
@@ -209,6 +272,48 @@ type AttendanceHistoryClassRow = {
   className: string | null;
   studentGrade?: string | null;
 };
+
+async function getClassNameByIdMap(
+  db: Awaited<ReturnType<typeof getDb>>,
+  values: Array<string | null | undefined>,
+) {
+  const classIds = [
+    ...new Set(
+      values
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value))
+        .filter((value) => isUuidLikeClassValue(value)),
+    ),
+  ];
+
+  if (classIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const classRows = await db
+    .select({ id: classes.id, name: classes.name })
+    .from(classes)
+    .where(and(inArray(classes.id, classIds), isNull(classes.deletedAt)));
+
+  return new Map(classRows.map((row) => [row.id, row.name]));
+}
+
+function resolveDisplayClassName(
+  classNameById: Map<string, string>,
+  ...candidates: Array<string | null | undefined>
+) {
+  return sanitizeClassDisplayName(
+    ...candidates.flatMap((candidate) => {
+      const normalized = candidate?.trim();
+      if (!normalized) {
+        return [];
+      }
+
+      const mappedName = classNameById.get(normalized);
+      return mappedName ? [mappedName, normalized] : [normalized];
+    }),
+  );
+}
 
 function parseTimeSetting(timeStr: string): Date {
   return parse(timeStr, "HH:mm", new Date());
@@ -349,12 +454,16 @@ async function resolveStudentFromQr(
       .limit(1);
 
     if (cardQuery[0]) {
+      const classNameById = await getClassNameByIdMap(db, [cardQuery[0].grade]);
       return {
         id: cardQuery[0].studentId,
         fullName: cardQuery[0].studentName || "UNKNOWN",
         nis: cardQuery[0].studentNis || "UNKNOWN",
-        grade:
-          cardQuery[0].accountClassName || cardQuery[0].grade || "UNASSIGNED",
+        grade: resolveDisplayClassName(
+          classNameById,
+          cardQuery[0].accountClassName,
+          cardQuery[0].grade,
+        ),
         photo: cardQuery[0].photo ?? undefined,
       };
     }
@@ -391,14 +500,18 @@ async function resolveStudentFromQr(
       .limit(1);
 
     if (directQuery[0]) {
+      const classNameById = await getClassNameByIdMap(db, [
+        directQuery[0].grade,
+      ]);
       return {
         id: directQuery[0].id,
         fullName: directQuery[0].fullName,
         nis: directQuery[0].nis,
-        grade:
-          directQuery[0].accountClassName ||
-          directQuery[0].grade ||
-          "UNASSIGNED",
+        grade: resolveDisplayClassName(
+          classNameById,
+          directQuery[0].accountClassName,
+          directQuery[0].grade,
+        ),
         photo: directQuery[0].photo ?? undefined,
       };
     }
@@ -853,7 +966,7 @@ export async function recordBulkAttendance(data: BulkAttendanceInput) {
             isNull(attendance.deletedAt),
           ),
         )
-        .limit(1);
+        .orderBy(desc(attendance.updatedAt), desc(attendance.createdAt));
 
       if (existing[0]) {
         await db
@@ -866,6 +979,18 @@ export async function recordBulkAttendance(data: BulkAttendanceInput) {
             updatedAt: now,
           })
           .where(eq(attendance.id, existing[0].id));
+
+        const duplicateIds = existing.slice(1).map((row) => row.id);
+        if (duplicateIds.length > 0) {
+          await db
+            .update(attendance)
+            .set({
+              deletedAt: now,
+              updatedAt: now,
+              syncStatus: "pending",
+            })
+            .where(inArray(attendance.id, duplicateIds));
+        }
         successCount += 1;
         continue;
       }
@@ -933,9 +1058,29 @@ export async function getTodayAttendanceRecords() {
   const db = await getDb();
   const todayStr = format(new Date(), "yyyy-MM-dd");
 
-  return db
-    .select()
+  const rows = await db
+    .select({
+      id: studentDailyAttendance.id,
+      studentId: studentDailyAttendance.studentId,
+      snapshotStudentName: studentDailyAttendance.snapshotStudentName,
+      snapshotStudentNis: studentDailyAttendance.snapshotStudentNis,
+      snapshotStudentNisn: students.nisn,
+      className: classes.name,
+      studentGrade: students.grade,
+      date: studentDailyAttendance.date,
+      checkInTime: studentDailyAttendance.checkInTime,
+      checkOutTime: studentDailyAttendance.checkOutTime,
+      status: studentDailyAttendance.status,
+      lateDuration: studentDailyAttendance.lateDuration,
+      syncStatus: studentDailyAttendance.syncStatus,
+      createdAt: studentDailyAttendance.createdAt,
+      updatedAt: studentDailyAttendance.updatedAt,
+      deletedAt: studentDailyAttendance.deletedAt,
+    })
     .from(studentDailyAttendance)
+    .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
+    .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
+    .leftJoin(classes, eq(users.kelasId, classes.id))
     .where(
       and(
         eq(studentDailyAttendance.date, todayStr),
@@ -943,6 +1088,12 @@ export async function getTodayAttendanceRecords() {
       ),
     )
     .orderBy(desc(studentDailyAttendance.checkInTime));
+
+  const resolvedRows = await resolveAttendanceHistoryClassNames(db, rows);
+  return resolvedRows.map(({ studentGrade: _studentGrade, ...row }) => ({
+    ...row,
+    source: "qr" as const,
+  }));
 }
 
 export type AttendanceHistoryFilter = {
@@ -965,6 +1116,7 @@ export type AttendanceHistoryRecord = {
   studentId: string;
   snapshotStudentName: string | null;
   snapshotStudentNis: string | null;
+  snapshotStudentNisn?: string | null;
   className: string | null;
   date: string;
   checkInTime: Date | null;
@@ -1179,6 +1331,7 @@ export async function getAttendanceHistory(
             studentId: studentDailyAttendance.studentId,
             snapshotStudentName: studentDailyAttendance.snapshotStudentName,
             snapshotStudentNis: studentDailyAttendance.snapshotStudentNis,
+            snapshotStudentNisn: students.nisn,
             className: classes.name,
             studentGrade: students.grade,
             date: studentDailyAttendance.date,
@@ -1234,6 +1387,7 @@ export async function getAttendanceHistory(
             status: attendance.status,
             fullName: students.fullName,
             nis: students.nis,
+            nisn: students.nisn,
             className: classes.name,
             studentGrade: students.grade,
             notes: attendance.notes,
@@ -1271,6 +1425,7 @@ export async function getAttendanceHistory(
         date: m.date,
         snapshotStudentName: m.fullName,
         snapshotStudentNis: m.nis,
+        snapshotStudentNisn: m.nisn,
         className: m.className,
         checkInTime: null,
         checkOutTime: null,
@@ -2053,10 +2208,19 @@ export async function createAttendanceRiskFollowUp(input: {
 
   const resolvedStudentName = student.fullName.trim();
   const resolvedNis = student.nis.trim();
-  const resolvedClassName =
-    student.accountClassName?.trim() || student.grade?.trim() || "";
+  const classNameById = await getClassNameByIdMap(db, [student.grade]);
+  const resolvedClassName = resolveDisplayClassName(
+    classNameById,
+    student.accountClassName,
+    student.grade,
+  );
 
-  if (!resolvedStudentName || !resolvedNis || !resolvedClassName) {
+  if (
+    !resolvedStudentName ||
+    !resolvedNis ||
+    !resolvedClassName ||
+    resolvedClassName === "UNASSIGNED"
+  ) {
     throw new Error("Data siswa follow-up tidak lengkap");
   }
 

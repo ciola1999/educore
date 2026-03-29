@@ -606,9 +606,14 @@ export function AttendanceForm({
                           {student.nis}
                           {student.nisn ? ` • NISN ${student.nisn}` : ""}
                         </span>
-                        <span className="font-medium tracking-tight text-zinc-50">
-                          {student.fullName}
-                        </span>
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                          <span className="font-medium tracking-tight text-zinc-50">
+                            {student.fullName}
+                          </span>
+                          <span className="inline-flex w-fit rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-100">
+                            {student.grade}
+                          </span>
+                        </div>
                         {viewMode === "detailed" ? (
                           <>
                             <span className="text-[11px] text-zinc-400">

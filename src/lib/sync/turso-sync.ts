@@ -33,6 +33,7 @@ type PullFromCloudDeps = {
 type PushToCloudDeps = {
   db?: Awaited<ReturnType<typeof getDb>>;
   tursoCloud?: Awaited<ReturnType<typeof getTursoCloudClient>>;
+  tables?: string[];
 };
 type FullSyncDeps = PushToCloudDeps &
   PullFromCloudDeps & {
@@ -56,6 +57,7 @@ type SyncTableConfig = {
   table: unknown;
   conflictKey?: string;
   logicalKey?: string | string[];
+  foreignKeyRemaps?: Record<string, string>;
 };
 const asSyncTableRef = (table: unknown): SyncTableRef => table as SyncTableRef;
 
@@ -212,8 +214,24 @@ const SYNC_TABLES: SyncTableConfig[] = [
     conflictKey: "id",
     logicalKey: "name",
   },
-  { name: "user_roles", table: userRoles, conflictKey: "id" },
-  { name: "role_permissions", table: rolePermissions, conflictKey: "id" },
+  {
+    name: "user_roles",
+    table: userRoles,
+    conflictKey: "id",
+    foreignKeyRemaps: {
+      userId: "users",
+      roleId: "roles",
+    },
+  },
+  {
+    name: "role_permissions",
+    table: rolePermissions,
+    conflictKey: "id",
+    foreignKeyRemaps: {
+      roleId: "roles",
+      permissionId: "permissions",
+    },
+  },
   {
     name: "tahun_ajaran",
     table: tahunAjaran,
@@ -225,6 +243,9 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: semester,
     conflictKey: "id",
     logicalKey: ["tahunAjaranId", "nama"],
+    foreignKeyRemaps: {
+      tahunAjaranId: "tahun_ajaran",
+    },
   },
   { name: "subjects", table: subjects, conflictKey: "id", logicalKey: "code" },
   { name: "classes", table: classes, conflictKey: "id" },
@@ -233,15 +254,32 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: guruMapel,
     conflictKey: "id",
     logicalKey: ["guruId", "mataPelajaranId", "kelasId", "semesterId"],
+    foreignKeyRemaps: {
+      guruId: "users",
+      mataPelajaranId: "subjects",
+      kelasId: "classes",
+      semesterId: "semester",
+    },
   },
   {
     name: "jadwal",
     table: jadwal,
     conflictKey: "id",
     logicalKey: ["guruMapelId", "hari", "jamMulai", "jamSelesai"],
+    foreignKeyRemaps: {
+      guruMapelId: "guru_mapel",
+    },
   },
   { name: "students", table: students, conflictKey: "id", logicalKey: "nis" },
-  { name: "attendance", table: attendance, conflictKey: "id" },
+  {
+    name: "attendance",
+    table: attendance,
+    conflictKey: "id",
+    foreignKeyRemaps: {
+      studentId: "students",
+      classId: "classes",
+    },
+  },
   {
     name: "attendance_settings",
     table: attendanceSettings,
@@ -253,10 +291,29 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: studentDailyAttendance,
     conflictKey: "id",
     logicalKey: ["studentId", "date"],
+    foreignKeyRemaps: {
+      studentId: "students",
+    },
   },
 ];
 
+const SYNC_TABLE_CONFIG_MAP = new Map(
+  SYNC_TABLES.map((tableConfig) => [tableConfig.name, tableConfig]),
+);
+
 export const SYNC_TABLE_NAMES = SYNC_TABLES.map((table) => table.name);
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isForeignKeyConstraintError(error: unknown): boolean {
+  return getErrorMessage(error).toLowerCase().includes("foreign key");
+}
+
+function toSnakeKey(key: string): string {
+  return key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
 
 /**
  * Push pending local data to Turso Cloud
@@ -273,14 +330,145 @@ export async function pushToCloud(
   try {
     const db = deps.db ?? (await getDb());
     const tursoCloud = deps.tursoCloud ?? (await getTursoCloudClient());
+    const targetTables =
+      deps.tables && deps.tables.length > 0
+        ? SYNC_TABLES.filter((tableConfig) =>
+            deps.tables?.includes(tableConfig.name),
+          )
+        : SYNC_TABLES;
+    const remoteIdRemaps = new Map<string, Map<string, string>>();
     let uploadedCount = 0;
 
-    const syncTable = async (
+    const rememberRemoteIdRemap = (
       tableName: string,
-      drizzleTable: unknown,
-      conflictKey: string = "id",
+      localId: unknown,
+      remoteId: unknown,
     ) => {
-      const table = asSyncTableRef(drizzleTable);
+      if (
+        typeof localId !== "string" ||
+        typeof remoteId !== "string" ||
+        !localId.trim() ||
+        !remoteId.trim()
+      ) {
+        return;
+      }
+
+      const tableRemaps =
+        remoteIdRemaps.get(tableName) ?? new Map<string, string>();
+      tableRemaps.set(localId, remoteId);
+      remoteIdRemaps.set(tableName, tableRemaps);
+    };
+
+    const getLocalRowById = async (
+      tableConfig: SyncTableConfig,
+      localId: string,
+    ): Promise<SnakeRecord | null> => {
+      const table = asSyncTableRef(tableConfig.table);
+      const rows = await db
+        .select()
+        .from(table as never)
+        .where(eq(table.id as never, localId as never))
+        .limit(1);
+
+      return ((rows[0] as SnakeRecord | undefined) ??
+        null) as SnakeRecord | null;
+    };
+
+    const findRemoteRecordIdByLogicalKey = async (
+      tableConfig: SyncTableConfig,
+      record: SnakeRecord,
+    ): Promise<string | null> => {
+      if (!tableConfig.logicalKey) {
+        return null;
+      }
+
+      const logicalKeys = Array.isArray(tableConfig.logicalKey)
+        ? tableConfig.logicalKey
+        : [tableConfig.logicalKey];
+
+      const logicalValues = logicalKeys.map((key) => record[key]);
+      if (
+        logicalValues.some(
+          (value) =>
+            value === null ||
+            value === undefined ||
+            (typeof value === "string" && value.trim() === ""),
+        )
+      ) {
+        return null;
+      }
+
+      const whereClause = logicalKeys
+        .map((key) => `"${toSnakeKey(key)}" = ?`)
+        .join(" AND ");
+      const result = await tursoCloud.execute({
+        sql: `SELECT id FROM "${tableConfig.name}" WHERE ${whereClause} LIMIT 1`,
+        args: logicalValues as InValue[],
+      });
+      const remoteId = result.rows?.[0]?.id;
+
+      return typeof remoteId === "string" && remoteId.trim() ? remoteId : null;
+    };
+
+    const remapPushRecordForeignKeys = async (
+      tableConfig: SyncTableConfig,
+      record: SnakeRecord,
+    ): Promise<SnakeRecord> => {
+      if (!tableConfig.foreignKeyRemaps) {
+        return { ...record };
+      }
+
+      const nextRecord = { ...record };
+
+      for (const [field, parentTableName] of Object.entries(
+        tableConfig.foreignKeyRemaps,
+      )) {
+        const currentValue = nextRecord[field];
+        if (typeof currentValue !== "string" || !currentValue.trim()) {
+          continue;
+        }
+
+        const cachedRemoteId = remoteIdRemaps
+          .get(parentTableName)
+          ?.get(currentValue);
+        if (cachedRemoteId) {
+          nextRecord[field] = cachedRemoteId;
+          continue;
+        }
+
+        const parentConfig = SYNC_TABLE_CONFIG_MAP.get(parentTableName);
+        if (!parentConfig) {
+          continue;
+        }
+
+        const localParentRow = await getLocalRowById(
+          parentConfig,
+          currentValue,
+        );
+        if (!localParentRow) {
+          continue;
+        }
+
+        const remappedParentRow = await remapPushRecordForeignKeys(
+          parentConfig,
+          localParentRow,
+        );
+        const remoteParentId = await findRemoteRecordIdByLogicalKey(
+          parentConfig,
+          remappedParentRow,
+        );
+
+        if (remoteParentId) {
+          rememberRemoteIdRemap(parentTableName, currentValue, remoteParentId);
+          nextRecord[field] = remoteParentId;
+        }
+      }
+
+      return nextRecord;
+    };
+
+    const syncTable = async (tableConfig: SyncTableConfig) => {
+      const table = asSyncTableRef(tableConfig.table);
       const pendingItems = await db
         .select()
         .from(table as never)
@@ -289,16 +477,43 @@ export async function pushToCloud(
 
       if (rows.length > 0) {
         for (const item of rows) {
-          const snakeItem = camelToSnake(item);
+          const remappedItem = await remapPushRecordForeignKeys(
+            tableConfig,
+            item,
+          );
+          const remoteRecordId = await findRemoteRecordIdByLogicalKey(
+            tableConfig,
+            remappedItem,
+          );
+          if (remoteRecordId && remoteRecordId !== remappedItem.id) {
+            rememberRemoteIdRemap(
+              tableConfig.name,
+              remappedItem.id,
+              remoteRecordId,
+            );
+            remappedItem.id = remoteRecordId;
+          }
+
+          const snakeItem = camelToSnake(remappedItem);
           const columns = sortColumns(snakeItem);
-          const sql = generateUpsertSql(tableName, columns, conflictKey);
+          const sql = generateUpsertSql(
+            tableConfig.name,
+            columns,
+            tableConfig.conflictKey,
+          );
           const args = toLibsqlArgs(columns, snakeItem);
 
           if (sql) {
-            await tursoCloud.execute({
-              sql,
-              args,
-            });
+            try {
+              await tursoCloud.execute({
+                sql,
+                args,
+              });
+            } catch (error) {
+              throw new Error(
+                `[SYNC_PUSH:${tableConfig.name}] Failed to push record ${String(item.id ?? "unknown")}: ${getErrorMessage(error)}`,
+              );
+            }
 
             await db
               .update(table as never)
@@ -311,12 +526,8 @@ export async function pushToCloud(
       }
     };
 
-    for (const tableConfig of SYNC_TABLES) {
-      await syncTable(
-        tableConfig.name,
-        tableConfig.table,
-        tableConfig.conflictKey,
-      );
+    for (const tableConfig of targetTables) {
+      await syncTable(tableConfig);
     }
 
     return {
@@ -328,7 +539,7 @@ export async function pushToCloud(
     console.error("Push error:", error);
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Gagal push ke cloud",
+      message: getErrorMessage(error) || "Gagal push ke cloud",
     };
   }
 }
@@ -350,6 +561,7 @@ export async function pullFromCloud(
     const tursoCloud = deps.tursoCloud ?? (await getTursoCloudClient());
     const runProjection =
       deps.syncUsersProjection ?? syncUsersToStudentsProjection;
+    const idRemaps = new Map<string, Map<string, string>>();
     let downloadedCount = 0;
     const parseEpoch = (value: unknown): number => {
       if (typeof value === "number" && Number.isFinite(value)) {
@@ -367,10 +579,55 @@ export async function pullFromCloud(
       return 0;
     };
 
+    const registerIdRemap = (
+      tableName: string,
+      remoteId: unknown,
+      localId: unknown,
+    ) => {
+      if (
+        typeof remoteId !== "string" ||
+        typeof localId !== "string" ||
+        !remoteId.trim() ||
+        !localId.trim() ||
+        remoteId === localId
+      ) {
+        return;
+      }
+
+      const tableRemaps = idRemaps.get(tableName) ?? new Map<string, string>();
+      tableRemaps.set(remoteId, localId);
+      idRemaps.set(tableName, tableRemaps);
+    };
+
+    const applyForeignKeyRemaps = (
+      record: SnakeRecord,
+      foreignKeyRemaps?: Record<string, string>,
+    ) => {
+      if (!foreignKeyRemaps) {
+        return record;
+      }
+
+      const nextRecord = { ...record };
+      for (const [field, parentTable] of Object.entries(foreignKeyRemaps)) {
+        const currentValue = nextRecord[field];
+        if (typeof currentValue !== "string" || !currentValue.trim()) {
+          continue;
+        }
+
+        const remappedValue = idRemaps.get(parentTable)?.get(currentValue);
+        if (remappedValue) {
+          nextRecord[field] = remappedValue;
+        }
+      }
+
+      return nextRecord;
+    };
+
     const pullTable = async (
       tableName: string,
       drizzleTable: unknown,
       logicalKey?: string | string[],
+      foreignKeyRemaps?: Record<string, string>,
     ) => {
       const table = asSyncTableRef(drizzleTable);
       const res = await tursoCloud.execute(`SELECT * FROM "${tableName}"`);
@@ -378,7 +635,10 @@ export async function pullFromCloud(
 
       if (remoteData && remoteData.length > 0) {
         for (const remote of remoteData) {
-          const mappedData = snakeToCamel(remote);
+          const mappedData = applyForeignKeyRemaps(
+            snakeToCamel(remote),
+            foreignKeyRemaps,
+          );
           mappedData.syncStatus = "synced";
 
           // 1. Check by ID first
@@ -437,6 +697,7 @@ export async function pullFromCloud(
 
             if (existingByKey.length > 0) {
               const localRecord = existingByKey[0];
+              registerIdRemap(tableName, mappedData.id, localRecord.id);
               const remoteTime = parseEpoch(
                 (remote as Record<string, unknown>).updated_at,
               );
@@ -477,6 +738,7 @@ export async function pullFromCloud(
         tableConfig.name,
         tableConfig.table,
         tableConfig.logicalKey,
+        tableConfig.foreignKeyRemaps,
       );
     }
 
@@ -500,7 +762,40 @@ export async function fullSync(deps: FullSyncDeps = {}): Promise<SyncResult> {
   const pushRunner = deps.pushExecutor ?? pushToCloud;
   const pullRunner = deps.pullExecutor ?? pullFromCloud;
   const push = await pushRunner(deps);
-  if (push.status === "error") return push;
+  if (push.status === "error") {
+    if (!isForeignKeyConstraintError(push.message)) {
+      return push;
+    }
+
+    const repairPull = await pullRunner(deps);
+    if (repairPull.status === "error") {
+      return {
+        status: "error",
+        message: `${push.message}. Repair pull gagal: ${repairPull.message}`,
+      };
+    }
+
+    const retryPush = await pushRunner(deps);
+    if (retryPush.status === "error") {
+      return {
+        status: "error",
+        message: `${push.message}. Retry setelah repair pull tetap gagal: ${retryPush.message}`,
+      };
+    }
+
+    const finalPull = await pullRunner(deps);
+    if (finalPull.status === "error") {
+      return finalPull;
+    }
+
+    return {
+      status: "success",
+      message:
+        `Full sync recovered after foreign key repair. ${retryPush.message} ${finalPull.message}`.trim(),
+      uploaded: retryPush.uploaded,
+      downloaded: finalPull.downloaded,
+    };
+  }
   const pull = await pullRunner(deps);
   return pull;
 }

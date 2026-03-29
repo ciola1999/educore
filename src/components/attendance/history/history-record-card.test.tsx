@@ -15,6 +15,7 @@ describe("HistoryRecordCard", () => {
           studentId: "student-1",
           snapshotStudentName: "Budi Santoso",
           snapshotStudentNis: "2324.10.001",
+          snapshotStudentNisn: "0099887766",
           className: "X-A",
           date: "2026-03-24",
           checkInTime: "2026-03-24T07:15:00.000Z",
@@ -30,8 +31,10 @@ describe("HistoryRecordCard", () => {
 
     expect(screen.getByText("Budi Santoso")).toBeInTheDocument();
     expect(
-      screen.getByText(/2324.10.001 • 2026-03-24 • QR • X-A/i),
+      screen.getByText(/Kelas: X-A • 2026-03-24 • QR/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/NIS: 2324.10.001/i)).toBeInTheDocument();
+    expect(screen.getByText(/NISN: 0099887766/i)).toBeInTheDocument();
     expect(screen.getByText("Terlambat")).toBeInTheDocument();
     expect(screen.getByText(/In 07:15 • Out 15:10/i)).toBeInTheDocument();
     expect(screen.getByText(/Terlambat 15 menit/i)).toBeInTheDocument();
@@ -51,6 +54,7 @@ describe("HistoryRecordCard", () => {
           studentId: "student-2",
           snapshotStudentName: null,
           snapshotStudentNis: null,
+          snapshotStudentNisn: null,
           className: null,
           date: "2026-03-24",
           checkInTime: null,
@@ -66,8 +70,10 @@ describe("HistoryRecordCard", () => {
 
     expect(screen.getByText("Siswa")).toBeInTheDocument();
     expect(
-      screen.getByText(/- • 2026-03-24 • MANUAL • -/i),
+      screen.getByText(/Kelas: - • 2026-03-24 • MANUAL/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/NIS: -/i)).toBeInTheDocument();
+    expect(screen.getByText(/NISN: -/i)).toBeInTheDocument();
     expect(screen.getByText(/In - • Out -/i)).toBeInTheDocument();
     expect(screen.queryByText("Catatan")).not.toBeInTheDocument();
   });
