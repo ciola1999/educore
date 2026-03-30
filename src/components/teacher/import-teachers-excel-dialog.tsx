@@ -22,7 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { isTauri } from "@/core/env";
 import { getApiErrorMessage, readApiResponse } from "@/lib/api/client";
+import { apiPost } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 
 type ImportResult = {
@@ -41,6 +43,15 @@ type ImportResult = {
 
 type ImportTeachersExcelDialogProps = {
   onSuccess: () => void;
+};
+
+type DesktopTeacherImportPayload = {
+  fileName: string;
+  fileDataBase64: string;
+  updateExisting: boolean;
+  defaultRole: "teacher" | "staff" | "admin";
+  defaultPassword: string;
+  resetPasswordOnUpdate: boolean;
 };
 
 const templateColumns = [
@@ -70,6 +81,33 @@ const templateExampleRow = {
   "No Telepon": "081298765432",
   Aktif: "ya",
 };
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => {
+      reject(
+        new Error("File Excel user tidak bisa dibaca di desktop runtime."),
+      );
+    };
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Format file user desktop tidak valid."));
+        return;
+      }
+
+      const [, base64 = ""] = result.split(",", 2);
+      if (!base64) {
+        reject(new Error("Isi file user tidak ditemukan."));
+        return;
+      }
+
+      resolve(base64);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export function ImportTeachersExcelDialog({
   onSuccess,
@@ -117,6 +155,24 @@ export function ImportTeachersExcelDialog({
 
     setLoading(true);
     try {
+      if (isTauri()) {
+        const payload = await apiPost<ImportResult>("/api/teachers/import", {
+          fileName: file.name,
+          fileDataBase64: await readFileAsBase64(file),
+          updateExisting,
+          defaultRole,
+          defaultPassword,
+          resetPasswordOnUpdate,
+        } satisfies DesktopTeacherImportPayload);
+
+        setLastResult(payload);
+        onSuccess();
+        toast.success(
+          `Import user selesai: ${payload.created} baru, ${payload.updated} diperbarui, ${payload.skipped} dilewati.`,
+        );
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
       formData.append("updateExisting", String(updateExisting));
@@ -188,7 +244,8 @@ export function ImportTeachersExcelDialog({
         <DialogHeader>
           <DialogTitle>Import User dari Excel</DialogTitle>
           <DialogDescription className="text-zinc-400">
-            Upload data admin, guru, dan staf dalam sekali proses.
+            Upload data admin, guru, dan staf dalam sekali proses. Di desktop,
+            file diproses lewat local runtime yang sama.
           </DialogDescription>
         </DialogHeader>
 

@@ -199,6 +199,20 @@ function isExpectedMissingLegacyScheduleTableError(error: unknown) {
   });
 }
 
+function isExpectedWebMigrationConnectivityError(error: unknown) {
+  return collectDatabaseErrorMessages(error).some((message) => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("failed to fetch") ||
+      normalized.includes("err_internet_disconnected") ||
+      normalized.includes("enotfound") ||
+      normalized.includes("getaddrinfo") ||
+      normalized.includes("econnrefused") ||
+      normalized.includes("network request failed")
+    );
+  });
+}
+
 async function ensureWebMigrations(
   dbLike: DatabaseLike,
   options?: DatabaseInitOptions,
@@ -402,10 +416,17 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
           try {
             await ensureWebMigrations(dbLike, options);
           } catch (migrationError) {
-            console.error(
-              "❌ [DB_MIGRATION_WEB_ERROR] Could not run migrations on web.",
-              migrationError,
-            );
+            if (isExpectedWebMigrationConnectivityError(migrationError)) {
+              console.warn(
+                "⚠️ [DB_MIGRATION_WEB_SKIPPED] Web migration skipped because cloud database is unreachable in current runtime.",
+                migrationError,
+              );
+            } else {
+              console.error(
+                "❌ [DB_MIGRATION_WEB_ERROR] Could not run migrations on web.",
+                migrationError,
+              );
+            }
           }
         } else if (isServerRuntime && shouldLogDatabaseDebug()) {
           console.info(

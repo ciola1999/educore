@@ -12,6 +12,10 @@ const DESKTOP_CONSTRAINED_DASHBOARD_ROUTES = [
     label: "Attendance",
   },
   {
+    href: "/dashboard/students",
+    label: "Students",
+  },
+  {
     href: "/dashboard/teachers",
     label: "User Management",
   },

@@ -115,6 +115,7 @@ function isDesktopSyncConfigMissingMessage(message: string): boolean {
 
 const dashboardOutlineButtonClass = outlineButtonStyles.neutral;
 const TRACE_STORAGE_KEY = "settings-auth-trace-v1";
+const SESSION_REFRESH_STORAGE_KEY = "settings-auth-last-refresh-v1";
 const TRACE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const TRACE_STORAGE_LIMIT = 100;
 const TRACE_RECENT_WINDOW_MS = 10 * 60 * 1000;
@@ -260,9 +261,19 @@ export default function SettingsPage() {
     Boolean(newPassword) &&
     currentPassword === newPassword;
   const isPasswordTooShort = Boolean(newPassword) && newPassword.length < 8;
+  const latestSessionRefreshTraceAt =
+    traceEvents.find(
+      (event) =>
+        event.action === "session-refresh" && event.status === "success",
+    )?.at ?? null;
+  const effectiveLastSessionRefreshAt =
+    lastSessionRefreshAt ??
+    (latestSessionRefreshTraceAt
+      ? new Date(latestSessionRefreshTraceAt)
+      : null);
   const formattedLastSyncAt = lastSyncAt ? lastSyncAt.toLocaleString() : "-";
-  const formattedLastSessionRefreshAt = lastSessionRefreshAt
-    ? lastSessionRefreshAt.toLocaleString()
+  const formattedLastSessionRefreshAt = effectiveLastSessionRefreshAt
+    ? effectiveLastSessionRefreshAt.toLocaleString()
     : "-";
   const { visibleTraceEvents, recentErrorCount, recentRecoveryErrorCount } =
     buildTraceInsights(traceEvents, showErrorTraceOnly);
@@ -282,7 +293,9 @@ export default function SettingsPage() {
     try {
       const refreshed = await refreshSession();
       if (refreshed) {
-        setLastSessionRefreshAt(new Date());
+        const nextRefreshAt = new Date();
+        setLastSessionRefreshAt(nextRefreshAt);
+        persistLastSessionRefreshAt(nextRefreshAt);
         toast.success("Recovery berhasil: session aktif dan sinkron.");
         appendTrace(
           "session-refresh",
@@ -557,6 +570,22 @@ export default function SettingsPage() {
     toast.success("Trace event berhasil dibersihkan.");
   }
 
+  function persistLastSessionRefreshAt(nextValue: Date | null) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!nextValue) {
+      window.localStorage.removeItem(SESSION_REFRESH_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(
+      SESSION_REFRESH_STORAGE_KEY,
+      nextValue.toISOString(),
+    );
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -594,6 +623,25 @@ export default function SettingsPage() {
     } catch {
       window.localStorage.removeItem(TRACE_STORAGE_KEY);
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const raw = window.localStorage.getItem(SESSION_REFRESH_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      window.localStorage.removeItem(SESSION_REFRESH_STORAGE_KEY);
+      return;
+    }
+
+    setLastSessionRefreshAt(parsed);
   }, []);
 
   useEffect(() => {
@@ -996,7 +1044,9 @@ export default function SettingsPage() {
     try {
       const refreshed = await refreshSession();
       if (refreshed) {
-        setLastSessionRefreshAt(new Date());
+        const nextRefreshAt = new Date();
+        setLastSessionRefreshAt(nextRefreshAt);
+        persistLastSessionRefreshAt(nextRefreshAt);
         appendTrace("session-refresh", "success", "Session refreshed.");
         toast.success("State session berhasil diperbarui.");
       } else {
@@ -1026,9 +1076,9 @@ export default function SettingsPage() {
       appendTrace("logout", "error", "Logout failed.");
       toast.error("Gagal logout. Coba lagi.");
     } finally {
-      if (typeof window !== "undefined") {
+      if (desktopRuntime && typeof window !== "undefined") {
         window.location.assign("/");
-      } else {
+      } else if (desktopRuntime) {
         router.replace("/");
         router.refresh();
       }

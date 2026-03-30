@@ -307,6 +307,12 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isDesktopOfflineRuntime() {
+  return (
+    !isWeb() && typeof navigator !== "undefined" && navigator.onLine === false
+  );
+}
+
 function isForeignKeyConstraintError(error: unknown): boolean {
   return getErrorMessage(error).toLowerCase().includes("foreign key");
 }
@@ -325,6 +331,13 @@ export async function pushToCloud(
     return {
       status: "success",
       message: "Web version is always live-to-cloud.",
+    };
+  }
+  if (isDesktopOfflineRuntime()) {
+    return {
+      status: "error",
+      message:
+        "Desktop sedang offline. Push sync ke cloud ditunda sampai koneksi tersedia.",
     };
   }
   try {
@@ -554,6 +567,13 @@ export async function pullFromCloud(
     return {
       status: "success",
       message: "Web version is always live-to-cloud.",
+    };
+  }
+  if (isDesktopOfflineRuntime()) {
+    return {
+      status: "error",
+      message:
+        "Desktop sedang offline. Pull sync dari cloud ditunda sampai koneksi tersedia.",
     };
   }
   try {

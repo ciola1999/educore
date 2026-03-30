@@ -65,11 +65,9 @@ function TeachersContent() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!desktopRuntime ? (
-            <ImportTeachersExcelDialog
-              onSuccess={() => setRefreshToken((value) => value + 1)}
-            />
-          ) : null}
+          <ImportTeachersExcelDialog
+            onSuccess={() => setRefreshToken((value) => value + 1)}
+          />
           <AddTeacherDialog
             onSuccess={() => setRefreshToken((value) => value + 1)}
           />
@@ -84,7 +82,7 @@ function TeachersContent() {
       {desktopRuntime ? (
         <InlineState
           title="Desktop runtime aktif"
-          description="CRUD user dan opsi wali kelas memakai local desktop path. Import Excel tetap dibatasi ke runtime web karena masih memakai upload route server."
+          description="CRUD user, import Excel, dan opsi wali kelas sekarang memakai local desktop path yang sama. Jalur ini tetap dibatasi untuk admin/super_admin."
           variant="info"
           className="text-sm"
         />

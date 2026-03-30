@@ -79,6 +79,22 @@ interface EditStudentDialogProps {
   onSuccess: () => void;
 }
 
+function resolveStudentActionKey(student: StudentListItem) {
+  const rawId = student.id?.trim();
+  if (
+    rawId &&
+    rawId !== "null" &&
+    rawId !== "undefined" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      rawId,
+    )
+  ) {
+    return rawId;
+  }
+
+  return student.nis.trim();
+}
+
 export function EditStudentDialog({
   student,
   open,
@@ -148,27 +164,30 @@ export function EditStudentDialog({
         return;
       }
 
-      await apiPatch<{ updated: true }>(`/api/students/${student.id}`, {
-        nis: values.nis.trim(),
-        nisn: values.nisn?.trim() || "",
-        fullName: values.fullName.trim(),
-        gender: values.gender,
-        grade: values.grade.trim(),
-        parentName: values.parentName?.trim() || "",
-        parentPhone: values.parentPhone?.trim() || "",
-        tempatLahir: values.tempatLahir?.trim() || "",
-        tanggalLahir: values.tanggalLahir || undefined,
-        alamat: values.alamat?.trim() || "",
-        account: student.hasAccount
-          ? {
-              email: values.accountEmail?.trim()
-                ? values.accountEmail.trim().toLowerCase()
-                : undefined,
-              password: values.newPassword || undefined,
-              confirmPassword: values.confirmNewPassword || undefined,
-            }
-          : undefined,
-      });
+      await apiPatch<{ updated: true }>(
+        `/api/students/${resolveStudentActionKey(student)}`,
+        {
+          nis: values.nis.trim(),
+          nisn: values.nisn?.trim() || "",
+          fullName: values.fullName.trim(),
+          gender: values.gender,
+          grade: values.grade.trim(),
+          parentName: values.parentName?.trim() || "",
+          parentPhone: values.parentPhone?.trim() || "",
+          tempatLahir: values.tempatLahir?.trim() || "",
+          tanggalLahir: values.tanggalLahir || undefined,
+          alamat: values.alamat?.trim() || "",
+          account: student.hasAccount
+            ? {
+                email: values.accountEmail?.trim()
+                  ? values.accountEmail.trim().toLowerCase()
+                  : undefined,
+                password: values.newPassword || undefined,
+                confirmPassword: values.confirmNewPassword || undefined,
+              }
+            : undefined,
+        },
+      );
       toast.success("Data siswa berhasil diperbarui");
       onOpenChange(false);
       onSuccess();

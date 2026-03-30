@@ -10,6 +10,7 @@ import {
   DASHBOARD_ROLE_DEFAULT_PATH,
   isAllowedDashboardPath,
 } from "@/lib/auth/dashboard-access";
+import { hasForcedLogoutMarker } from "@/lib/auth/logout-marker";
 import {
   getRuntimeDefaultDashboardPath,
   getRuntimeSupportedDashboardLabels,
@@ -38,6 +39,7 @@ export function DashboardAccessGate({
   }, []);
 
   const currentRole = toAuthRole(user?.role);
+  const forcedLogout = mounted && hasForcedLogoutMarker();
   const desktopConstrainedRuntime = isDesktopDashboardConstrainedRuntime();
   const runtimeStaticDesktop = isDesktopStaticRuntime();
   const runtimeSupportedLabels = currentRole
@@ -61,6 +63,11 @@ export function DashboardAccessGate({
       return;
     }
 
+    if (forcedLogout) {
+      router.replace("/");
+      return;
+    }
+
     if (sessionStatus === "unauthenticated" && !currentRole) {
       router.replace("/");
       return;
@@ -77,6 +84,7 @@ export function DashboardAccessGate({
   }, [
     mounted,
     isLoading,
+    forcedLogout,
     currentRole,
     router,
     sessionStatus,
@@ -98,6 +106,10 @@ export function DashboardAccessGate({
         </div>
       </div>
     );
+  }
+
+  if (forcedLogout) {
+    return null;
   }
 
   if (hasAccess && runtimeSupported) {

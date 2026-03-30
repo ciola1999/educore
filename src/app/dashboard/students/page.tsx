@@ -3,8 +3,11 @@
 import { Users } from "lucide-react";
 import { PhaseBoundary } from "@/components/common/phase-boundary";
 import { StudentList } from "@/components/student/student-list";
+import { isTauri } from "@/core/env";
 
 export default function StudentsPage() {
+  const desktopRuntime = isTauri();
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <section className="relative overflow-hidden rounded-[2rem] border border-zinc-800/80 bg-linear-to-br from-zinc-950 via-zinc-950 to-sky-950/40 p-6 shadow-[0_30px_80px_-50px_rgba(14,165,233,0.35)] md:p-8">
@@ -20,9 +23,9 @@ export default function StudentsPage() {
                 Data Siswa
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-zinc-300 md:text-base">
-                Workspace siswa untuk monitoring roster, absensi harian,
-                identitas, akun, import, dan export dalam satu alur yang lebih
-                rapi.
+                {desktopRuntime
+                  ? "Desktop membuka roster siswa, detail identitas, core CRUD, create account per siswa, bulk maintenance inti, shortcut attendance, export, dan cetak kartu lewat jalur local-safe."
+                  : "Workspace siswa untuk monitoring roster, absensi harian, identitas, akun, import, dan export dalam satu alur yang lebih rapi."}
               </p>
             </div>
           </div>
@@ -49,7 +52,7 @@ export default function StudentsPage() {
                 Mode
               </p>
               <p className="mt-2 text-sm font-medium text-zinc-100">
-                Roster & CRUD
+                {desktopRuntime ? "Roster & Core CRUD" : "Roster & CRUD"}
               </p>
             </div>
           </div>
@@ -57,7 +60,11 @@ export default function StudentsPage() {
       </section>
 
       <PhaseBoundary
-        bannerDescription="Halaman siswa tetap fokus pada identitas dan monitoring. Status absensi harian sekarang aktif dan setiap kartu siswa punya shortcut ke riwayat attendance."
+        bannerDescription={
+          desktopRuntime
+            ? "Desktop saat ini sudah membuka roster, identitas, core CRUD siswa, import Excel, account creation per siswa, bulk account ops, repair kelas legacy, status absensi harian, export, dan shortcut attendance lewat local runtime yang sama."
+            : "Halaman siswa tetap fokus pada identitas dan monitoring. Status absensi harian sekarang aktif dan setiap kartu siswa punya shortcut ke riwayat attendance."
+        }
         actions={[
           {
             href: "/dashboard/attendance",

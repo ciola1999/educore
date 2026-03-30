@@ -7,10 +7,17 @@ let exitCode = 1;
 for (const command of commands) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    E2E_ATTENDANCE_IDENTIFIER: "admin@educore.school",
-    E2E_ATTENDANCE_PASSWORD: "admin123",
-    E2E_SETTINGS_IDENTIFIER: "admin@educore.school",
-    E2E_SETTINGS_PASSWORD: "admin123",
+    E2E_ATTENDANCE_IDENTIFIER:
+      process.env.E2E_ATTENDANCE_IDENTIFIER || "admin@educore.school",
+    E2E_ATTENDANCE_PASSWORD: process.env.E2E_ATTENDANCE_PASSWORD || "admin123",
+    E2E_SETTINGS_IDENTIFIER:
+      process.env.E2E_SETTINGS_IDENTIFIER ||
+      process.env.E2E_ATTENDANCE_IDENTIFIER ||
+      "admin@educore.school",
+    E2E_SETTINGS_PASSWORD:
+      process.env.E2E_SETTINGS_PASSWORD ||
+      process.env.E2E_ATTENDANCE_PASSWORD ||
+      "admin123",
   };
 
   if (process.env.PLAYWRIGHT_BASE_URL) {

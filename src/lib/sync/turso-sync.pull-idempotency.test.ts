@@ -5,7 +5,7 @@ vi.mock("@/core/env", () => ({
   isTauri: () => true,
 }));
 
-import { fullSync, pullFromCloud } from "./turso-sync";
+import { fullSync, pullFromCloud, pushToCloud } from "./turso-sync";
 
 type TestWindow = {
   __TAURI_INTERNALS__?: Record<string, unknown>;
@@ -30,8 +30,43 @@ describe("turso full sync idempotency", () => {
   afterEach(() => {
     const testWindow = globalThis as typeof globalThis & {
       window?: TestWindow;
+      navigator?: Navigator;
     };
     delete testWindow.window?.__TAURI_INTERNALS__;
+    if (testWindow.navigator) {
+      Object.defineProperty(testWindow.navigator, "onLine", {
+        value: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it("skips direct cloud sync when desktop runtime is offline", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
+
+    const pullResult = await pullFromCloud({
+      tursoCloud: {
+        execute: vi.fn(async () => {
+          throw new Error("should not hit cloud while offline");
+        }),
+      } as never,
+    });
+
+    const pushResult = await pushToCloud({
+      tursoCloud: {
+        execute: vi.fn(async () => {
+          throw new Error("should not hit cloud while offline");
+        }),
+      } as never,
+    });
+
+    expect(pullResult.status).toBe("error");
+    expect(pullResult.message).toContain("offline");
+    expect(pushResult.status).toBe("error");
+    expect(pushResult.message).toContain("offline");
   });
 
   it("does not report phantom downloaded records on repeated full sync", async () => {

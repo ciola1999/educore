@@ -166,6 +166,10 @@ export class SettingsAuthPage {
       await this.refreshSessionButton.click();
     }
 
+    await expect(this.refreshSessionButton).toBeEnabled({
+      timeout: 20_000,
+    });
+
     await expect(this.lastSessionRefreshCard).not.toHaveText("-", {
       timeout: 20_000,
     });

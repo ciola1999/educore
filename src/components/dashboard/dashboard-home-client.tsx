@@ -217,8 +217,9 @@ export function DashboardHomeClient() {
           <CardContent className="space-y-3 text-sm text-zinc-400">
             <p>
               Overview desktop hanya membuka alur yang sudah local-runtime-safe.
-              Insight attendance lanjutan dan roster siswa penuh tetap
-              dipertahankan di runtime web sampai jalur desktop-nya siap.
+              Insight attendance lanjutan tetap ditahan sampai local path
+              analytics/follow-up-nya siap. Students roster, CRUD inti, dan
+              import Excel sekarang sudah memakai runtime desktop yang sama.
             </p>
             <p>
               Menu yang aktif di runtime ini:{" "}

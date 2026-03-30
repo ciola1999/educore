@@ -44,9 +44,14 @@ describe("desktop dashboard runtime policy", () => {
         "/dashboard/attendance",
         "/dashboard/courses",
       ]),
-    ).toEqual(["/dashboard", "/dashboard/attendance", "/dashboard/courses"]);
+    ).toEqual([
+      "/dashboard",
+      "/dashboard/students",
+      "/dashboard/attendance",
+      "/dashboard/courses",
+    ]);
     expect(isRuntimeSupportedDashboardPath("/dashboard")).toBe(true);
-    expect(isRuntimeSupportedDashboardPath("/dashboard/students")).toBe(false);
+    expect(isRuntimeSupportedDashboardPath("/dashboard/students")).toBe(true);
   });
 
   it("keeps desktop default redirect on a supported path", () => {
@@ -57,7 +62,7 @@ describe("desktop dashboard runtime policy", () => {
     );
     expect(
       getRuntimeDefaultDashboardPath("student", "/dashboard/students"),
-    ).toBe("/dashboard/attendance");
+    ).toBe("/dashboard/students");
   });
 
   it("describes only the dashboard pages supported in desktop runtime", () => {
@@ -69,6 +74,6 @@ describe("desktop dashboard runtime policy", () => {
         "/dashboard/students",
         "/dashboard/settings",
       ]),
-    ).toEqual(["Overview", "Settings"]);
+    ).toEqual(["Overview", "Students", "Settings"]);
   });
 });

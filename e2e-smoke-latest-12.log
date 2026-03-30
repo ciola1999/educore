@@ -1,0 +1,92 @@
+▲ Next.js 16.1.6
+- Local:         http://localhost:64505
+- Network:       http://192.168.23.1:64505
+
+✓ Starting...
+✓ Ready in 4s
+
+Running 7 tests using 1 worker
+
+🔄 [Migration] Starting database sync...
+  ok 1 [chromium] › tests\e2e\attendance-shell.spec.ts:26:7 › Attendance shell @smoke › allows admin to open attendance and switch core sections (20.7s)
+[Seed] Admin admin@educore.school has valid Argon2id hash (97 chars).
+[Seed] ✅ Admin admin@educore.school is healthy with valid credentials.
+✅ [Seed] Roles and permissions seeded successfully.
+  ok 2 [chromium] › tests\e2e\attendance-shell.spec.ts:48:7 › Attendance shell @smoke › persists schedule save and holiday create-delete flow (26.5s)
+[OBS][settings-auth] {
+  at: '2026-03-30T06:16:14.030Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  ok 3 [chromium] › tests\e2e\settings-auth.spec.ts:50:7 › Settings/Auth shell @smoke › enforces web sync action boundary and session panel visibility (18.0s)
+ℹ️ [Migration] Legacy schedule table retired after canonical cleanup.
+✅ [Migration] Database sync complete!
+  ok 4 [chromium] › tests\e2e\settings-auth.spec.ts:74:7 › Settings/Auth shell @smoke › keeps auth source and active identity in sync (12.1s)
+  ok 5 [chromium] › tests\e2e\settings-auth.spec.ts:84:7 › Settings/Auth shell @smoke › keeps session refresh functional when telemetry endpoint fails (13.9s)
+  x  6 [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › keeps change-password form validation honest (13.3s)
+[OBS][settings-auth] {
+  at: '2026-03-30T06:17:20.279Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  ok 7 [chromium] › tests\e2e\settings-auth.spec.ts:136:7 › Settings/Auth shell @smoke › revokes route access after logout (28.4s)
+
+
+  1) [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › keeps change-password form validation honest 
+
+    Error: locator.fill: Error: strict mode violation: getByLabel('Password Baru') resolved to 2 elements:
+        1) <input value="" type="password" data-slot="input" id="new-password" autocomplete="new-password" class="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-5…/> aka getByRole('textbox', { name: 'Password Baru', exact: true })
+        2) <input value="" type="password" data-slot="input" id="confirm-password" autocomplete="new-password" class="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opaci…/> aka getByRole('textbox', { name: 'Konfirmasi Password Baru' })
+
+    Call log:
+    [2m  - waiting for getByLabel('Password Baru')[22m
+
+
+      110 |
+      111 |     await page.getByLabel("Password Saat Ini").fill(settingsPassword ?? "");
+    > 112 |     await page.getByLabel("Password Baru").fill("short");
+          |                                            ^
+      113 |     await page.getByLabel("Konfirmasi Password Baru").fill("different");
+      114 |
+      115 |     await expect(page.getByText(/Password baru terlalu pendek/i)).toBeVisible();
+        at e:\Freelance\Project\educore\tests\e2e\settings-auth.spec.ts:112:44
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-30398-word-form-validation-honest-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-30398-word-form-validation-honest-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings-auth-Settings-Aut-30398-word-form-validation-honest-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-30398-word-form-validation-honest-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\settings-auth-Settings-Aut-30398-word-form-validation-honest-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › keeps change-password form validation honest 
+  6 passed (2.5m)

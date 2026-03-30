@@ -1,0 +1,36 @@
+$ next start
+▲ Next.js 16.1.6
+- Local:         http://localhost:3100
+- Network:       http://192.168.23.1:3100
+
+✓ Starting...
+✓ Ready in 3.1s
+[31m[auth][error][0m CredentialsSignin: Read more at https://errors.authjs.dev#credentialssignin
+    at ad (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__1215951f._.js:404:40971)
+    at async a_ (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__1215951f._.js:404:50396)
+    at async aE (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__1215951f._.js:404:54646)
+    at async rW.do (E:\Freelance\Project\educore\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.prod.js:5:20169)
+    at async rW.handle (E:\Freelance\Project\educore\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.prod.js:5:24949)
+    at async d (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__97926abe._.js:1:6164)
+    at async rW.handleResponse (E:\Freelance\Project\educore\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.prod.js:1:104149)
+    at async u (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__97926abe._.js:1:7205)
+    at async Module.A (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__97926abe._.js:1:8283)
+    at async NextNodeServer.renderToResponseWithComponentsImpl (E:\Freelance\Project\educore\node_modules\next\dist\server\base-server.js:1442:9)
+[31m[auth][error][0m CredentialsSignin: Read more at https://errors.authjs.dev#credentialssignin
+    at ad (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__1215951f._.js:404:40971)
+    at async a_ (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__1215951f._.js:404:50396)
+    at async aE (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__1215951f._.js:404:54646)
+    at async rW.do (E:\Freelance\Project\educore\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.prod.js:5:20169)
+    at async rW.handle (E:\Freelance\Project\educore\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.prod.js:5:24949)
+    at async d (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__97926abe._.js:1:6164)
+    at async rW.handleResponse (E:\Freelance\Project\educore\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.prod.js:1:104149)
+    at async u (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__97926abe._.js:1:7205)
+    at async Module.A (E:\Freelance\Project\educore\.next\server\chunks\[root-of-the-server]__97926abe._.js:1:8283)
+    at async NextNodeServer.renderToResponseWithComponentsImpl (E:\Freelance\Project\educore\node_modules\next\dist\server\base-server.js:1442:9)
+Error: [E2E STRICT] Invalid credentials for attendance.
+- identifier: admin@educore.school
+- status: 302
+- location: http://localhost:3000/login?error=CredentialsSignin&code=credentials
+- redirectPathname: /login
+- cookies: 0
+- hasSessionCookie: false

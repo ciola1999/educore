@@ -15,7 +15,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isTauri } from "@/core/env";
 import { getApiErrorMessage, readApiResponse } from "@/lib/api/client";
+import { apiPost } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
@@ -35,6 +37,12 @@ type ImportResult = {
 
 type ImportStudentsExcelDialogProps = {
   onSuccess: () => void;
+};
+
+type DesktopImportPayload = {
+  fileName: string;
+  fileDataBase64: string;
+  updateExisting: boolean;
 };
 
 const importStudentsSkyOutlineButtonClass = outlineButtonStyles.sky;
@@ -65,6 +73,31 @@ const templateExampleRow = {
   "Tanggal Lahir": "2010-05-12",
   Alamat: "Jl. Merdeka No. 10",
 };
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => {
+      reject(new Error("File Excel tidak bisa dibaca di desktop runtime."));
+    };
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Format file desktop tidak valid."));
+        return;
+      }
+
+      const [, base64 = ""] = result.split(",", 2);
+      if (!base64) {
+        reject(new Error("Isi file Excel tidak ditemukan."));
+        return;
+      }
+
+      resolve(base64);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export function ImportStudentsExcelDialog({
   onSuccess,
@@ -104,6 +137,21 @@ export function ImportStudentsExcelDialog({
     setLoading(true);
     setLastError(null);
     try {
+      if (isTauri()) {
+        const payload = await apiPost<ImportResult>("/api/students/import", {
+          fileName: file.name,
+          fileDataBase64: await readFileAsBase64(file),
+          updateExisting,
+        } satisfies DesktopImportPayload);
+
+        setLastResult(payload);
+        onSuccess();
+        toast.success(
+          `Import selesai: ${payload.created} baru, ${payload.updated} diperbarui, ${payload.skipped} dilewati.`,
+        );
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
       formData.append("updateExisting", String(updateExisting));
@@ -188,7 +236,8 @@ export function ImportStudentsExcelDialog({
           <DialogTitle>Import Data Siswa dari Excel</DialogTitle>
           <DialogDescription className="text-zinc-400">
             Upload file `.xlsx`, `.xls`, atau `.csv` untuk insert/update data
-            siswa massal.
+            siswa massal. Di desktop, file akan diproses langsung lewat local
+            runtime.
           </DialogDescription>
         </DialogHeader>
 
@@ -201,6 +250,12 @@ export function ImportStudentsExcelDialog({
             <p>
               Catatan: NIS, Nama Lengkap, Jenis Kelamin, dan Kelas wajib diisi.
             </p>
+            <p>
+              NISN opsional. Jika diisi harus 10 digit. Desktop runtime akan
+              membersihkan format angka Excel umum seperti `1234567890.0`, tapi
+              untuk NIS/NISN yang punya nol di depan tetap paling aman jika
+              kolom disimpan sebagai Text.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -208,7 +263,7 @@ export function ImportStudentsExcelDialog({
             <Input
               id="students-import-file"
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.xls,.csv,.xlsm"
               onChange={(event) => {
                 const selected = event.target.files?.[0] ?? null;
                 setFile(selected);

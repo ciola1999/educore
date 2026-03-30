@@ -43,7 +43,15 @@ export default function RootLayout({
               try {
                 var isTauriRuntime =
                   typeof window !== 'undefined' &&
-                  typeof window.__TAURI_INTERNALS__ !== 'undefined';
+                  (
+                    typeof window.__TAURI_INTERNALS__ !== 'undefined' ||
+                    typeof window.__TAURI__ !== 'undefined' ||
+                    (typeof navigator !== 'undefined' &&
+                      typeof navigator.userAgent === 'string' &&
+                      navigator.userAgent.indexOf('Tauri') !== -1) ||
+                    (typeof window.location !== 'undefined' &&
+                      window.location.protocol === 'tauri:')
+                  );
                 var shouldWarm =
                   typeof window !== 'undefined' &&
                   (window.location.pathname === '/' ||
@@ -62,6 +70,8 @@ export default function RootLayout({
                   headers: {
                     'x-educore-warmup': '1'
                   }
+                }).catch(function(error) {
+                  console.warn('[BOOTSTRAP] beforeInteractive warmup skipped', error);
                 });
               } catch (error) {
                 console.warn('[BOOTSTRAP] beforeInteractive warmup failed', error);

@@ -1,0 +1,194 @@
+▲ Next.js 16.1.6
+- Local:         http://localhost:49584
+- Network:       http://192.168.23.1:49584
+
+✓ Starting...
+✓ Ready in 3.2s
+
+Running 11 tests using 1 worker
+
+🔄 [Migration] Starting database sync...
+  ok  1 [chromium] › tests\e2e\attendance-shell.spec.ts:26:7 › Attendance shell @smoke › allows admin to open attendance and switch core sections (18.2s)
+[Seed] Admin admin@educore.school has valid Argon2id hash (97 chars).
+[Seed] ✅ Admin admin@educore.school is healthy with valid credentials.
+✅ [Seed] Roles and permissions seeded successfully.
+  ok  2 [chromium] › tests\e2e\attendance-shell.spec.ts:48:7 › Attendance shell @smoke › persists schedule save and holiday create-delete flow (23.5s)
+  x   3 [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard to login (12.6s)
+ℹ️ [Migration] Legacy schedule table retired after canonical cleanup.
+✅ [Migration] Database sync complete!
+  x   4 [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/attendance to login (12.1s)
+  x   5 [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/students to login (11.9s)
+  x   6 [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/settings to login (11.5s)
+[OBS][settings-auth] {
+  at: '2026-03-30T06:28:59.027Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  ok  7 [chromium] › tests\e2e\settings-auth.spec.ts:50:7 › Settings/Auth shell @smoke › enforces web sync action boundary and session panel visibility (19.0s)
+  ok  8 [chromium] › tests\e2e\settings-auth.spec.ts:74:7 › Settings/Auth shell @smoke › keeps auth source and active identity in sync (8.6s)
+  ok  9 [chromium] › tests\e2e\settings-auth.spec.ts:84:7 › Settings/Auth shell @smoke › keeps session refresh functional when telemetry endpoint fails (12.2s)
+  ok 10 [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › keeps change-password form validation honest (12.0s)
+[OBS][settings-auth] {
+  at: '2026-03-30T06:29:46.308Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  ok 11 [chromium] › tests\e2e\settings-auth.spec.ts:136:7 › Settings/Auth shell @smoke › revokes route access after logout (23.0s)
+
+
+  1) [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard to login 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:49584/dashboard
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:49584/dashboard", waiting until "domcontentloaded"[22m
+
+
+      4 |   for (let attempt = 0; attempt < 3; attempt += 1) {
+      5 |     try {
+    > 6 |       await page.goto(path, {
+        |                  ^
+      7 |         waitUntil: "domcontentloaded",
+      8 |         timeout: 60_000,
+      9 |       });
+        at gotoWithRetry (e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:6:18)
+        at e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:31:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-0729a-ess-from-dashboard-to-login-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-0729a-ess-from-dashboard-to-login-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-0729a-ess-from-dashboard-to-login-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\auth-guard-Auth-guard-smok-0729a-ess-from-dashboard-to-login-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/attendance to login 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:49584/dashboard/attendance
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:49584/dashboard/attendance", waiting until "domcontentloaded"[22m
+
+
+      4 |   for (let attempt = 0; attempt < 3; attempt += 1) {
+      5 |     try {
+    > 6 |       await page.goto(path, {
+        |                  ^
+      7 |         waitUntil: "domcontentloaded",
+      8 |         timeout: 60_000,
+      9 |       });
+        at gotoWithRetry (e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:6:18)
+        at e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:31:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-d6026-shboard-attendance-to-login-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-d6026-shboard-attendance-to-login-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-d6026-shboard-attendance-to-login-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\auth-guard-Auth-guard-smok-d6026-shboard-attendance-to-login-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/students to login 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:49584/dashboard/students
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:49584/dashboard/students", waiting until "domcontentloaded"[22m
+
+
+      4 |   for (let attempt = 0; attempt < 3; attempt += 1) {
+      5 |     try {
+    > 6 |       await page.goto(path, {
+        |                  ^
+      7 |         waitUntil: "domcontentloaded",
+      8 |         timeout: 60_000,
+      9 |       });
+        at gotoWithRetry (e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:6:18)
+        at e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:31:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-52f14-dashboard-students-to-login-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-52f14-dashboard-students-to-login-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-52f14-dashboard-students-to-login-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\auth-guard-Auth-guard-smok-52f14-dashboard-students-to-login-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/settings to login 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:49584/dashboard/settings
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:49584/dashboard/settings", waiting until "domcontentloaded"[22m
+
+
+      4 |   for (let attempt = 0; attempt < 3; attempt += 1) {
+      5 |     try {
+    > 6 |       await page.goto(path, {
+        |                  ^
+      7 |         waitUntil: "domcontentloaded",
+      8 |         timeout: 60_000,
+      9 |       });
+        at gotoWithRetry (e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:6:18)
+        at e:\Freelance\Project\educore\tests\e2e\auth-guard.spec.ts:31:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-ea78b-dashboard-settings-to-login-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-ea78b-dashboard-settings-to-login-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\auth-guard-Auth-guard-smok-ea78b-dashboard-settings-to-login-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\auth-guard-Auth-guard-smok-ea78b-dashboard-settings-to-login-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard to login 
+    [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/attendance to login 
+    [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/students to login 
+    [chromium] › tests\e2e\auth-guard.spec.ts:28:9 › Auth guard @smoke › redirects unauthenticated access from /dashboard/settings to login 
+  7 passed (3.4m)

@@ -1,0 +1,93 @@
+▲ Next.js 16.1.6
+- Local:         http://localhost:62036
+- Network:       http://192.168.23.1:62036
+
+✓ Starting...
+✓ Ready in 3.7s
+
+Running 6 tests using 1 worker
+
+🔄 [Migration] Starting database sync...
+  ok 1 [chromium] › tests\e2e\attendance-shell.spec.ts:26:7 › Attendance shell @smoke › allows admin to open attendance and switch core sections (27.2s)
+[Seed] Admin admin@educore.school has valid Argon2id hash (97 chars).
+[Seed] ✅ Admin admin@educore.school is healthy with valid credentials.
+✅ [Seed] Roles and permissions seeded successfully.
+  ok 2 [chromium] › tests\e2e\attendance-shell.spec.ts:48:7 › Attendance shell @smoke › persists schedule save and holiday create-delete flow (22.4s)
+[OBS][settings-auth] {
+  at: '2026-03-30T05:52:15.670Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  ok 3 [chromium] › tests\e2e\settings-auth.spec.ts:50:7 › Settings/Auth shell @smoke › enforces web sync action boundary and session panel visibility (16.3s)
+ℹ️ [Migration] Legacy schedule table retired after canonical cleanup.
+✅ [Migration] Database sync complete!
+  ok 4 [chromium] › tests\e2e\settings-auth.spec.ts:74:7 › Settings/Auth shell @smoke › keeps auth source and active identity in sync (11.6s)
+  ok 5 [chromium] › tests\e2e\settings-auth.spec.ts:84:7 › Settings/Auth shell @smoke › keeps session refresh functional when telemetry endpoint fails (24.5s)
+[OBS][settings-auth] {
+  at: '2026-03-30T05:53:06.275Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  x  6 [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › revokes route access after logout (42.4s)
+
+
+  1) [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › revokes route access after logout 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByLabel(/Email \/ Username \/ NIP \/ NIS/i)
+    Expected: visible
+    Timeout: 20000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 20000ms[22m
+    [2m  - waiting for getByLabel(/Email \/ Username \/ NIP \/ NIS/i)[22m
+
+
+      112 |     await settingsPage.logout();
+      113 |     await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
+    > 114 |     await expect(loginIdentifierField).toBeVisible({ timeout: 20_000 });
+          |                                        ^
+      115 |
+      116 |     await page.goto("/dashboard/settings");
+      117 |     await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 60_000 });
+        at e:\Freelance\Project\educore\tests\e2e\settings-auth.spec.ts:114:40
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › revokes route access after logout 
+  5 passed (2.6m)

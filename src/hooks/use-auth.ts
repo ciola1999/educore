@@ -6,6 +6,10 @@ import { useEffect, useState } from "react";
 import { useAuthSessionRuntime } from "@/components/providers/auth-session-provider";
 import { isTauri } from "@/core/env";
 import { apiPost } from "@/lib/api/request";
+import {
+  clearForcedLogoutMarker,
+  setForcedLogoutMarker,
+} from "@/lib/auth/logout-marker";
 import { type UserSession, useStore } from "@/lib/store/use-store";
 
 type SessionRole = UserSession["role"];
@@ -129,6 +133,7 @@ export function useAuth() {
           email: identifier,
           password,
         });
+        clearForcedLogoutMarker();
         return { success: true as const };
       } catch (error) {
         return {
@@ -171,6 +176,7 @@ export function useAuth() {
     }
 
     setUser(nextUser);
+    clearForcedLogoutMarker();
 
     return { success: true as const };
   }
@@ -179,15 +185,11 @@ export function useAuth() {
    * Logout current user
    */
   async function logout() {
-    try {
-      if (!desktopRuntime) {
-        await fetch("/api/auth/logout", { method: "POST" });
-      }
-    } finally {
-      if (!desktopRuntime) {
-        await signOut({ redirect: false });
-      }
-      clearUser();
+    setForcedLogoutMarker();
+    clearUser();
+
+    if (!desktopRuntime) {
+      await signOut({ redirect: true, redirectTo: "/" });
     }
   }
 
@@ -197,15 +199,19 @@ export function useAuth() {
     }
 
     const latestSession = await getSession();
+    const effectiveSession =
+      latestSession?.user?.id || status !== "authenticated"
+        ? latestSession
+        : session;
 
-    if (!latestSession?.user?.id) {
+    if (!effectiveSession?.user?.id) {
       if (!desktopRuntime) {
         clearUser();
       }
       return false;
     }
 
-    const nextUser = buildUserSession(latestSession.user);
+    const nextUser = buildUserSession(effectiveSession.user);
     if (!nextUser) {
       return false;
     }

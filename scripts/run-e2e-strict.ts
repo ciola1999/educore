@@ -1,4 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { createAuthDbClient } from "@/lib/auth/web/db";
 import {
   buildLoginEmailCandidates,
@@ -236,6 +237,7 @@ async function verifyCredentials(params: {
         `- redirectPathname: ${redirectPathname || "<none>"}`,
         `- cookies: ${browserCookies.length}`,
         `- hasSessionCookie: ${hasSessionCookie}`,
+        "- hint: set E2E_* env ke kredensial web yang benar bila auth lokal Anda tidak memakai default admin123.",
       ].join("\n"),
     );
   }
@@ -249,6 +251,75 @@ function delay(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+async function waitForServerReachable(
+  baseUrl: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      await assertServerReachable(baseUrl);
+      return true;
+    } catch {
+      await delay(1_500);
+    }
+  }
+
+  return false;
+}
+
+async function resolveAvailableLocalBaseUrl(preferredPort = 3100) {
+  const tryBind = (port: number) =>
+    new Promise<string>((resolve, reject) => {
+      const server = createServer();
+      server.unref();
+      server.once("error", reject);
+      server.listen(port, () => {
+        const address = server.address();
+        const resolvedPort =
+          typeof address === "object" && address ? address.port : port;
+        server.close((closeError) => {
+          if (closeError) {
+            reject(closeError);
+            return;
+          }
+          resolve(`http://127.0.0.1:${resolvedPort}`);
+        });
+      });
+    });
+
+  try {
+    return await tryBind(preferredPort);
+  } catch {
+    return await tryBind(0);
+  }
+}
+
+function startManagedLocalServer(baseUrl: string): ChildProcess {
+  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const origin = new URL(baseUrl);
+  const port = origin.port || "3000";
+  const child = spawn(command, ["next", "start", "-p", port], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      PORT: port,
+    },
+  });
+
+  const shutdown = () => {
+    if (!child.killed) {
+      child.kill();
+    }
+  };
+
+  process.once("exit", shutdown);
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+
+  return child;
 }
 
 async function clearE2EAuthRateLimits(identifiers: string[]) {
@@ -349,9 +420,28 @@ async function run() {
   const cliArgs = process.argv.slice(2);
   const isSmoke = cliArgs.includes("--smoke");
   const explicitBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
-  const baseUrl = explicitBaseUrl || "http://127.0.0.1:3000";
+  const baseUrl = explicitBaseUrl || (await resolveAvailableLocalBaseUrl(3100));
+  let managedServer: ChildProcess | null = null;
 
-  await assertServerReachable(baseUrl);
+  try {
+    await assertServerReachable(baseUrl);
+  } catch (error) {
+    if (explicitBaseUrl) {
+      throw error;
+    }
+
+    managedServer = startManagedLocalServer(baseUrl);
+    const reachable = await waitForServerReachable(baseUrl, 180_000);
+    if (!reachable) {
+      throw new Error(
+        [
+          "[E2E STRICT] Managed local server gagal siap tepat waktu.",
+          `- PLAYWRIGHT_BASE_URL: ${baseUrl}`,
+          "Pastikan tidak ada proses lain yang memegang port yang sama.",
+        ].join("\n"),
+      );
+    }
+  }
 
   if (explicitBaseUrl) {
     try {
@@ -427,9 +517,14 @@ async function run() {
     stdio: "inherit",
     env: {
       ...process.env,
+      PLAYWRIGHT_BASE_URL: baseUrl,
       E2E_SESSION_COOKIES_JSON: JSON.stringify(e2eSessionCookies),
     },
   });
+
+  if (managedServer && !managedServer.killed) {
+    managedServer.kill();
+  }
 
   process.exit(result.status ?? 1);
 }

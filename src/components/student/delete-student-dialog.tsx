@@ -23,6 +23,22 @@ interface DeleteStudentDialogProps {
   onSuccess: () => void;
 }
 
+function resolveStudentActionKey(student: StudentListItem) {
+  const rawId = student.id?.trim();
+  if (
+    rawId &&
+    rawId !== "null" &&
+    rawId !== "undefined" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      rawId,
+    )
+  ) {
+    return rawId;
+  }
+
+  return student.nis.trim();
+}
+
 export function DeleteStudentDialog({
   student,
   open,
@@ -38,7 +54,9 @@ export function DeleteStudentDialog({
 
     setLoading(true);
     try {
-      await apiDelete<{ deleted: true }>(`/api/students/${student.id}`);
+      await apiDelete<{ deleted: true }>(
+        `/api/students/${resolveStudentActionKey(student)}`,
+      );
       toast.success("Siswa berhasil dihapus");
       onOpenChange(false);
       onSuccess();

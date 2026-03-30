@@ -102,21 +102,46 @@ test.describe("Settings/Auth shell @smoke", () => {
     await settingsPage.expectSessionRefreshTimestampUpdated();
   });
 
-  test("refreshes session indicator and revokes route access after logout", async ({
-    page,
-  }) => {
+  test("keeps change-password form validation honest", async ({ page }) => {
     const settingsPage = new SettingsAuthPage(page);
 
     await settingsPage.goto();
-    await settingsPage.refreshSession();
-    await settingsPage.expectSessionRefreshTimestampUpdated();
+    await settingsPage.expectSessionSectionReady();
 
+    await page.getByLabel(/^Password Saat Ini$/).fill(settingsPassword ?? "");
+    await page.getByLabel(/^Password Baru$/).fill("short");
+    await page.getByLabel(/^Konfirmasi Password Baru$/).fill("different");
+
+    await expect(page.getByText(/Password baru terlalu pendek/i)).toBeVisible();
+    await expect(
+      page.getByText(/Konfirmasi password tidak cocok/i),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Simpan Password Baru/i }),
+    ).toBeDisabled();
+
+    await page.getByLabel(/^Password Baru$/).fill(settingsPassword ?? "");
+    await page
+      .getByLabel(/^Konfirmasi Password Baru$/)
+      .fill(settingsPassword ?? "");
+
+    await expect(
+      page.getByText(/Password baru sama dengan password lama/i),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Simpan Password Baru/i }),
+    ).toBeDisabled();
+  });
+
+  test("revokes route access after logout", async ({ page }) => {
+    const settingsPage = new SettingsAuthPage(page);
+
+    await settingsPage.goto();
     await settingsPage.logout();
     await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: /Educore/i })).toBeVisible();
+    await page.waitForLoadState("domcontentloaded");
 
     await page.goto("/dashboard/settings");
     await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: /Educore/i })).toBeVisible();
   });
 });

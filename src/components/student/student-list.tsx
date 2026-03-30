@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import type { StudentListItem } from "@/hooks/use-student-list";
 import { useStudentList } from "@/hooks/use-student-list";
@@ -163,8 +164,29 @@ function buildStudentExportRows(students: StudentListItem[]) {
   }));
 }
 
+function getStudentRenderKey(student: StudentListItem, index: number) {
+  const rawId =
+    typeof student.id === "string" && student.id.trim().length > 0
+      ? student.id.trim()
+      : null;
+
+  if (rawId) {
+    return rawId;
+  }
+
+  const createdAt =
+    typeof student.createdAt === "string"
+      ? student.createdAt
+      : student.createdAt instanceof Date
+        ? student.createdAt.toISOString()
+        : "unknown-created-at";
+
+  return `student-fallback-${student.nis}-${student.fullName}-${createdAt}-${index}`;
+}
+
 export function StudentList() {
   const today = getTodayDateString();
+  const desktopRuntime = isTauri();
   const [selectedStudent, setSelectedStudent] =
     useState<StudentListItem | null>(null);
   const [selectedStudentForCard, setSelectedStudentForCard] =
@@ -189,6 +211,8 @@ export function StudentList() {
   const isStudentView = user?.role === "student";
   const canManageStudents =
     user?.role === "admin" || user?.role === "super_admin";
+  const canRunStudentImport = canManageStudents;
+  const canRunStudentBulkActions = canManageStudents;
   const {
     loading,
     statsLoading,
@@ -344,6 +368,14 @@ export function StudentList() {
         </div>
       ) : null}
 
+      {desktopRuntime && !isStudentView ? (
+        <InlineState
+          title="Desktop students dibuka dalam mode desktop-safe"
+          description="Roster, detail siswa, tambah, edit, hapus, buat akun per siswa, import Excel, bulk account ops, repair kelas legacy, shortcut attendance, export, dan cetak kartu sudah memakai jalur local desktop. Jalur yang dibuka tetap dipagari oleh role admin/super_admin."
+          variant="info"
+        />
+      ) : null}
+
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
         <div className="flex flex-col gap-6">
           {!isStudentView ? (
@@ -469,7 +501,7 @@ export function StudentList() {
                           />
                         </div>
                       ) : null}
-                      {canManageStudents ? (
+                      {canRunStudentImport ? (
                         <div className="flex-1 sm:flex-none">
                           <ImportStudentsExcelDialog
                             onSuccess={() => {
@@ -491,7 +523,7 @@ export function StudentList() {
                           Export Excel
                         </Button>
                       ) : null}
-                      {canManageStudents ? (
+                      {canRunStudentBulkActions ? (
                         <Button
                           type="button"
                           variant="outline"
@@ -509,7 +541,7 @@ export function StudentList() {
                 </div>
               </div>
 
-              {canManageStudents && bulkActionsOpen ? (
+              {canRunStudentBulkActions && bulkActionsOpen ? (
                 <div className="border-t border-zinc-800 pt-4">
                   <div className="mx-auto grid max-w-[660px] gap-3 rounded-[1.5rem] border border-zinc-800 bg-zinc-950/40 p-3 sm:grid-cols-2 xl:grid-cols-3">
                     <div className="w-full min-w-0 [&_button]:w-full">
@@ -593,9 +625,9 @@ export function StudentList() {
         </div>
       ) : visibleStudents.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visibleStudents.map((student) => (
+          {visibleStudents.map((student, index) => (
             <article
-              key={student.id}
+              key={getStudentRenderKey(student, index)}
               className="group rounded-[1.75rem] border border-zinc-800 bg-linear-to-br from-zinc-900/60 via-zinc-900/40 to-zinc-950/70 p-5 transition-all hover:-translate-y-0.5 hover:border-zinc-700 hover:shadow-[0_25px_60px_-40px_rgba(14,165,233,0.45)]"
             >
               <div className="space-y-4">
@@ -978,32 +1010,36 @@ export function StudentList() {
         </DialogContent>
       </Dialog>
 
-      <EditStudentDialog
-        student={selectedStudentForEdit}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSuccess={() => {
-          void refreshAll();
-        }}
-      />
+      {canManageStudents ? (
+        <>
+          <EditStudentDialog
+            student={selectedStudentForEdit}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            onSuccess={() => {
+              void refreshAll();
+            }}
+          />
 
-      <DeleteStudentDialog
-        student={selectedStudentForDelete}
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        onSuccess={() => {
-          void refreshAll();
-        }}
-      />
+          <DeleteStudentDialog
+            student={selectedStudentForDelete}
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            onSuccess={() => {
+              void refreshAll();
+            }}
+          />
 
-      <CreateStudentAccountDialog
-        student={selectedStudentForAccount}
-        open={accountOpen}
-        onOpenChange={setAccountOpen}
-        onSuccess={() => {
-          void refreshList();
-        }}
-      />
+          <CreateStudentAccountDialog
+            student={selectedStudentForAccount}
+            open={accountOpen}
+            onOpenChange={setAccountOpen}
+            onSuccess={() => {
+              void refreshList();
+            }}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

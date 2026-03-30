@@ -64,14 +64,33 @@ export function AuthSessionProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [desktopRuntime, setDesktopRuntime] = useState(false);
+  const [runtimeMode, setRuntimeMode] = useState<"pending" | "desktop" | "web">(
+    "pending",
+  );
 
   useEffect(() => {
-    setDesktopRuntime(isTauri());
-    void ensureAppWarmup();
+    const nextDesktopRuntime = isTauri();
+    setRuntimeMode(nextDesktopRuntime ? "desktop" : "web");
+    if (!nextDesktopRuntime) {
+      void ensureAppWarmup();
+    }
   }, []);
 
-  if (desktopRuntime) {
+  if (runtimeMode === "pending") {
+    return (
+      <AuthSessionRuntimeContext.Provider
+        value={{
+          desktopRuntime: false,
+          status: "loading",
+          session: null,
+        }}
+      >
+        {children}
+      </AuthSessionRuntimeContext.Provider>
+    );
+  }
+
+  if (runtimeMode === "desktop") {
     return <DesktopSessionProvider>{children}</DesktopSessionProvider>;
   }
 

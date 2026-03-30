@@ -1,0 +1,80 @@
+▲ Next.js 16.1.6
+- Local:         http://localhost:59180
+- Network:       http://192.168.23.1:59180
+
+✓ Starting...
+✓ Ready in 6.2s
+
+Running 6 tests using 1 worker
+
+🔄 [Migration] Starting database sync...
+  ok 1 [chromium] › tests\e2e\attendance-shell.spec.ts:26:7 › Attendance shell @smoke › allows admin to open attendance and switch core sections (22.5s)
+[Seed] Admin admin@educore.school has valid Argon2id hash (97 chars).
+[Seed] ✅ Admin admin@educore.school is healthy with valid credentials.
+✅ [Seed] Roles and permissions seeded successfully.
+  ok 2 [chromium] › tests\e2e\attendance-shell.spec.ts:48:7 › Attendance shell @smoke › persists schedule save and holiday create-delete flow (23.7s)
+[OBS][settings-auth] {
+  at: '2026-03-30T05:19:53.931Z',
+  userId: '5b238cb9-b1e5-4fce-a5ab-3b3abe35f4eb',
+  userEmail: 'admin@educore.school',
+  events: [
+    {
+      page: 'dashboard/settings',
+      sessionStatus: 'authenticated',
+      authSource: 'next-auth',
+      activeRole: 'admin',
+      event: [Object]
+    }
+  ]
+}
+  ok 3 [chromium] › tests\e2e\settings-auth.spec.ts:50:7 › Settings/Auth shell @smoke › enforces web sync action boundary and session panel visibility (17.6s)
+  ok 4 [chromium] › tests\e2e\settings-auth.spec.ts:74:7 › Settings/Auth shell @smoke › keeps auth source and active identity in sync (11.1s)
+ℹ️ [Migration] Legacy schedule table retired after canonical cleanup.
+✅ [Migration] Database sync complete!
+  ok 5 [chromium] › tests\e2e\settings-auth.spec.ts:84:7 › Settings/Auth shell @smoke › keeps session refresh functional when telemetry endpoint fails (16.0s)
+  x  6 [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › revokes route access after logout (1.5m)
+
+
+  1) [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › revokes route access after logout 
+
+    Error: [2mexpect([22m[31mpage[39m[2m).[22mtoHaveURL[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Expected pattern: [32m/\/(\?.*)?$/[39m
+    Received string:  [31m"http://127.0.0.1:59180/dashboard/settings"[39m
+    Timeout: 60000ms
+
+    Call log:
+    [2m  - Expect "toHaveURL" with timeout 60000ms[22m
+    [2m    62 × unexpected value "http://127.0.0.1:59180/dashboard/settings"[22m
+
+
+      115 |
+      116 |     await page.goto("/dashboard/settings");
+    > 117 |     await expect(page).toHaveURL(/\/(\?.*)?$/, { timeout: 60_000 });
+          |                        ^
+      118 |     await expect(loginIdentifierField).toBeVisible({ timeout: 20_000 });
+      119 |   });
+      120 | });
+        at e:\Freelance\Project\educore\tests\e2e\settings-auth.spec.ts:117:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\settings-auth-Settings-Aut-a2631-s-route-access-after-logout-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › revokes route access after logout 
+  5 passed (3.2m)
