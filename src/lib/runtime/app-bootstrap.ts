@@ -4,6 +4,7 @@ const STARTUP_STABILIZATION_TIMEOUT_MS = 30_000;
 const STARTUP_STABILIZATION_WINDOW_MS = 45_000;
 const MUTATION_API_TIMEOUT_MS = 30_000;
 const STARTUP_WARMUP_ENDPOINT = "/api/runtime/warmup";
+export const STARTUP_HEALTH_ENDPOINT = "/api/runtime/health";
 
 type WarmupState = "idle" | "pending" | "ready" | "failed";
 

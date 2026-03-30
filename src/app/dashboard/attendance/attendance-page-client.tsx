@@ -14,6 +14,7 @@ import {
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { InlineState } from "@/components/common/inline-state";
+import { isTauri } from "@/core/env";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { apiPost } from "@/lib/api/request";
@@ -247,6 +248,7 @@ export function AttendancePageClient({
   initialSettings?: AttendanceSetting[];
   initialHolidays?: Holiday[];
 }) {
+  const desktopRuntime = isTauri();
   const { pathname, router, searchParams } = useAppNavigation();
   const getParam = (key: string) => searchParams?.get(key) ?? null;
   const { user } = useAuth();
@@ -443,15 +445,19 @@ export function AttendancePageClient({
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base lg:text-lg">
               {canWriteAttendance
-                ? "Absensi manual, scanner QR, dan insight kehadiran berjalan di atas route backend yang tervalidasi untuk web serta desktop."
-                : "Riwayat dan insight attendance tersedia sesuai permission role aktif tanpa membuka jalur tulis yang tidak diizinkan."}
+                ? desktopRuntime
+                  ? "Absensi manual, scanner QR, history, settings, holidays, dan risk follow-up inti sekarang berjalan lewat local desktop path yang sama untuk retest operasional."
+                  : "Absensi manual, scanner QR, dan insight kehadiran berjalan di atas route backend yang tervalidasi untuk web."
+                : desktopRuntime
+                  ? "Riwayat dan insight attendance tersedia di desktop sesuai permission role aktif tanpa membuka jalur tulis yang tidak diizinkan."
+                  : "Riwayat dan insight attendance tersedia sesuai permission role aktif tanpa membuka jalur tulis yang tidak diizinkan."}
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
                 {canWriteAttendance ? "Operasional Penuh" : "Analitik Aman"}
               </span>
               <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-                Siap Web + Desktop
+                {desktopRuntime ? "Desktop Retest Safe" : "Siap Web"}
               </span>
               <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
                 Sinkron Siswa ke Attendance
@@ -541,6 +547,15 @@ export function AttendancePageClient({
           variant="warning"
         />
       )}
+
+      {desktopRuntime && canReadAttendance ? (
+        <InlineState
+          title="Desktop attendance dibuka untuk retest operasional"
+          description="Today, history, QR, input manual, settings, holidays, risk insights, dan risk follow-up inti sekarang memakai local desktop path yang sama. Status ini cukup kuat untuk retest dan pre-production audit, tetapi belum saya klaim release artifact final."
+          variant="info"
+          className="text-sm"
+        />
+      ) : null}
 
       {canReadAttendance ? (
         <section className={attendanceStackClass}>

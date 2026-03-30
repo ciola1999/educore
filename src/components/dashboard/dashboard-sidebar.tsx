@@ -54,7 +54,7 @@ const menuItems: DashboardMenuItem[] = [
     phaseTag: "P1",
   },
   {
-    label: "User Management",
+    label: "Teachers & Staff",
     icon: GraduationCap,
     href: "/dashboard/teachers",
     color: "text-pink-500",

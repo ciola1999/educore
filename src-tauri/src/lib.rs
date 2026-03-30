@@ -1,8 +1,12 @@
 mod auth;
+mod runtime;
 
 use crate::auth::service::{
     authenticate_with_biometric, get_sync_config, login, set_password, set_sync_config,
     verify_password,
+};
+use crate::runtime::service::{
+    get_runtime_bootstrap_config, probe_runtime_bootstrap_health,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,7 +22,9 @@ pub fn run() {
             set_password,
             verify_password,
             get_sync_config,
-            set_sync_config
+            set_sync_config,
+            get_runtime_bootstrap_config,
+            probe_runtime_bootstrap_health
         ])
         .setup(|app| {
                 if cfg!(debug_assertions) {

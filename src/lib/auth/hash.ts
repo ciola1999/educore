@@ -9,6 +9,8 @@ const PASSWORD_HASH_OPTIONS = {
 
 const PASSWORD_HASH_LENGTH = 32;
 const PASSWORD_SALT_LENGTH = 16;
+const PREFER_NATIVE_ARGON2_ENV = "EDUCORE_PREFER_NATIVE_ARGON2";
+const FORCE_HASH_WASM_ENV = "EDUCORE_FORCE_HASH_WASM";
 
 function isNodeRuntime(): boolean {
   return (
@@ -19,8 +21,8 @@ function isNodeRuntime(): boolean {
 }
 
 async function loadArgon2() {
-  if (process.env.EDUCORE_FORCE_HASH_WASM === "true") {
-    throw new Error("Native argon2 disabled by EDUCORE_FORCE_HASH_WASM");
+  if (process.env[FORCE_HASH_WASM_ENV] === "true") {
+    throw new Error(`Native argon2 disabled by ${FORCE_HASH_WASM_ENV}`);
   }
 
   const runtimeImport = new Function(
@@ -59,7 +61,36 @@ function createPasswordSalt(length = PASSWORD_SALT_LENGTH): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(length));
 }
 
+function shouldPreferNativeArgon2(): boolean {
+  return process.env[PREFER_NATIVE_ARGON2_ENV] === "true";
+}
+
+async function hashPasswordWithHashWasm(password: string): Promise<string> {
+  const { argon2id } = await loadHashWasm();
+  return argon2id({
+    password,
+    salt: createPasswordSalt(),
+    parallelism: PASSWORD_HASH_OPTIONS.parallelism,
+    iterations: PASSWORD_HASH_OPTIONS.timeCost,
+    memorySize: PASSWORD_HASH_OPTIONS.memoryCost,
+    hashLength: PASSWORD_HASH_LENGTH,
+    outputType: "encoded",
+  });
+}
+
+async function verifyPasswordWithHashWasm(
+  password: string,
+  hash: string,
+): Promise<boolean> {
+  const { argon2Verify } = await loadHashWasm();
+  return argon2Verify({ password, hash });
+}
+
 async function hashPasswordNode(password: string): Promise<string> {
+  if (!shouldPreferNativeArgon2()) {
+    return hashPasswordWithHashWasm(password);
+  }
+
   try {
     const argon2 = await loadArgon2();
     return argon2.hash(password, PASSWORD_HASH_OPTIONS);
@@ -69,16 +100,7 @@ async function hashPasswordNode(password: string): Promise<string> {
       error,
     );
 
-    const { argon2id } = await loadHashWasm();
-    return argon2id({
-      password,
-      salt: createPasswordSalt(),
-      parallelism: PASSWORD_HASH_OPTIONS.parallelism,
-      iterations: PASSWORD_HASH_OPTIONS.timeCost,
-      memorySize: PASSWORD_HASH_OPTIONS.memoryCost,
-      hashLength: PASSWORD_HASH_LENGTH,
-      outputType: "encoded",
-    });
+    return hashPasswordWithHashWasm(password);
   }
 }
 
@@ -86,13 +108,16 @@ async function verifyPasswordNode(
   password: string,
   hash: string,
 ): Promise<boolean> {
+  if (!shouldPreferNativeArgon2()) {
+    return verifyPasswordWithHashWasm(password, hash);
+  }
+
   try {
     const argon2 = await loadArgon2();
     return await argon2.verify(hash, password);
   } catch {
     try {
-      const { argon2Verify } = await loadHashWasm();
-      return await argon2Verify({ password, hash });
+      return await verifyPasswordWithHashWasm(password, hash);
     } catch {
       return false;
     }

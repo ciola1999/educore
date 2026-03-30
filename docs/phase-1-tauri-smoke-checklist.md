@@ -29,9 +29,9 @@ Expected:
 ## 3. Navigasi & Role Gate
 
 1. Buka sidebar sebagai `admin`/`super_admin`.
-2. Pastikan menu `User Management` terlihat.
+2. Pastikan menu `Teachers & Staff` terlihat.
 3. Login dengan role `teacher` atau `staff`.
-4. Pastikan `User Management` tidak terlihat.
+4. Pastikan `Teachers & Staff` tidak terlihat.
 5. Login dengan role `student`.
 
 Expected:
@@ -43,7 +43,7 @@ Expected:
 ## 4. Admin Smoke
 
 1. Login sebagai `admin`.
-2. Buka `Students`, `Attendance`, `Courses`, `User Management`, `Settings`.
+2. Buka `Students`, `Attendance`, `Courses`, `Teachers & Staff`, `Settings`.
 3. Pastikan semua halaman terbuka tanpa `Forbidden`.
 4. Coba:
    - tambah kelas
@@ -61,7 +61,7 @@ Expected:
 
 1. Login sebagai `teacher`.
 2. Buka `Attendance`, `Courses`, `Settings`.
-3. Pastikan `User Management` tidak muncul di sidebar.
+3. Pastikan `Teachers & Staff` tidak muncul di sidebar.
 4. Di `Attendance`, pastikan QR/manual attendance masih tersedia.
 5. Di `Courses`, pastikan halaman terbuka dalam mode read-only.
 6. Di `Settings`, pastikan halaman terbuka dalam mode read-only.
@@ -97,9 +97,9 @@ Expected:
 - Tidak ada error `Forbidden` untuk role yang memang berizin.
 - Role read-only tidak melihat tombol tambah/edit/hapus.
 
-## 8. User Management Contract
+## 8. Teachers & Staff Contract
 
-1. Buka `User Management` sebagai `admin`/`super_admin`.
+1. Buka `Teachers & Staff` sebagai `admin`/`super_admin`.
 2. Tambah akun `teacher` atau `staff`.
 3. Hapus akun yang baru dibuat.
 

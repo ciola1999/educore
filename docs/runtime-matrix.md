@@ -28,7 +28,7 @@ Tujuannya:
 ### Login
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `needs-audit`
+- Desktop release: `partially-ready`
 
 Catatan:
 - Desktop auth harus lokal.
@@ -37,7 +37,7 @@ Catatan:
 ### Logout / Change Password
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `needs-audit`
+- Desktop release: `partially-ready`
 
 ---
 
@@ -46,15 +46,15 @@ Catatan:
 ### Dashboard Home
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `guarded`
+- Desktop release: `partially-ready`
 
 Catatan:
 - Jika insight/kpi tertentu belum desktop-safe, tampilkan safe mode atau batasi eksplisit.
 
 ### Attendance Risk Insights
 - Web: `web-ready`
-- Desktop dev: `needs-audit`
-- Desktop release: `guarded`
+- Desktop dev: `desktop-dev-ready`
+- Desktop release: `partially-ready`
 
 ---
 
@@ -66,8 +66,8 @@ Catatan:
 - Desktop release: `partially-ready`
 
 Catatan:
-- master data inti sudah dekat ke jalur desktop-safe
-- tetap perlu penutupan penuh untuk entitas yang belum lengkap seperti tahun ajaran, semester, guru_mapel
+- master data inti sudah desktop-safe untuk retest melalui dashboard courses
+- release desktop tetap perlu audit parity dan smoke artifact final
 
 ### Teachers / User Management terkait Master Data
 - Web: `web-ready`
@@ -75,19 +75,21 @@ Catatan:
 - Desktop release: `partially-ready`
 
 Catatan:
-- import Excel bisa tetap `web-only` jika belum ada jalur desktop yang aman
+- CRUD dan import inti sekarang sudah bisa diretest di desktop
+- release desktop penuh tetap perlu audit parity dan smoke bundle final
 
 ---
 
 ## 4. Phase 2.2 Jadwal
 
 ### Schedule Management
-- Web: `needs-audit`
-- Desktop dev: `needs-audit`
-- Desktop release: `needs-audit`
+- Web: `web-ready`
+- Desktop dev: `desktop-dev-ready`
+- Desktop release: `partially-ready`
 
 Catatan:
-- jangan anggap siap sampai conflict detector, local editor, dan sync contract jelas
+- jalur courses/schedule sudah cukup aman untuk retest desktop
+- release desktop tetap perlu audit conflict detector, editor parity, dan smoke final
 
 ---
 
@@ -96,17 +98,21 @@ Catatan:
 ### Attendance Input
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `needs-audit`
+- Desktop release: `partially-ready`
 
 ### Attendance History / Reporting
 - Web: `web-ready`
-- Desktop dev: `needs-audit`
-- Desktop release: `needs-audit`
+- Desktop dev: `desktop-dev-ready`
+- Desktop release: `partially-ready`
 
 ### QR Attendance
-- Web: `needs-audit`
-- Desktop dev: `needs-audit`
-- Desktop release: `needs-audit`
+- Web: `web-ready`
+- Desktop dev: `desktop-dev-ready`
+- Desktop release: `partially-ready`
+
+Catatan:
+- read-side, mutation inti, settings, holidays, risk insights, dan follow-up sudah punya local desktop path
+- desktop release penuh tetap perlu smoke QR camera/runtime artifact final
 
 ---
 
@@ -126,11 +132,12 @@ Catatan:
 
 ### Student List / CRUD
 - Web: `web-ready`
-- Desktop dev: `needs-audit`
-- Desktop release: `needs-audit`
+- Desktop dev: `desktop-dev-ready`
+- Desktop release: `partially-ready`
 
 Catatan:
-- jangan disentuh saat task Fase 2.1 kecuali ada kaitan langsung
+- desktop sekarang sudah mendukung roster, CRUD inti, import Excel, dan account ops utama
+- release desktop penuh tetap perlu smoke artifact final dan audit integration handler lokal
 
 ---
 
@@ -143,6 +150,7 @@ Catatan:
 
 Catatan:
 - karena settings/auth sudah distabilkan, perubahan di sini harus sangat hati-hati
+- sync desktop sekarang fail-secure saat offline dan kembali normal saat online
 
 ---
 
@@ -158,4 +166,3 @@ Jika belum, status yang benar adalah:
 - `guarded`
 - `needs-audit`
 - atau `partially-ready`
-

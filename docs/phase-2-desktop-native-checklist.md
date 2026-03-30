@@ -89,3 +89,11 @@ Desktop release baru boleh dibuka jika:
 Kalau salah satu belum terpenuhi:
 - [ ] tetap blok release desktop secara eksplisit
 
+Status saat ini:
+- `bun run build` sudah sehat
+- `bun run build:desktop` masih sengaja diblok fail-secure
+- blocker utamanya bukan bug kecil, tetapi runtime production desktop masih belum punya jalur non-static yang valid
+
+Referensi implementasi berikutnya:
+- [desktop-production-runtime-plan.md](/e:/Freelance/Project/educore/docs/desktop-production-runtime-plan.md)
+- [desktop-embedded-server-design.md](/e:/Freelance/Project/educore/docs/desktop-embedded-server-design.md)

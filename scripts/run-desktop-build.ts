@@ -42,6 +42,7 @@ function main() {
         'but src-tauri/tauri.conf.json still points frontendDist to "../out" (static export).',
         "This combination can produce a desktop bundle that looks valid but breaks Master Data and other API-backed flows offline.",
         "Use `bun tauri dev` for local desktop runtime until a dedicated desktop production runtime is implemented.",
+        "See docs/desktop-production-runtime-plan.md for the required production runtime path.",
         staleOutWarning,
       ].join("\n"),
     );

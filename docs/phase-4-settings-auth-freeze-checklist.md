@@ -16,6 +16,9 @@ Scope: Frontend Settings/Auth + observability + E2E hardening (web + tauri)
 - Session source-of-truth konsisten
 - Logout revoke access ke route terlindungi
 - Telemetry detail sensitif disanitasi
+- `AUTH_SECRET`, `AUTH_TRUST_HOST`, `AUTH_URL`, `NEXTAUTH_URL` production valid
+- Auth DB web membaca env Turso/auth yang benar
+- Login production tidak gagal karena native `argon2` unavailable di serverless runtime
 
 ## 3) E2E Gate
 - Settings/Auth smoke pass
@@ -60,3 +63,4 @@ Scope: Frontend Settings/Auth + observability + E2E hardening (web + tauri)
 - E2E bergantung env credential lokal valid
 - Telemetry summary volume tinggi tetap perlu monitoring retention
 - Pastikan AUTH_URL/NEXTAUTH_URL local tidak mismatch origin
+- Production auth tetap perlu smoke login sesudah perubahan env Vercel/Turso

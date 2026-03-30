@@ -266,6 +266,13 @@ Kalau desktop production path belum siap:
 - release desktop harus diblok eksplisit
 - jangan membiarkan bundle statis palsu terpaket
 
+### Current direction
+Untuk membuka desktop production release dari status saat ini, arah implementasi yang direkomendasikan adalah:
+- `embedded local web server` untuk menjaga kontrak Next.js route handlers tetap hidup di desktop production
+- detail implementasi ada di:
+  - [desktop-production-runtime-plan.md](/e:/Freelance/Project/educore/docs/desktop-production-runtime-plan.md)
+  - [desktop-embedded-server-design.md](/e:/Freelance/Project/educore/docs/desktop-embedded-server-design.md)
+
 ---
 
 ## 11. Build Gates
@@ -305,4 +312,3 @@ Prioritas tetap:
 - a11y
 - predictable form lifecycle
 - clean error semantics
-

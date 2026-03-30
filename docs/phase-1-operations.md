@@ -8,6 +8,18 @@ Tanggal referensi: 19 Maret 2026
 - `AUTH_SECRET` (wajib di production)
 - `AUTH_DATABASE_URL` atau `TURSO_DATABASE_URL`
 - `AUTH_DATABASE_AUTH_TOKEN` atau `TURSO_AUTH_TOKEN`
+- `AUTH_TRUST_HOST=true` (production web)
+- `AUTH_URL` dan `NEXTAUTH_URL` dengan origin production yang sama
+
+Catatan Vercel + Turso:
+- Integration-managed env Turso seperti `TURSO_DATABASE_TURSO_AUTH_TOKEN` sekarang ikut dibaca runtime auth web sebagai fallback.
+- Jika memakai custom env sendiri, tetap prioritaskan `AUTH_DATABASE_URL` dan `AUTH_DATABASE_AUTH_TOKEN` agar konfigurasi lebih jelas.
+- Jangan pakai `DATABASE_URL` Vercel Postgres untuk auth DB aplikasi ini.
+
+Catatan hashing auth web:
+- Web/server runtime sekarang default memakai `hash-wasm` untuk Argon2id agar stabil di Vercel/serverless.
+- Desktop Tauri tetap memakai jalur native desktop.
+- Native `argon2` di Node hanya dipakai jika benar-benar diinginkan lewat `EDUCORE_PREFER_NATIVE_ARGON2=true`.
 
 ### Desktop Sync (Tauri)
 - `SYNC_DATABASE_URL` atau `TURSO_DATABASE_URL`
@@ -35,11 +47,13 @@ Jika keyring OS gagal:
 ## 2. Checklist Operasional Phase 1
 
 1. Login admin berhasil tanpa error `MissingSecret` / `UntrustedHost`.
-2. Buka `Courses`, `Attendance`, `User Management`, `Settings`.
-3. Attendance manual:
+2. `GET /api/auth/session` production mengembalikan `200`, bukan `500`.
+3. Login credentials production tidak gagal dengan error `Cannot find package 'argon2'`.
+4. Buka `Courses`, `Attendance`, `Teachers & Staff`, `Settings`.
+5. Attendance manual:
    - `All Students` hanya read-only.
    - Save wajib kelas spesifik.
-4. Jalankan `Sinkron Penuh` dua kali:
+6. Jalankan `Sinkron Penuh` dua kali:
    - run pertama boleh ada download.
    - run kedua harus idempotent (tidak ghost increment jika tidak ada perubahan).
 

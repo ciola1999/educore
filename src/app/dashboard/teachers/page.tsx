@@ -46,7 +46,7 @@ function TeachersContent() {
     return (
       <InlineState
         title="Akses dibatasi"
-        description="Halaman Manajemen User hanya tersedia untuk admin/super admin. Guru dan staf tidak dapat mengubah data akun dari modul ini."
+        description="Halaman Teachers & Staff hanya tersedia untuk admin/super admin. Guru dan staf tidak dapat mengubah data akun dari modul ini."
         variant="warning"
       />
     );
@@ -57,11 +57,11 @@ function TeachersContent() {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-4xl font-extrabold tracking-tight bg-linear-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent">
-            Manajemen User
+            Teachers & Staff
           </h2>
           <p className="text-zinc-400 mt-2 text-lg">
-            Kelola akun admin, guru, dan staf menggunakan kontrak API fase 1
-            yang sudah stabil.
+            Kelola akun admin, guru, dan staf menggunakan jalur web dan
+            desktop-safe yang sekarang sudah sinkron untuk retest inti.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -75,8 +75,8 @@ function TeachersContent() {
       </div>
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-400">
-        Kelola akun admin, guru, dan staf secara konsisten di web maupun
-        desktop.
+        Kelola akun admin, guru, dan staf secara konsisten di web maupun desktop
+        tanpa lompat ke flow web-only untuk CRUD dan import inti.
       </div>
 
       {desktopRuntime ? (

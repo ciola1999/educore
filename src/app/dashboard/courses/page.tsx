@@ -11,11 +11,13 @@ import { SubjectList } from "@/components/academic/subject-list";
 import { TeachingAssignmentList } from "@/components/academic/teaching-assignment-list";
 import { InlineState } from "@/components/common/inline-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import { checkPermission } from "@/lib/auth/rbac";
 
 export default function CoursesPage() {
   const { user } = useAuth();
+  const desktopRuntime = isTauri();
   const canReadAcademic = checkPermission(user, "academic:read");
   const canWriteAcademic = checkPermission(user, "academic:write");
   const [tab, setTab] = useQueryState("tab", {
@@ -46,6 +48,15 @@ export default function CoursesPage() {
             : "Lihat master data akademik sesuai permission role aktif."}
         </p>
       </div>
+
+      {desktopRuntime ? (
+        <InlineState
+          title="Desktop runtime aktif"
+          description="Academic years, semesters, classes, subjects, teaching assignments, schedules, dan audit jadwal sekarang mengikuti local desktop path yang sama untuk retest. Release desktop penuh tetap perlu smoke artifact final."
+          variant="info"
+          className="text-sm"
+        />
+      ) : null}
 
       {!canReadAcademic ? (
         <InlineState

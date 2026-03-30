@@ -40,6 +40,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPost } from "@/lib/api/request";
 import { checkPermission } from "@/lib/auth/rbac";
 import { sendSettingsAuthTelemetry } from "@/lib/observability/settings-auth-telemetry";
+import {
+  type DesktopRuntimeBootstrapConfig,
+  type DesktopRuntimeBootstrapHealth,
+  getDesktopRuntimeBootstrapConfig,
+  probeDesktopRuntimeBootstrapHealth,
+} from "@/lib/runtime/desktop-bootstrap-config";
 import { runFullSync, runPullSync, runPushSync } from "@/lib/sync/actions";
 import type { SyncResult } from "@/lib/sync/client";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
@@ -224,6 +230,14 @@ export default function SettingsPage() {
     url: "",
     authToken: "",
   });
+  const [desktopBootstrapConfig, setDesktopBootstrapConfig] =
+    useState<DesktopRuntimeBootstrapConfig | null>(null);
+  const [desktopBootstrapHealth, setDesktopBootstrapHealth] =
+    useState<DesktopRuntimeBootstrapHealth | null>(null);
+  const [desktopBootstrapLoading, setDesktopBootstrapLoading] = useState(false);
+  const [desktopBootstrapError, setDesktopBootstrapError] = useState<
+    string | null
+  >(null);
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -892,6 +906,39 @@ export default function SettingsPage() {
     })();
   }, [desktopRuntime]);
 
+  useEffect(() => {
+    if (!desktopRuntime) {
+      setDesktopBootstrapConfig(null);
+      setDesktopBootstrapHealth(null);
+      setDesktopBootstrapError(null);
+      return;
+    }
+
+    setDesktopBootstrapLoading(true);
+    setDesktopBootstrapError(null);
+
+    void Promise.all([
+      getDesktopRuntimeBootstrapConfig(),
+      probeDesktopRuntimeBootstrapHealth(),
+    ])
+      .then(([config, health]) => {
+        setDesktopBootstrapConfig(config);
+        setDesktopBootstrapHealth(health);
+      })
+      .catch((error) => {
+        const message = extractUnknownErrorMessage(
+          error,
+          "Gagal membaca status bootstrap desktop runtime",
+        );
+        setDesktopBootstrapConfig(null);
+        setDesktopBootstrapHealth(null);
+        setDesktopBootstrapError(message);
+      })
+      .finally(() => {
+        setDesktopBootstrapLoading(false);
+      });
+  }, [desktopRuntime]);
+
   async function saveSyncConfig() {
     if (!desktopRuntime) {
       toast.error("Konfigurasi sync credential hanya tersedia di desktop.");
@@ -1547,6 +1594,60 @@ export default function SettingsPage() {
               />
             )}
 
+            {desktopRuntime ? (
+              <InlineState
+                title={
+                  desktopBootstrapHealth?.ok
+                    ? "Bootstrap desktop runtime tervalidasi"
+                    : "Bootstrap desktop runtime masih tahap fondasi"
+                }
+                description={
+                  desktopBootstrapError
+                    ? desktopBootstrapError
+                    : desktopBootstrapHealth
+                      ? `${desktopBootstrapHealth.message} Target: ${desktopBootstrapHealth.url}`
+                      : desktopBootstrapLoading
+                        ? "Memeriksa loopback runtime desktop production..."
+                        : "Kontrak bootstrap desktop sudah tersedia, tetapi embedded local server production belum diaktifkan."
+                }
+                actionLabel={
+                  desktopBootstrapLoading ? undefined : "Cek Bootstrap Runtime"
+                }
+                onAction={() => {
+                  setDesktopBootstrapLoading(true);
+                  setDesktopBootstrapError(null);
+                  void Promise.all([
+                    getDesktopRuntimeBootstrapConfig(),
+                    probeDesktopRuntimeBootstrapHealth(),
+                  ])
+                    .then(([config, health]) => {
+                      setDesktopBootstrapConfig(config);
+                      setDesktopBootstrapHealth(health);
+                    })
+                    .catch((error) => {
+                      const message = extractUnknownErrorMessage(
+                        error,
+                        "Gagal membaca status bootstrap desktop runtime",
+                      );
+                      setDesktopBootstrapConfig(null);
+                      setDesktopBootstrapHealth(null);
+                      setDesktopBootstrapError(message);
+                    })
+                    .finally(() => {
+                      setDesktopBootstrapLoading(false);
+                    });
+                }}
+                variant={
+                  desktopBootstrapHealth?.ok
+                    ? "info"
+                    : desktopBootstrapError
+                      ? "warning"
+                      : "info"
+                }
+                className="text-xs"
+              />
+            ) : null}
+
             {syncError ? (
               <InlineState
                 title="Aksi sinkronisasi gagal"
@@ -1605,6 +1706,33 @@ export default function SettingsPage() {
                 {desktopRuntime ? "Desktop Path" : "/api/sync/*"}
               </span>
             </div>
+            {desktopRuntime ? (
+              <>
+                <div className="flex justify-between gap-3">
+                  <span className="text-zinc-400">Bootstrap Strategy</span>
+                  <span className="truncate text-right font-mono text-zinc-100">
+                    {desktopBootstrapConfig?.strategy ||
+                      "embedded-local-web-server"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-zinc-400">Bootstrap Health</span>
+                  <span
+                    className={
+                      desktopBootstrapHealth?.ok
+                        ? "font-mono text-emerald-400"
+                        : "font-mono text-amber-300"
+                    }
+                  >
+                    {desktopBootstrapLoading
+                      ? "checking"
+                      : desktopBootstrapHealth?.ok
+                        ? "reachable"
+                        : "not-ready"}
+                  </span>
+                </div>
+              </>
+            ) : null}
           </CardContent>
         </Card>
 

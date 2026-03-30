@@ -7,6 +7,7 @@ import {
   LibraryBig,
   Settings,
   ShieldCheck,
+  UserCog,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -61,6 +62,12 @@ const quickLinks: QuickLink[] = [
     label: "Academic",
     description: "Kelas dan mata pelajaran yang bisa dibaca role aktif.",
     icon: LibraryBig,
+  },
+  {
+    href: "/dashboard/teachers",
+    label: "Teachers & Staff",
+    description: "Manajemen akun guru, staf, dan admin yang role-safe.",
+    icon: UserCog,
   },
   {
     href: "/dashboard/settings",
@@ -217,9 +224,9 @@ export function DashboardHomeClient() {
           <CardContent className="space-y-3 text-sm text-zinc-400">
             <p>
               Overview desktop hanya membuka alur yang sudah local-runtime-safe.
-              Insight attendance lanjutan tetap ditahan sampai local path
-              analytics/follow-up-nya siap. Students roster, CRUD inti, dan
-              import Excel sekarang sudah memakai runtime desktop yang sama.
+              KPI dashboard, students roster, academic workspace, teachers &
+              staff management, dan insight attendance inti sekarang sudah
+              memakai runtime desktop yang sama untuk retest operasional.
             </p>
             <p>
               Menu yang aktif di runtime ini:{" "}
@@ -318,7 +325,7 @@ export function DashboardHomeClient() {
         </section>
       ) : null}
 
-      {canOperateDashboard && !desktopConstrainedRuntime ? (
+      {canOperateDashboard ? (
         startupReady ? (
           <AttendanceRiskInsights />
         ) : (

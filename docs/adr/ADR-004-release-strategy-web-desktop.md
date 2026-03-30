@@ -65,3 +65,7 @@ bun tauri build
 - readiness web dan desktop bisa berbeda
 - team harus disiplin membedakan status “web-ready” dan “desktop-release-ready”
 
+## Follow-up
+
+Implementasi konkret untuk membuka desktop release production dijabarkan di:
+- [desktop-production-runtime-plan.md](/e:/Freelance/Project/educore/docs/desktop-production-runtime-plan.md)
