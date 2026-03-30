@@ -33,4 +33,19 @@ describe("Auth Hash Utilities", () => {
     const isValid = await verifyPassword("admin123", hash);
     expect(isValid).toBe(true);
   });
+
+  it("should verify passwords with hash-wasm fallback when native argon2 is unavailable", async () => {
+    process.env.EDUCORE_FORCE_HASH_WASM = "true";
+
+    try {
+      const password = "fallbackPassword123";
+      const hash = await hashPassword(password);
+
+      expect(hash.startsWith("$argon2id$")).toBe(true);
+      await expect(verifyPassword(password, hash)).resolves.toBe(true);
+      await expect(verifyPassword("wrongPassword", hash)).resolves.toBe(false);
+    } finally {
+      delete process.env.EDUCORE_FORCE_HASH_WASM;
+    }
+  });
 });

@@ -7,6 +7,9 @@ const PASSWORD_HASH_OPTIONS = {
   parallelism: 1,
 };
 
+const PASSWORD_HASH_LENGTH = 32;
+const PASSWORD_SALT_LENGTH = 16;
+
 function isNodeRuntime(): boolean {
   return (
     typeof process !== "undefined" &&
@@ -16,36 +19,83 @@ function isNodeRuntime(): boolean {
 }
 
 async function loadArgon2() {
-  // Keep argon2 as a runtime-only dependency so browser/edge bundles do not
-  // attempt to resolve native Node modules during compilation.
-  const runtimeImport = new Function(
-    "specifier",
-    "return import(specifier);",
-  ) as (specifier: string) => Promise<{
+  if (process.env.EDUCORE_FORCE_HASH_WASM === "true") {
+    throw new Error("Native argon2 disabled by EDUCORE_FORCE_HASH_WASM");
+  }
+
+  const { createRequire } = await import("node:module");
+  const runtimeRequire = createRequire(import.meta.url) as (
+    specifier: string,
+  ) => {
     hash: (
       password: string,
       options: typeof PASSWORD_HASH_OPTIONS,
     ) => Promise<string>;
     verify: (hash: string, password: string) => Promise<boolean>;
-  }>;
+  };
 
-  return runtimeImport("argon2");
+  return runtimeRequire("argon2");
+}
+
+async function loadHashWasm() {
+  return (await import("hash-wasm")) as {
+    argon2id: (options: {
+      password: string;
+      salt: Uint8Array;
+      parallelism: number;
+      iterations: number;
+      memorySize: number;
+      hashLength: number;
+      outputType: "encoded";
+    }) => Promise<string>;
+    argon2Verify: (options: {
+      password: string;
+      hash: string;
+    }) => Promise<boolean>;
+  };
+}
+
+function createPasswordSalt(length = PASSWORD_SALT_LENGTH): Uint8Array {
+  return crypto.getRandomValues(new Uint8Array(length));
 }
 
 async function hashPasswordNode(password: string): Promise<string> {
-  const argon2 = await loadArgon2();
-  return argon2.hash(password, PASSWORD_HASH_OPTIONS);
+  try {
+    const argon2 = await loadArgon2();
+    return argon2.hash(password, PASSWORD_HASH_OPTIONS);
+  } catch (error) {
+    console.warn(
+      "[AUTH] Native argon2 unavailable in current Node runtime. Falling back to hash-wasm.",
+      error,
+    );
+
+    const { argon2id } = await loadHashWasm();
+    return argon2id({
+      password,
+      salt: createPasswordSalt(),
+      parallelism: PASSWORD_HASH_OPTIONS.parallelism,
+      iterations: PASSWORD_HASH_OPTIONS.timeCost,
+      memorySize: PASSWORD_HASH_OPTIONS.memoryCost,
+      hashLength: PASSWORD_HASH_LENGTH,
+      outputType: "encoded",
+    });
+  }
 }
 
 async function verifyPasswordNode(
   password: string,
   hash: string,
 ): Promise<boolean> {
-  const argon2 = await loadArgon2();
   try {
+    const argon2 = await loadArgon2();
     return await argon2.verify(hash, password);
   } catch {
-    return false;
+    try {
+      const { argon2Verify } = await loadHashWasm();
+      return await argon2Verify({ password, hash });
+    } catch {
+      return false;
+    }
   }
 }
 

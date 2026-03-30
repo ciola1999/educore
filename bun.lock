@@ -22,6 +22,7 @@
         "date-fns": "^4.1.0",
         "drizzle-orm": "^0.45.1",
         "framer-motion": "^12.33.0",
+        "hash-wasm": "^4.12.0",
         "html-to-image": "^1.11.13",
         "html2canvas": "^1.4.1",
         "html5-qrcode": "^2.3.8",
@@ -1059,6 +1060,8 @@
     "hapi": ["hapi@6.11.1", "", { "dependencies": { "accept": "1.x.x", "boom": "^2.5.x", "bossy": "1.x.x", "call": "1.x.x", "catbox": "^3.3.x", "catbox-memory": "1.x.x", "cryptiles": "2.x.x", "h2o2": "1.x.x", "heavy": "1.x.x", "hoek": "^2.4.x", "iron": "2.x.x", "items": "1.x.x", "joi": "^4.4.x", "kilt": "^1.1.x", "lru-cache": "2.5.x", "mimos": "1.x.x", "qs": "2.x.x", "semver": "2.3.x", "shot": "1.x.x", "statehood": "^1.2.x", "subtext": "1.x.x", "topo": "1.x.x", "vision": "1.x.x", "wreck": "5.x.x" }, "bin": { "hapi": "./bin/hapi" } }, "sha512-Wvq/x8tfIKZTUo2mPvOoXNUo1hCbebiNW0GCNIPFGaVgV27In+n1LvVjs/RHrNxlYDJVkNu9XaSlJvcLlwQy7g=="],
 
     "has-symbols": ["has-symbols@1.1.0", "", {}, "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ=="],
+
+    "hash-wasm": ["hash-wasm@4.12.0", "", {}, "sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ=="],
 
     "hasown": ["hasown@2.0.2", "", { "dependencies": { "function-bind": "^1.1.2" } }, "sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ=="],
 
