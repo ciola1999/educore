@@ -95,7 +95,10 @@ function resolveServerDatabaseConfig() {
   return {
     url: normalizeLibsqlUrl(url),
     authToken:
-      process.env.AUTH_DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN,
+      process.env.AUTH_DATABASE_AUTH_TOKEN ||
+      process.env.TURSO_AUTH_TOKEN ||
+      process.env.TURSO_DATABASE_AUTH_TOKEN ||
+      process.env.TURSO_DATABASE_TURSO_AUTH_TOKEN,
   };
 }
 

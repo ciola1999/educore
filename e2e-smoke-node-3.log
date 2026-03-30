@@ -155,3 +155,4 @@ Running 6 tests using 1 worker
     [chromium] › tests\e2e\settings-auth.spec.ts:84:7 › Settings/Auth shell @smoke › keeps session refresh functional when telemetry endpoint fails 
     [chromium] › tests\e2e\settings-auth.spec.ts:105:7 › Settings/Auth shell @smoke › refreshes session indicator and revokes route access after logout 
   4 passed (3.1m)
+^C

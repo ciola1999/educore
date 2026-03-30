@@ -2,6 +2,13 @@ import { createClient } from "@libsql/client";
 
 const LIBSQL_SCHEMES = ["libsql:", "https:", "http:", "ws:", "wss:", "file:"];
 
+const AUTH_DATABASE_TOKEN_ENV_KEYS = [
+  "AUTH_DATABASE_AUTH_TOKEN",
+  "TURSO_AUTH_TOKEN",
+  "TURSO_DATABASE_AUTH_TOKEN",
+  "TURSO_DATABASE_TURSO_AUTH_TOKEN",
+] as const;
+
 function isSupportedLibsqlUrl(url: string): boolean {
   try {
     const normalized = url.startsWith("libsql://")
@@ -33,8 +40,17 @@ function resolveAuthDatabaseUrl(): string {
     : url;
 }
 
-function resolveAuthDatabaseToken(): string | undefined {
-  return process.env.AUTH_DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+export function resolveAuthDatabaseToken(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  for (const key of AUTH_DATABASE_TOKEN_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
 }
 
 export function createAuthDbClient() {
