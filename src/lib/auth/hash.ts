@@ -23,18 +23,18 @@ async function loadArgon2() {
     throw new Error("Native argon2 disabled by EDUCORE_FORCE_HASH_WASM");
   }
 
-  const { createRequire } = await import("node:module");
-  const runtimeRequire = createRequire(import.meta.url) as (
-    specifier: string,
-  ) => {
+  const runtimeImport = new Function(
+    "specifier",
+    "return import(specifier);",
+  ) as (specifier: string) => Promise<{
     hash: (
       password: string,
       options: typeof PASSWORD_HASH_OPTIONS,
     ) => Promise<string>;
     verify: (hash: string, password: string) => Promise<boolean>;
-  };
+  }>;
 
-  return runtimeRequire("argon2");
+  return runtimeImport("argon2");
 }
 
 async function loadHashWasm() {
