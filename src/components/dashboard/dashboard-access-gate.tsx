@@ -10,7 +10,10 @@ import {
   DASHBOARD_ROLE_DEFAULT_PATH,
   isAllowedDashboardPath,
 } from "@/lib/auth/dashboard-access";
-import { hasForcedLogoutMarker } from "@/lib/auth/logout-marker";
+import {
+  clearForcedLogoutMarker,
+  hasForcedLogoutMarker,
+} from "@/lib/auth/logout-marker";
 import {
   getRuntimeDefaultDashboardPath,
   getRuntimeSupportedDashboardLabels,
@@ -33,13 +36,14 @@ export function DashboardAccessGate({
   const router = useRouter();
   const { user, isLoading, sessionStatus } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [forcedLogout, setForcedLogout] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    setForcedLogout(hasForcedLogoutMarker());
   }, []);
 
   const currentRole = toAuthRole(user?.role);
-  const forcedLogout = mounted && hasForcedLogoutMarker();
   const desktopConstrainedRuntime = isDesktopDashboardConstrainedRuntime();
   const runtimeStaticDesktop = isDesktopStaticRuntime();
   const runtimeSupportedLabels = currentRole
@@ -60,6 +64,12 @@ export function DashboardAccessGate({
 
   useEffect(() => {
     if (!mounted || isLoading) {
+      return;
+    }
+
+    if (forcedLogout && sessionStatus === "authenticated" && currentRole) {
+      clearForcedLogoutMarker();
+      setForcedLogout(false);
       return;
     }
 
@@ -109,7 +119,15 @@ export function DashboardAccessGate({
   }
 
   if (forcedLogout) {
-    return null;
+    return (
+      <div className="pt-8">
+        <InlineState
+          title="Sesi sebelumnya sedang ditutup"
+          description="Workspace akan dialihkan kembali ke login agar sesi lama benar-benar bersih."
+          variant="info"
+        />
+      </div>
+    );
   }
 
   if (hasAccess && runtimeSupported) {

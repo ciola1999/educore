@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AuthRole } from "@/core/auth/roles";
+import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import { DASHBOARD_ROLE_ALLOWED_PATHS } from "@/lib/auth/dashboard-access";
 import { getRuntimeSupportedDashboardPaths } from "@/lib/runtime/desktop-dashboard";
@@ -118,7 +119,9 @@ export function DashboardSidebar() {
     setSigningOut(true);
     try {
       await logout();
-      router.replace("/");
+      if (isTauri()) {
+        router.replace("/");
+      }
     } catch {
       toast.error("Gagal logout. Coba lagi.");
     } finally {
