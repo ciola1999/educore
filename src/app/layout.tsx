@@ -85,21 +85,14 @@ export default function RootLayout({
               const isTauriRuntime =
                 typeof window !== 'undefined' &&
                 typeof window.__TAURI_INTERNALS__ !== 'undefined';
-              const shouldRegisterServiceWorker =
-                !isTauriRuntime && window.location.protocol !== 'http:';
 
               window.addEventListener('load', function() {
-                if (!shouldRegisterServiceWorker) {
-                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                    registrations.forEach(function(registration) {
-                      void registration.unregister();
-                    });
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                  registrations.forEach(function(registration) {
+                    void registration.unregister();
                   });
-                  return;
-                }
-
-                navigator.serviceWorker.register('/sw.js').catch(function() {
-                  // Ignore registration failures in runtime-specific contexts.
+                }).catch(function() {
+                  // Ignore cleanup failures.
                 });
               });
             }
