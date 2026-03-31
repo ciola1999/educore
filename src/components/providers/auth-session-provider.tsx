@@ -69,11 +69,47 @@ export function AuthSessionProvider({
   );
 
   useEffect(() => {
-    const nextDesktopRuntime = isTauri();
-    setRuntimeMode(nextDesktopRuntime ? "desktop" : "web");
-    if (!nextDesktopRuntime) {
+    let cancelled = false;
+
+    const resolveRuntimeMode = () => {
+      if (cancelled) {
+        return;
+      }
+
+      if (isTauri()) {
+        setRuntimeMode("desktop");
+        return;
+      }
+
+      setRuntimeMode((currentMode) => {
+        if (currentMode === "pending") {
+          window.setTimeout(resolveRuntimeMode, 100);
+        }
+
+        return currentMode === "pending" ? "pending" : currentMode;
+      });
+    };
+
+    const finalizeWebRuntime = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+
+      if (isTauri()) {
+        setRuntimeMode("desktop");
+        return;
+      }
+
+      setRuntimeMode("web");
       void ensureAppWarmup();
-    }
+    }, 1500);
+
+    resolveRuntimeMode();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(finalizeWebRuntime);
+    };
   }, []);
 
   if (runtimeMode === "pending") {

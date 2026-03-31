@@ -1,10 +1,10 @@
 # Production Release Checklist
 
-Tanggal referensi: 30 Maret 2026
+Tanggal referensi: 1 April 2026
 
 Checklist ini dipakai sebagai gate rilis praktis untuk:
 - web production
-- desktop pre-production / release candidate
+- desktop production MSI
 - auth + sync + environment
 - smoke test setelah deploy
 
@@ -76,10 +76,15 @@ Desktop hanya boleh disebut mendekati release-ready jika:
 - [ ] `bun run build` lulus
 - [ ] `bun run build:desktop` lulus
 - [ ] `bun tauri build` menghasilkan bundle valid
+- [ ] artifact MSI berhasil di-install pada Windows target
+- [ ] login desktop berhasil
+- [ ] logout lalu login ulang tanpa restart app berhasil
+- [ ] full sync online berhasil
+- [ ] full sync offline gagal dengan pesan jujur
 
 Status jujur saat ini:
-- desktop: kuat untuk retest dan kandidat pre-production
-- desktop release penuh: tetap perlu smoke release artifact final
+- desktop MSI: production final setelah smoke artifact nyata lulus
+- desktop NSIS: belum disignoff, masuk backlog hardening terpisah
 
 Referensi:
 - lihat [desktop-production-runtime-plan.md](/e:/Freelance/Project/educore/docs/desktop-production-runtime-plan.md) untuk blocker arsitektur yang masih menahan `build:desktop`
@@ -176,7 +181,22 @@ Cari error ini:
 
 ## 8. Residual Risk
 
+### Release Scope
+
+- [ ] signoff resmi Windows saat ini hanya untuk channel `MSI`
+- [ ] `NSIS` diperlakukan sebagai backlog hardening terpisah, bukan blocker release MSI
+- [ ] release note menyebut jelas `Windows installer officially supported: MSI`
+
+### Artifact Security
+
+- [ ] installer desktop diperlakukan sebagai controlled artifact
+- [ ] distribusi installer dibatasi ke channel rilis resmi
+- [ ] hash artifact final dicatat sebelum distribusi
+- [ ] secret runtime packaged diminimalkan hanya untuk kebutuhan bootstrap
+- [ ] roadmap first-run provisioning / keyring-only credential masih terbuka
+
+### Engineering Follow-up
+
 - [ ] desktop runtime sudah jauh lebih rapi, tapi belum full integration-tested untuk semua handler lokal
 - [ ] `desktop-local-api.ts` masih cukup besar walau modularisasi sudah maju
-- [ ] release desktop final tetap perlu smoke bundle nyata, bukan hanya `tauri dev`
-- [ ] perubahan env production harus selalu diikuti redeploy + login smoke
+- [ ] perubahan env production harus selalu diikuti rebuild artifact + smoke login

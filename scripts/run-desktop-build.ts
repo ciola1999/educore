@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -37,17 +38,83 @@ function readText(relativePath: string) {
   return readFileSync(resolve(process.cwd(), relativePath), "utf8");
 }
 
+function getNodeMajorVersion(): number {
+  const [major] = process.versions.node.split(".");
+  const parsed = Number.parseInt(major ?? "0", 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sanitizeNodeOptions(
+  input: string | undefined,
+  storageFile: string,
+): string {
+  const tokens = (input ?? "")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  let hasLocalStorageOption = false;
+  const sanitizedTokens: string[] = [];
+
+  for (const token of tokens) {
+    if (token === "--localstorage-file") {
+      hasLocalStorageOption = true;
+      continue;
+    }
+
+    if (token.startsWith("--localstorage-file=")) {
+      hasLocalStorageOption = true;
+      const value = token.slice("--localstorage-file=".length).trim();
+      if (value.length > 0) {
+        sanitizedTokens.push(token);
+      }
+      continue;
+    }
+
+    sanitizedTokens.push(token);
+  }
+
+  if (!hasLocalStorageOption) {
+    sanitizedTokens.push(`--localstorage-file=${storageFile}`);
+  } else if (
+    !sanitizedTokens.some((token) => token.startsWith("--localstorage-file="))
+  ) {
+    sanitizedTokens.push(`--localstorage-file=${storageFile}`);
+  }
+
+  return sanitizedTokens.join(" ");
+}
+
 function failSecure(message: string): never {
   console.error(message);
   process.exit(1);
 }
 
 function runNextBuild() {
-  const result = spawnSync("bun", ["run", "build"], {
+  const env = { ...process.env };
+  const nodeMajor = getNodeMajorVersion();
+  if (nodeMajor >= 22) {
+    const localStorageDir = resolve(process.cwd(), ".next");
+    mkdirSync(localStorageDir, { recursive: true });
+    const localStorageFile = resolve(localStorageDir, "node-localstorage");
+    env.NODE_OPTIONS = sanitizeNodeOptions(env.NODE_OPTIONS, localStorageFile);
+  }
+
+  const nextBin = resolve(
+    process.cwd(),
+    "node_modules",
+    "next",
+    "dist",
+    "bin",
+    "next",
+  );
+  const runtimeBinary = basename(process.execPath).toLowerCase().includes("bun")
+    ? "node"
+    : process.execPath;
+  const result = spawnSync(runtimeBinary, [nextBin, "build"], {
     cwd: process.cwd(),
     stdio: "inherit",
-    shell: true,
-    env: process.env,
+    env,
   });
 
   if (result.status !== 0) {
@@ -130,7 +197,7 @@ function prepareDesktopRuntimeConfig(): DesktopRuntimeConfig {
     serverEntrypoint: "app/server.js",
     appDir: "app",
     bundleArchive: "runtime-bundle.tar",
-    bundleVersion: version,
+    bundleVersion: `${version}-pending`,
     env: {
       NODE_ENV: "production",
       HOSTNAME: DEFAULT_HOST,
@@ -151,6 +218,35 @@ function prepareDesktopRuntimeConfig(): DesktopRuntimeConfig {
         "production-candidate",
     },
   };
+}
+
+function hashText(input: string) {
+  return createHash("sha256").update(input).digest("hex");
+}
+
+function hashFile(path: string) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function buildDesktopBundleVersion(
+  config: DesktopRuntimeConfig,
+  archivePath: string,
+) {
+  const appVersion = config.env.NEXT_PUBLIC_APP_VERSION || readPackageVersion();
+  const archiveHash = hashFile(archivePath).slice(0, 12);
+  const configHash = hashText(
+    JSON.stringify({
+      host: config.host,
+      port: config.port,
+      nodeBinary: config.nodeBinary,
+      serverEntrypoint: config.serverEntrypoint,
+      appDir: config.appDir,
+      bundleArchive: config.bundleArchive,
+      env: config.env,
+    }),
+  ).slice(0, 12);
+
+  return `${appVersion}-${archiveHash}-${configHash}`;
 }
 
 function ensureStandaloneArtifacts() {
@@ -278,6 +374,7 @@ function prepareDesktopRuntimeBundle(config: DesktopRuntimeConfig) {
   );
 
   runTarArchive(DESKTOP_RUNTIME_STAGING_DIR, archivePath);
+  config.bundleVersion = buildDesktopBundleVersion(config, archivePath);
   rmSync(DESKTOP_RUNTIME_STAGING_DIR, { recursive: true, force: true });
 
   writeFileSync(

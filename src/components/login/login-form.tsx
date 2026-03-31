@@ -108,9 +108,16 @@ export function LoginForm() {
 
       if (result.success) {
         playSuccessSound();
-        router.replace(
-          isTauri() ? resolveDesktopDefaultUrl() : resolveCallbackUrl(),
-        );
+        const nextUrl = isTauri()
+          ? resolveDesktopDefaultUrl()
+          : resolveCallbackUrl();
+
+        if (isTauri()) {
+          window.location.replace(nextUrl);
+          return;
+        }
+
+        router.replace(nextUrl);
       } else {
         triggerErrorHaptic();
         setError(result.error);

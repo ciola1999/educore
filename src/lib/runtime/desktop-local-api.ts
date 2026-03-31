@@ -37,7 +37,7 @@ import {
   upsertAttendanceSetting,
 } from "@/core/services/attendance-service";
 import { qrScanSchema } from "@/core/validation/schemas";
-import { hashPassword } from "@/lib/auth/hash";
+import { hashPassword, verifyPassword } from "@/lib/auth/hash";
 import {
   checkAnyPermission,
   checkPermission,
@@ -107,6 +107,7 @@ import {
 } from "@/lib/services/legacy-schedule-repair";
 import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
 import { useStore } from "@/lib/store/use-store";
+import { getTursoCloudClient } from "@/lib/sync/client";
 import { pullFromCloud, pushToCloud } from "@/lib/sync/turso-sync";
 import {
   isUuidLikeClassValue,
@@ -143,6 +144,69 @@ type DesktopAuthUserRow = {
   hlc: string | null;
   syncStatus: "synced" | "pending" | "error";
   passwordHash: string | null;
+};
+
+type RemoteDesktopAuthUserRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  version: number | string | null;
+  password_hash: string | null;
+  nip: string | null;
+  nis: string | null;
+  nisn: string | null;
+  tempat_lahir: string | null;
+  tanggal_lahir: number | string | null;
+  jenis_kelamin: "L" | "P" | null;
+  alamat: string | null;
+  no_telepon: string | null;
+  foto: string | null;
+  kelas_id: string | null;
+  is_active: number | boolean | null;
+  last_login_at: number | string | null;
+  provider: string | null;
+  provider_id: string | null;
+  created_at: number | string | null;
+  updated_at: number | string | null;
+  deleted_at: number | string | null;
+  hlc: string | null;
+  sync_status: "synced" | "pending" | "error" | null;
+};
+
+type LocalDesktopAuthUserSqlRow = {
+  id?: string | null;
+  fullName?: string | null;
+  email?: string | null;
+  role?: string | null;
+  version?: number | string | null;
+  passwordHash?: string | null;
+  nip?: string | null;
+  nis?: string | null;
+  nisn?: string | null;
+  tempatLahir?: string | null;
+  tanggalLahir?: number | string | null;
+  jenisKelamin?: "L" | "P" | null;
+  alamat?: string | null;
+  noTelepon?: string | null;
+  foto?: string | null;
+  kelasId?: string | null;
+  isActive?: boolean | number | string | null;
+  lastLoginAt?: number | string | null;
+  provider?: string | null;
+  providerId?: string | null;
+  createdAt?: number | string | null;
+  updatedAt?: number | string | null;
+  deletedAt?: number | string | null;
+  hlc?: string | null;
+  syncStatus?: "synced" | "pending" | "error" | null;
+};
+
+type VerifyLocalDesktopLoginResponse = {
+  success: boolean;
+  user?: LocalDesktopAuthUserSqlRow | null;
+  error?: string | null;
+  dbPath?: string | null;
 };
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -226,15 +290,151 @@ function isDesktopOffline() {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
+function isArgon2PasswordHash(value: string | null | undefined) {
+  return typeof value === "string" && value.startsWith("$argon2");
+}
+
+function toBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "1" || normalized === "true") {
+      return true;
+    }
+    if (normalized === "0" || normalized === "false") {
+      return false;
+    }
+  }
+
+  return fallback;
+}
+
+function toInteger(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function toTimestampDate(
+  value: number | string | null | undefined,
+): Date | null | undefined {
+  if (value === null || value === undefined) {
+    return value as null | undefined;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value * 1000);
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return new Date(parsed * 1000);
+    }
+  }
+
+  return undefined;
+}
+
+function mapLocalDesktopAuthSqlRow(
+  row: LocalDesktopAuthUserSqlRow | null | undefined,
+): DesktopAuthUserRow | null {
+  if (!row?.id || !row.email || !row.role || !isSupportedRole(row.role)) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    fullName: row.fullName ?? "",
+    email: row.email,
+    role: row.role,
+    version: toInteger(row.version, 1),
+    passwordHash: row.passwordHash ?? null,
+    nip: row.nip ?? null,
+    nis: row.nis ?? null,
+    nisn: row.nisn ?? null,
+    tempatLahir: row.tempatLahir ?? null,
+    tanggalLahir: toTimestampDate(row.tanggalLahir) ?? null,
+    jenisKelamin: row.jenisKelamin ?? null,
+    alamat: row.alamat ?? null,
+    noTelepon: row.noTelepon ?? null,
+    foto: row.foto ?? null,
+    kelasId: row.kelasId ?? null,
+    isActive: toBoolean(row.isActive, true),
+    lastLoginAt: toTimestampDate(row.lastLoginAt) ?? null,
+    provider: row.provider ?? null,
+    providerId: row.providerId ?? null,
+    createdAt: toTimestampDate(row.createdAt) ?? new Date(),
+    updatedAt: toTimestampDate(row.updatedAt) ?? new Date(),
+    deletedAt: toTimestampDate(row.deletedAt) ?? null,
+    hlc: row.hlc ?? null,
+    syncStatus:
+      row.syncStatus === "pending" || row.syncStatus === "error"
+        ? row.syncStatus
+        : "synced",
+  };
+}
+
+async function queryDesktopAuthUser(
+  sqlText: string,
+  args: unknown[],
+): Promise<DesktopAuthUserRow | null> {
+  const { default: Database } = await import("@tauri-apps/plugin-sql");
+  const sqlite = await Database.load("sqlite:educore.db");
+  const rows = await sqlite.select<LocalDesktopAuthUserSqlRow[]>(sqlText, args);
+  return mapLocalDesktopAuthSqlRow(rows[0]);
+}
+
+async function verifyLocalDesktopLoginNative(
+  identifier: string,
+  password: string,
+) {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = await invoke<VerifyLocalDesktopLoginResponse>(
+      "verify_local_desktop_login",
+      {
+        request: {
+          identifier,
+          password,
+        },
+      },
+    );
+
+    if (!result.success || !result.user) {
+      if (result.dbPath) {
+        console.warn(
+          `[DESKTOP_AUTH] Native login fallback rejected credential using ${result.dbPath}: ${result.error ?? "UNKNOWN"}`,
+        );
+      }
+      return null;
+    }
+
+    return mapLocalDesktopAuthSqlRow(result.user);
+  } catch (error) {
+    console.warn("[DESKTOP_AUTH] Native login fallback failed.", error);
+    return null;
+  }
+}
+
 async function verifyDesktopPassword(password: string, hash: string) {
-  const { invoke } = await import("@tauri-apps/api/core");
-  const result = await invoke<{ success: boolean }>("verify_password", {
-    request: {
-      password,
-      stored_hash: hash,
-    },
-  });
-  return result.success;
+  return verifyPassword(password, hash);
 }
 
 async function hashDesktopPassword(password: string) {
@@ -258,111 +458,258 @@ async function hashDesktopPassword(password: string) {
   return result.hash;
 }
 
-async function getDesktopAuthUserById(userId: string) {
-  const db = await getDb();
-  const userRows = await db
-    .select({
-      id: users.id,
-      fullName: users.fullName,
-      email: users.email,
-      role: users.role,
-      version: users.version,
-      passwordHash: users.passwordHash,
-      nip: users.nip,
-      nis: users.nis,
-      nisn: users.nisn,
-      tempatLahir: users.tempatLahir,
-      tanggalLahir: users.tanggalLahir,
-      jenisKelamin: users.jenisKelamin,
-      alamat: users.alamat,
-      noTelepon: users.noTelepon,
-      foto: users.foto,
-      kelasId: users.kelasId,
-      isActive: users.isActive,
-      lastLoginAt: users.lastLoginAt,
-      provider: users.provider,
-      providerId: users.providerId,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-      deletedAt: users.deletedAt,
-      hlc: users.hlc,
-      syncStatus: users.syncStatus,
-    })
-    .from(users)
-    .where(
-      and(
-        eq(users.id, userId),
-        eq(users.isActive, true),
-        isNull(users.deletedAt),
-      ),
-    )
-    .limit(1);
-
-  const userRow = userRows[0];
-  if (!userRow || !isSupportedRole(userRow.role)) {
-    return null;
+async function verifyDesktopPasswordWithLegacyUpgrade(
+  userRow: Pick<DesktopAuthUserRow, "id" | "passwordHash"> | null,
+  password: string,
+) {
+  const storedHash = userRow?.passwordHash?.trim() ?? "";
+  if (!userRow || !storedHash) {
+    return false;
   }
 
-  return {
-    ...userRow,
-    role: userRow.role,
-  } satisfies DesktopAuthUserRow;
+  if (isArgon2PasswordHash(storedHash)) {
+    return verifyDesktopPassword(password, storedHash);
+  }
+
+  if (password !== storedHash) {
+    return false;
+  }
+
+  const nextHash = await hashDesktopPassword(password);
+  const db = await getDb();
+  await db
+    .update(users)
+    .set({
+      passwordHash: nextHash,
+      updatedAt: new Date(),
+      syncStatus: "pending",
+    })
+    .where(eq(users.id, userRow.id));
+
+  userRow.passwordHash = nextHash;
+  return true;
+}
+
+async function getDesktopAuthUserById(userId: string) {
+  return queryDesktopAuthUser(
+    `SELECT
+        id,
+        full_name AS fullName,
+        email,
+        role,
+        version,
+        password_hash AS passwordHash,
+        nip,
+        nis,
+        nisn,
+        tempat_lahir AS tempatLahir,
+        tanggal_lahir AS tanggalLahir,
+        jenis_kelamin AS jenisKelamin,
+        alamat,
+        no_telepon AS noTelepon,
+        foto,
+        kelas_id AS kelasId,
+        is_active AS isActive,
+        last_login_at AS lastLoginAt,
+        provider,
+        provider_id AS providerId,
+        created_at AS createdAt,
+        updated_at AS updatedAt,
+        deleted_at AS deletedAt,
+        hlc,
+        sync_status AS syncStatus
+      FROM users
+      WHERE id = ?
+        AND is_active = 1
+        AND deleted_at IS NULL
+      LIMIT 1`,
+    [userId],
+  );
 }
 
 async function getDesktopAuthUserByIdentifier(identifier: string) {
-  const db = await getDb();
   const emailCandidates = buildLoginEmailCandidates(identifier);
-  const userRows = await db
-    .select({
-      id: users.id,
-      fullName: users.fullName,
-      email: users.email,
-      role: users.role,
-      version: users.version,
-      passwordHash: users.passwordHash,
-      nip: users.nip,
-      nis: users.nis,
-      nisn: users.nisn,
-      tempatLahir: users.tempatLahir,
-      tanggalLahir: users.tanggalLahir,
-      jenisKelamin: users.jenisKelamin,
-      alamat: users.alamat,
-      noTelepon: users.noTelepon,
-      foto: users.foto,
-      kelasId: users.kelasId,
-      isActive: users.isActive,
-      lastLoginAt: users.lastLoginAt,
-      provider: users.provider,
-      providerId: users.providerId,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-      deletedAt: users.deletedAt,
-      hlc: users.hlc,
-      syncStatus: users.syncStatus,
-    })
-    .from(users)
-    .where(
-      and(
-        eq(users.isActive, true),
-        isNull(users.deletedAt),
-        or(
-          inArray(users.email, emailCandidates),
-          eq(users.nip, identifier),
-          eq(users.nis, identifier),
-        ),
-      ),
-    )
-    .limit(1);
+  return queryDesktopAuthUser(
+    `SELECT
+        id,
+        full_name AS fullName,
+        email,
+        role,
+        version,
+        password_hash AS passwordHash,
+        nip,
+        nis,
+        nisn,
+        tempat_lahir AS tempatLahir,
+        tanggal_lahir AS tanggalLahir,
+        jenis_kelamin AS jenisKelamin,
+        alamat,
+        no_telepon AS noTelepon,
+        foto,
+        kelas_id AS kelasId,
+        is_active AS isActive,
+        last_login_at AS lastLoginAt,
+        provider,
+        provider_id AS providerId,
+        created_at AS createdAt,
+        updated_at AS updatedAt,
+        deleted_at AS deletedAt,
+        hlc,
+        sync_status AS syncStatus
+      FROM users
+      WHERE is_active = 1
+        AND deleted_at IS NULL
+        AND (
+          lower(email) IN (${emailCandidates.map(() => "?").join(", ")})
+          OR (? NOT LIKE '%@%' AND lower(COALESCE(nip, '')) = ?)
+          OR (? NOT LIKE '%@%' AND lower(COALESCE(nis, '')) = ?)
+        )
+      LIMIT 1`,
+    [...emailCandidates, identifier, identifier, identifier, identifier],
+  );
+}
 
-  const userRow = userRows[0];
-  if (!userRow || !isSupportedRole(userRow.role)) {
+async function findRemoteDesktopAuthUser(identifier: string) {
+  const tursoCloud = await getTursoCloudClient();
+  const emailCandidates = buildLoginEmailCandidates(identifier);
+  const result = await tursoCloud.execute({
+    sql: `SELECT
+            id,
+            full_name,
+            email,
+            role,
+            version,
+            password_hash,
+            nip,
+            nis,
+            nisn,
+            tempat_lahir,
+            tanggal_lahir,
+            jenis_kelamin,
+            alamat,
+            no_telepon,
+            foto,
+            kelas_id,
+            is_active,
+            last_login_at,
+            provider,
+            provider_id,
+            created_at,
+            updated_at,
+            deleted_at,
+            hlc,
+            sync_status
+          FROM users
+          WHERE (
+            lower(email) IN (${emailCandidates.map(() => "?").join(", ")})
+            OR (? NOT LIKE '%@%' AND lower(COALESCE(nip, '')) = ?)
+            OR (? NOT LIKE '%@%' AND lower(COALESCE(nis, '')) = ?)
+          )
+            AND deleted_at IS NULL
+            AND is_active = 1
+          LIMIT 1`,
+    args: [...emailCandidates, identifier, identifier, identifier, identifier],
+  });
+
+  const row = result.rows[0] as unknown as RemoteDesktopAuthUserRow | undefined;
+  if (!row || !isSupportedRole(row.role)) {
     return null;
   }
 
-  return {
-    ...userRow,
-    role: userRow.role,
-  } satisfies DesktopAuthUserRow;
+  return row;
+}
+
+async function forceRepairDesktopAuthUserFromCloud(identifier: string) {
+  const remoteUser = await findRemoteDesktopAuthUser(identifier);
+  if (!remoteUser) {
+    return false;
+  }
+
+  const db = await getDb();
+  const existingByEmail = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, remoteUser.email))
+    .limit(1);
+
+  const staleLocalUserId = existingByEmail[0]?.id;
+  if (staleLocalUserId && staleLocalUserId !== remoteUser.id) {
+    await db.delete(users).where(eq(users.id, staleLocalUserId));
+  }
+
+  await db
+    .insert(users)
+    .values({
+      id: remoteUser.id,
+      fullName: remoteUser.full_name,
+      email: remoteUser.email,
+      role: remoteUser.role as AuthRole,
+      passwordHash: remoteUser.password_hash,
+      nip: remoteUser.nip,
+      nis: remoteUser.nis,
+      nisn: remoteUser.nisn,
+      tempatLahir: remoteUser.tempat_lahir,
+      tanggalLahir: toTimestampDate(remoteUser.tanggal_lahir),
+      jenisKelamin: remoteUser.jenis_kelamin,
+      alamat: remoteUser.alamat,
+      noTelepon: remoteUser.no_telepon,
+      foto: remoteUser.foto,
+      kelasId: remoteUser.kelas_id,
+      isActive:
+        remoteUser.is_active === null
+          ? true
+          : Boolean(Number(remoteUser.is_active)),
+      lastLoginAt: toTimestampDate(remoteUser.last_login_at),
+      provider: remoteUser.provider,
+      providerId: remoteUser.provider_id,
+      createdAt: toTimestampDate(remoteUser.created_at) ?? new Date(),
+      updatedAt: toTimestampDate(remoteUser.updated_at) ?? new Date(),
+      deletedAt: toTimestampDate(remoteUser.deleted_at) ?? null,
+      hlc: remoteUser.hlc,
+      version:
+        typeof remoteUser.version === "number"
+          ? remoteUser.version
+          : Number.parseInt(String(remoteUser.version ?? "1"), 10) || 1,
+      syncStatus: remoteUser.sync_status ?? "synced",
+    })
+    .onConflictDoUpdate({
+      target: users.id,
+      set: {
+        fullName: remoteUser.full_name,
+        email: remoteUser.email,
+        role: remoteUser.role as AuthRole,
+        passwordHash: remoteUser.password_hash,
+        nip: remoteUser.nip,
+        nis: remoteUser.nis,
+        nisn: remoteUser.nisn,
+        tempatLahir: remoteUser.tempat_lahir,
+        tanggalLahir: toTimestampDate(remoteUser.tanggal_lahir) ?? null,
+        jenisKelamin: remoteUser.jenis_kelamin,
+        alamat: remoteUser.alamat,
+        noTelepon: remoteUser.no_telepon,
+        foto: remoteUser.foto,
+        kelasId: remoteUser.kelas_id,
+        isActive:
+          remoteUser.is_active === null
+            ? true
+            : Boolean(Number(remoteUser.is_active)),
+        lastLoginAt: toTimestampDate(remoteUser.last_login_at) ?? null,
+        provider: remoteUser.provider,
+        providerId: remoteUser.provider_id,
+        createdAt: toTimestampDate(remoteUser.created_at) ?? new Date(),
+        updatedAt: toTimestampDate(remoteUser.updated_at) ?? new Date(),
+        deletedAt: toTimestampDate(remoteUser.deleted_at) ?? null,
+        hlc: remoteUser.hlc,
+        version:
+          typeof remoteUser.version === "number"
+            ? remoteUser.version
+            : Number.parseInt(String(remoteUser.version ?? "1"), 10) || 1,
+        syncStatus: remoteUser.sync_status ?? "synced",
+      },
+    });
+
+  await syncUsersToStudentsProjection();
+  return true;
 }
 
 async function runDesktopAuthRepairSync(reason: string) {
@@ -457,39 +804,89 @@ async function handleDesktopLogin(body: unknown) {
     );
   }
 
-  const db = await getDb();
   let userRow = await getDesktopAuthUserByIdentifier(identifier);
-  let isValidPassword = Boolean(
-    userRow?.passwordHash &&
-      (await verifyDesktopPassword(password, userRow.passwordHash)),
+  let isValidPassword = await verifyDesktopPasswordWithLegacyUpgrade(
+    userRow,
+    password,
   );
 
+  let repairMessage: string | null = null;
+
   if (!userRow || !isValidPassword) {
-    const repairResult = await runDesktopAuthRepairSync("credential repair");
-    if (repairResult.repaired) {
-      userRow = await getDesktopAuthUserByIdentifier(identifier);
-      isValidPassword = Boolean(
-        userRow?.passwordHash &&
-          (await verifyDesktopPassword(password, userRow.passwordHash)),
-      );
+    const nativeFallbackUser = await verifyLocalDesktopLoginNative(
+      identifier,
+      password,
+    );
+
+    if (nativeFallbackUser) {
+      userRow = nativeFallbackUser;
+      isValidPassword = true;
     }
   }
 
   if (!userRow || !isValidPassword) {
+    const repairResult = await runDesktopAuthRepairSync("credential repair");
+    repairMessage = repairResult.message;
+
+    if (repairResult.repaired) {
+      userRow = await getDesktopAuthUserByIdentifier(identifier);
+      isValidPassword = await verifyDesktopPasswordWithLegacyUpgrade(
+        userRow,
+        password,
+      );
+    }
+
+    if (!isValidPassword) {
+      try {
+        const forceRepaired =
+          await forceRepairDesktopAuthUserFromCloud(identifier);
+        if (forceRepaired) {
+          userRow = await getDesktopAuthUserByIdentifier(identifier);
+          isValidPassword = await verifyDesktopPasswordWithLegacyUpgrade(
+            userRow,
+            password,
+          );
+        }
+      } catch (error) {
+        repairMessage =
+          error instanceof Error
+            ? error.message
+            : "AUTH_USER_FORCE_REPAIR_FAILED";
+      }
+    }
+  }
+
+  if (!userRow || !isValidPassword) {
+    if (repairMessage && repairMessage !== "OFFLINE_DESKTOP_LOCAL_ONLY") {
+      return apiError(
+        "Akun desktop belum sinkron dari cloud. Pastikan koneksi internet aktif lalu coba lagi.",
+        503,
+        "DESKTOP_AUTH_SYNC_REQUIRED",
+      );
+    }
+
     return apiError("Email atau password salah", 401, "INVALID_CREDENTIALS");
   }
 
   resetDesktopRateLimit(identifier);
 
   const now = new Date();
-  await db
-    .update(users)
-    .set({
-      lastLoginAt: now,
-      updatedAt: now,
-      syncStatus: "pending",
-    })
-    .where(eq(users.id, userRow.id));
+  try {
+    const db = await getDb();
+    await db
+      .update(users)
+      .set({
+        lastLoginAt: now,
+        updatedAt: now,
+        syncStatus: "pending",
+      })
+      .where(eq(users.id, userRow.id));
+  } catch (error) {
+    console.warn(
+      "[DESKTOP_AUTH] Login succeeded but failed to persist last_login_at.",
+      error,
+    );
+  }
 
   const sessionUser = buildDesktopSession({
     ...userRow,
@@ -563,9 +960,9 @@ async function handleDesktopChangePassword(body: unknown) {
     return apiError("Akun tidak ditemukan", 404, "USER_NOT_FOUND");
   }
 
-  let isCurrentValid = await verifyDesktopPassword(
+  let isCurrentValid = await verifyDesktopPasswordWithLegacyUpgrade(
+    userRow,
     currentPassword,
-    userRow.passwordHash,
   );
 
   if (!isCurrentValid) {
@@ -590,9 +987,9 @@ async function handleDesktopChangePassword(body: unknown) {
         .limit(1);
 
       userRow = repairedRows[0];
-      isCurrentValid = Boolean(
-        userRow?.passwordHash &&
-          (await verifyDesktopPassword(currentPassword, userRow.passwordHash)),
+      isCurrentValid = await verifyDesktopPasswordWithLegacyUpgrade(
+        userRow,
+        currentPassword,
       );
     }
   }

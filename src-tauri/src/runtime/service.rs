@@ -8,13 +8,21 @@ use std::{
     time::Duration,
 };
 
+use rand::{distributions::Alphanumeric, Rng};
 use tauri::{AppHandle, Manager, Runtime, State, Url};
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 const DEFAULT_LOOPBACK_HOST: &str = "127.0.0.1";
 const DEFAULT_PREFERRED_PORT: u16 = 3210;
 const BOOTSTRAP_WINDOW_LABEL: &str = "main";
 const STARTUP_MAX_ATTEMPTS: usize = 40;
 const STARTUP_SLEEP_MS: u64 = 500;
+const DESKTOP_LOOPBACK_QUERY_TOKEN: &str = "educore_desktop_token";
+const DESKTOP_LOOPBACK_ENV_TOKEN: &str = "EDUCORE_DESKTOP_LOOPBACK_TOKEN";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct DesktopRuntimeBootstrapConfig {
@@ -67,6 +75,7 @@ pub struct DesktopRuntimeManagerState {
 struct DesktopRuntimeManager {
     child: Option<Child>,
     active_port: Option<u16>,
+    desktop_session_token: Option<String>,
     last_error: Option<String>,
 }
 
@@ -85,8 +94,35 @@ fn build_base_url(config: &DesktopRuntimeBootstrapConfig) -> String {
     format!("http://{}:{}", config.loopback_host, config.preferred_port)
 }
 
+fn build_window_entry_url(
+    config: &DesktopRuntimeBootstrapConfig,
+    state: &DesktopRuntimeManagerState,
+) -> String {
+    let base_url = build_base_url(config);
+    let desktop_session_token = state
+        .inner
+        .lock()
+        .ok()
+        .and_then(|manager| manager.desktop_session_token.clone());
+
+    match desktop_session_token {
+        Some(token) if !token.trim().is_empty() => {
+            format!("{base_url}/?{DESKTOP_LOOPBACK_QUERY_TOKEN}={token}")
+        }
+        _ => base_url,
+    }
+}
+
 fn build_health_url(config: &DesktopRuntimeBootstrapConfig) -> String {
     format!("{}{}", build_base_url(config), config.health_path)
+}
+
+fn generate_desktop_session_token() -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(48)
+        .map(char::from)
+        .collect()
 }
 
 fn desktop_runtime_resource_dir<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -325,6 +361,7 @@ fn spawn_embedded_runtime<R: Runtime>(
     let bundle_config = load_embedded_runtime_bundle_config(app_handle)?;
     let (node_path, app_dir, server_path) = resolve_runtime_paths(app_handle, &bundle_config)?;
     let selected_port = select_loopback_port(&config.loopback_host, bundle_config.port)?;
+    let desktop_session_token = generate_desktop_session_token();
 
     let mut command = Command::new(&node_path);
     command.arg(&server_path);
@@ -332,6 +369,8 @@ fn spawn_embedded_runtime<R: Runtime>(
     command.stdin(Stdio::null());
     command.stdout(Stdio::null());
     command.stderr(Stdio::null());
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
 
     for (key, value) in &bundle_config.env {
         command.env(key, value);
@@ -347,6 +386,7 @@ fn spawn_embedded_runtime<R: Runtime>(
         "NEXTAUTH_URL",
         format!("http://{}:{}", config.loopback_host, selected_port),
     );
+    command.env(DESKTOP_LOOPBACK_ENV_TOKEN, &desktop_session_token);
 
     let child = command.spawn().map_err(|error| {
         format!(
@@ -364,6 +404,7 @@ fn spawn_embedded_runtime<R: Runtime>(
     }
     manager.child = Some(child);
     manager.active_port = Some(selected_port);
+    manager.desktop_session_token = Some(desktop_session_token);
     manager.last_error = None;
 
     Ok(format!(
@@ -383,6 +424,7 @@ fn stop_embedded_runtime_internal(state: &DesktopRuntimeManagerState) -> Result<
     }
 
     manager.active_port = None;
+    manager.desktop_session_token = None;
     manager.last_error = None;
     Ok(())
 }
@@ -391,6 +433,7 @@ fn mark_runtime_error(state: &DesktopRuntimeManagerState, message: String) {
     if let Ok(mut manager) = state.inner.lock() {
         manager.last_error = Some(message);
         manager.active_port = None;
+        manager.desktop_session_token = None;
         manager.child = None;
     }
 }
@@ -412,6 +455,7 @@ fn check_child_exited(state: &DesktopRuntimeManagerState) -> Result<Option<Strin
     if let Some(status) = maybe_status {
         manager.child = None;
         manager.active_port = None;
+        manager.desktop_session_token = None;
         let message = format!("Embedded runtime berhenti lebih awal dengan status {status}.");
         manager.last_error = Some(message.clone());
         return Ok(Some(message));
@@ -610,7 +654,7 @@ pub fn setup_desktop_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Result<()
         return Err(result.message);
     }
 
-    let runtime_url = build_base_url(&result.config);
+    let runtime_url = build_window_entry_url(&result.config, &state);
     let parsed = Url::parse(&runtime_url)
         .map_err(|error| format!("URL runtime desktop tidak valid: {error}"))?;
 

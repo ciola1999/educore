@@ -5,6 +5,13 @@ import {
   isAllowedDashboardPath,
 } from "@/lib/auth/dashboard-access";
 import { auth } from "@/lib/auth/web/auth";
+import {
+  DESKTOP_LOOPBACK_ENV_TOKEN,
+  DESKTOP_LOOPBACK_QUERY_TOKEN,
+  DESKTOP_LOOPBACK_SESSION_COOKIE,
+  hasDesktopLoopbackSessionToken,
+  isLoopbackHostname,
+} from "@/lib/runtime/desktop-loopback-request";
 
 function toAuthRole(role: unknown): AuthRole | null {
   if (typeof role !== "string") {
@@ -20,6 +27,41 @@ export default auth((request) => {
   const currentRole = toAuthRole(
     (session?.user as { role?: AuthRole } | undefined)?.role,
   );
+  const loopbackHost = isLoopbackHostname(request.headers.get("host"));
+  const expectedDesktopToken =
+    process.env[DESKTOP_LOOPBACK_ENV_TOKEN]?.trim() ?? "";
+  const desktopLoopbackToken = loopbackHost
+    ? nextUrl.searchParams.get(DESKTOP_LOOPBACK_QUERY_TOKEN)
+    : null;
+  const hasDesktopLoopbackSession = loopbackHost
+    ? hasDesktopLoopbackSessionToken({
+        cookieValue: request.cookies.get(DESKTOP_LOOPBACK_SESSION_COOKIE)
+          ?.value,
+        queryValue: desktopLoopbackToken,
+        expectedToken: expectedDesktopToken,
+      })
+    : false;
+
+  if (loopbackHost && desktopLoopbackToken && hasDesktopLoopbackSession) {
+    const sanitizedUrl = nextUrl.clone();
+    sanitizedUrl.searchParams.delete(DESKTOP_LOOPBACK_QUERY_TOKEN);
+    const response = NextResponse.redirect(sanitizedUrl);
+    response.cookies.set(
+      DESKTOP_LOOPBACK_SESSION_COOKIE,
+      expectedDesktopToken,
+      {
+        httpOnly: true,
+        sameSite: "strict",
+        secure: false,
+        path: "/",
+      },
+    );
+    return response;
+  }
+
+  if (loopbackHost && hasDesktopLoopbackSession) {
+    return NextResponse.next();
+  }
 
   if (pathname === "/") {
     if (!currentRole) {

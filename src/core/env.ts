@@ -25,7 +25,14 @@ export const isTauri = (): boolean => {
     typeof window.location !== "undefined" &&
     window.location.protocol === "tauri:";
 
-  return hasTauriInternals || hasTauriGlobal || isTauriProtocol;
+  const hasTauriUserAgent =
+    typeof navigator !== "undefined" &&
+    typeof navigator.userAgent === "string" &&
+    navigator.userAgent.includes("Tauri");
+
+  return (
+    hasTauriInternals || hasTauriGlobal || isTauriProtocol || hasTauriUserAgent
+  );
 };
 
 export const isWeb = (): boolean => {

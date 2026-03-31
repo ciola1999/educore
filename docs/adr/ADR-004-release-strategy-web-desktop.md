@@ -26,6 +26,12 @@ Strategi release dipisah:
 - hanya dibuka jika flow inti desktop sudah local-runtime-safe
 - tidak boleh mengandalkan route web untuk fitur inti
 - harus lolos build gate khusus desktop
+- signoff channel release dilakukan per-installer, bukan otomatis untuk semua bundler
+
+### Windows installer policy
+- channel yang disignoff saat ini: `MSI`
+- channel `NSIS` tidak otomatis ikut dianggap siap hanya karena `MSI` sehat
+- `NSIS` harus punya build + install + smoke gate sendiri sebelum boleh disebut supported
 
 ## Fail-Secure Policy
 
@@ -60,10 +66,18 @@ bun tauri build
 - user tidak menerima installer desktop yang misleading
 - kualitas release lebih dapat dipertanggungjawabkan
 - web tetap bisa bergerak lebih cepat
+- MSI bisa dirilis lebih cepat tanpa menunggu semua bundler Windows matang bersamaan
 
 ### Negative
 - readiness web dan desktop bisa berbeda
 - team harus disiplin membedakan status “web-ready” dan “desktop-release-ready”
+- readiness antar bundler desktop juga bisa berbeda
+
+## Security Consequence
+
+- installer desktop production adalah controlled artifact
+- secret runtime packaged harus diminimalkan dan tidak boleh diperlakukan seperti env web biasa
+- arah jangka menengah adalah first-run provisioning + keyring-only credential, bukan permanent secret di bundle
 
 ## Follow-up
 

@@ -14,6 +14,124 @@ import { type UserSession, useStore } from "@/lib/store/use-store";
 
 type SessionRole = UserSession["role"];
 type AuthSource = "next-auth" | "desktop-store" | "none";
+type DesktopNativeLoginUser = {
+  id?: string | null;
+  fullName?: string | null;
+  email?: string | null;
+  role?: string | null;
+  version?: number | null;
+  hlc?: string | null;
+  createdAt?: number | string | null;
+  updatedAt?: number | string | null;
+  deletedAt?: number | string | null;
+  syncStatus?: UserSession["syncStatus"] | null;
+  nip?: string | null;
+  nis?: string | null;
+  nisn?: string | null;
+  tempatLahir?: string | null;
+  tanggalLahir?: number | string | null;
+  jenisKelamin?: UserSession["jenisKelamin"] | null;
+  alamat?: string | null;
+  noTelepon?: string | null;
+  foto?: string | null;
+  kelasId?: string | null;
+  isActive?: boolean | number | string | null;
+  lastLoginAt?: number | string | null;
+  provider?: string | null;
+  providerId?: string | null;
+};
+
+type DesktopNativeLoginResponse = {
+  success: boolean;
+  user?: DesktopNativeLoginUser | null;
+  error?: string | null;
+  dbPath?: string | null;
+};
+
+const DESKTOP_NATIVE_LOGIN_TIMEOUT_MS = 5_000;
+const DESKTOP_LOGIN_FALLBACK_TIMEOUT_MS = 15_000;
+
+function toDesktopDate(value: number | string | null | undefined) {
+  if (value === null || value === undefined) {
+    return value ?? null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value * 1000);
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return new Date(parsed * 1000);
+    }
+  }
+
+  return null;
+}
+
+function toDesktopBoolean(
+  value: boolean | number | string | null | undefined,
+  fallback: boolean,
+) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "1" || normalized === "true") {
+      return true;
+    }
+    if (normalized === "0" || normalized === "false") {
+      return false;
+    }
+  }
+
+  return fallback;
+}
+
+function buildDesktopNativeSession(
+  user: DesktopNativeLoginUser | null | undefined,
+): UserSession | null {
+  if (!user?.id || !user.email || !user.role) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    fullName: user.fullName ?? "",
+    email: user.email,
+    role: user.role as SessionRole,
+    version: user.version ?? 1,
+    hlc: user.hlc ?? null,
+    createdAt: toDesktopDate(user.createdAt) ?? new Date(),
+    updatedAt: toDesktopDate(user.updatedAt) ?? new Date(),
+    deletedAt: toDesktopDate(user.deletedAt),
+    syncStatus:
+      user.syncStatus === "pending" || user.syncStatus === "error"
+        ? user.syncStatus
+        : "synced",
+    nip: user.nip ?? null,
+    nis: user.nis ?? null,
+    nisn: user.nisn ?? null,
+    tempatLahir: user.tempatLahir ?? null,
+    tanggalLahir: toDesktopDate(user.tanggalLahir),
+    jenisKelamin: user.jenisKelamin ?? null,
+    alamat: user.alamat ?? null,
+    noTelepon: user.noTelepon ?? null,
+    foto: user.foto ?? null,
+    kelasId: user.kelasId ?? null,
+    isActive: toDesktopBoolean(user.isActive, true),
+    lastLoginAt: toDesktopDate(user.lastLoginAt),
+    provider: user.provider ?? null,
+    providerId: user.providerId ?? null,
+  };
+}
 
 function buildUserSession(
   sessionUser: NonNullable<Session["user"]>,
@@ -51,6 +169,42 @@ function buildUserSession(
     provider: null,
     providerId: null,
   };
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage: string,
+) {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
+function getDesktopLoginErrorMessage(errorCode?: string | null) {
+  switch (errorCode) {
+    case "INVALID_CREDENTIALS":
+      return "Email atau password salah";
+    case "USER_NOT_FOUND":
+      return "Akun desktop belum tersedia di perangkat ini.";
+    case "PASSWORD_HASH_MISSING":
+      return "Akun desktop belum siap dipakai. Jalankan sinkronisasi lalu coba lagi.";
+    default:
+      return "Login desktop gagal diproses.";
+  }
 }
 
 /**
@@ -128,11 +282,69 @@ export function useAuth() {
     const identifier = email.trim();
 
     if (desktopRuntime) {
+      let shouldFallbackToDesktopApi = true;
+
       try {
-        await apiPost<{ user: UserSession }>("/api/auth/login", {
-          email: identifier,
-          password,
-        });
+        const { invoke } = await import("@tauri-apps/api/core");
+        const nativeResult = await withTimeout(
+          invoke<DesktopNativeLoginResponse>("verify_local_desktop_login", {
+            request: {
+              identifier,
+              password,
+            },
+          }),
+          DESKTOP_NATIVE_LOGIN_TIMEOUT_MS,
+          "Native desktop login timeout",
+        );
+
+        if (nativeResult.success && nativeResult.user) {
+          const nativeUser = buildDesktopNativeSession(nativeResult.user);
+          if (nativeUser) {
+            setUser(nativeUser);
+            clearForcedLogoutMarker();
+            return { success: true as const };
+          }
+        }
+
+        if (nativeResult.error === "INVALID_CREDENTIALS") {
+          return {
+            success: false as const,
+            error: getDesktopLoginErrorMessage(nativeResult.error),
+          };
+        }
+
+        if (nativeResult.error) {
+          shouldFallbackToDesktopApi =
+            nativeResult.error === "USER_NOT_FOUND" ||
+            nativeResult.error === "PASSWORD_HASH_MISSING";
+
+          if (!shouldFallbackToDesktopApi) {
+            return {
+              success: false as const,
+              error: getDesktopLoginErrorMessage(nativeResult.error),
+            };
+          }
+        }
+      } catch (error) {
+        console.warn("[AUTH] Native desktop login path failed.", error);
+      }
+
+      if (!shouldFallbackToDesktopApi) {
+        return {
+          success: false as const,
+          error: "Login desktop gagal diproses.",
+        };
+      }
+
+      try {
+        await withTimeout(
+          apiPost<{ user: UserSession }>("/api/auth/login", {
+            email: identifier,
+            password,
+          }),
+          DESKTOP_LOGIN_FALLBACK_TIMEOUT_MS,
+          "Desktop login repair timeout",
+        );
         clearForcedLogoutMarker();
         return { success: true as const };
       } catch (error) {
@@ -188,9 +400,19 @@ export function useAuth() {
     setForcedLogoutMarker();
     clearUser();
 
-    if (!desktopRuntime) {
-      await signOut({ redirect: true, redirectTo: "/" });
+    if (desktopRuntime) {
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch (error) {
+        console.warn("[AUTH] Desktop logout cleanup failed.", error);
+      }
+      return;
     }
+
+    await signOut({ redirect: true, redirectTo: "/" });
   }
 
   async function refreshSession() {

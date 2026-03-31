@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 
 function getNodeMajorVersion(): number {
   const [major] = process.versions.node.split(".");
@@ -70,7 +70,10 @@ function run() {
     "bin",
     "next",
   );
-  const result = spawnSync(process.execPath, [nextBin, "build"], {
+  const runtimeBinary = basename(process.execPath).toLowerCase().includes("bun")
+    ? "node"
+    : process.execPath;
+  const result = spawnSync(runtimeBinary, [nextBin, "build"], {
     stdio: "inherit",
     env,
   });

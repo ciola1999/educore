@@ -182,9 +182,38 @@ export async function verifyPassword(
         },
       );
 
-      return result.success;
+      if (result.success) {
+        return true;
+      }
+
+      if (hash.startsWith("$argon2")) {
+        try {
+          return await verifyPasswordWithHashWasm(password, hash);
+        } catch (fallbackError) {
+          console.error(
+            "Password verification fallback error after native false result:",
+            fallbackError,
+          );
+          return false;
+        }
+      }
+
+      return false;
     } catch (e) {
       console.error("Password verification error:", e);
+
+      if (hash.startsWith("$argon2")) {
+        try {
+          return await verifyPasswordWithHashWasm(password, hash);
+        } catch (fallbackError) {
+          console.error(
+            "Password verification fallback error after native exception:",
+            fallbackError,
+          );
+          return false;
+        }
+      }
+
       return false;
     }
   }

@@ -2,8 +2,8 @@ mod auth;
 mod runtime;
 
 use crate::auth::service::{
-    authenticate_with_biometric, get_sync_config, login, set_password, set_sync_config,
-    verify_password,
+    authenticate_with_biometric, get_sync_config, set_password, set_sync_config,
+    verify_local_desktop_login, verify_password,
 };
 use crate::runtime::service::{
     ensure_runtime_bootstrap_ready, get_runtime_bootstrap_config, probe_runtime_bootstrap_health,
@@ -18,10 +18,10 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::new().build())
         .manage(DesktopRuntimeManagerState::default())
         .invoke_handler(tauri::generate_handler![
-            login,
             authenticate_with_biometric,
             set_password,
             verify_password,
+            verify_local_desktop_login,
             get_sync_config,
             set_sync_config,
             get_runtime_bootstrap_config,
