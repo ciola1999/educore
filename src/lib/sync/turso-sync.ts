@@ -206,7 +206,15 @@ export function generateUpsertSql(
 }
 
 const SYNC_TABLES: SyncTableConfig[] = [
-  { name: "users", table: users, conflictKey: "email", logicalKey: "email" },
+  {
+    name: "users",
+    table: users,
+    conflictKey: "email",
+    logicalKey: "email",
+    foreignKeyRemaps: {
+      kelasId: "classes",
+    },
+  },
   { name: "roles", table: roles, conflictKey: "id", logicalKey: "name" },
   {
     name: "permissions",
@@ -248,7 +256,12 @@ const SYNC_TABLES: SyncTableConfig[] = [
     },
   },
   { name: "subjects", table: subjects, conflictKey: "id", logicalKey: "code" },
-  { name: "classes", table: classes, conflictKey: "id" },
+  {
+    name: "classes",
+    table: classes,
+    conflictKey: "id",
+    logicalKey: ["name", "academicYear"],
+  },
   {
     name: "guru_mapel",
     table: guruMapel,
@@ -349,6 +362,15 @@ export async function pushToCloud(
             deps.tables?.includes(tableConfig.name),
           )
         : SYNC_TABLES;
+    const shouldRunStudentProjection =
+      targetTables.length === SYNC_TABLES.length ||
+      targetTables.some((tableConfig) =>
+        ["users", "classes", "students"].includes(tableConfig.name),
+      );
+
+    if (shouldRunStudentProjection) {
+      await syncUsersToStudentsProjection();
+    }
     const remoteIdRemaps = new Map<string, Map<string, string>>();
     let uploadedCount = 0;
 
@@ -421,6 +443,44 @@ export async function pushToCloud(
       const remoteId = result.rows?.[0]?.id;
 
       return typeof remoteId === "string" && remoteId.trim() ? remoteId : null;
+    };
+
+    const findRemoteRecordIdByFallbackIdentity = async (
+      tableConfig: SyncTableConfig,
+      record: SnakeRecord,
+    ): Promise<string | null> => {
+      if (tableConfig.name !== "guru_mapel") {
+        return null;
+      }
+
+      const guruId = record.guruId;
+      const mataPelajaranId = record.mataPelajaranId;
+      const semesterId = record.semesterId;
+
+      if (
+        typeof guruId !== "string" ||
+        !guruId.trim() ||
+        typeof mataPelajaranId !== "string" ||
+        !mataPelajaranId.trim() ||
+        typeof semesterId !== "string" ||
+        !semesterId.trim()
+      ) {
+        return null;
+      }
+
+      const result = await tursoCloud.execute({
+        sql: 'SELECT id FROM "guru_mapel" WHERE "guru_id" = ? AND "mata_pelajaran_id" = ? AND "semester_id" = ? AND "deleted_at" IS NULL LIMIT 2',
+        args: [guruId, mataPelajaranId, semesterId],
+      });
+
+      const candidateIds = (result.rows ?? [])
+        .map((row) => row.id)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        );
+
+      return candidateIds.length === 1 ? candidateIds[0] : null;
     };
 
     const remapPushRecordForeignKeys = async (
@@ -498,13 +558,22 @@ export async function pushToCloud(
             tableConfig,
             remappedItem,
           );
-          if (remoteRecordId && remoteRecordId !== remappedItem.id) {
+          const fallbackRemoteRecordId =
+            remoteRecordId ||
+            (await findRemoteRecordIdByFallbackIdentity(
+              tableConfig,
+              remappedItem,
+            ));
+          if (
+            fallbackRemoteRecordId &&
+            fallbackRemoteRecordId !== remappedItem.id
+          ) {
             rememberRemoteIdRemap(
               tableConfig.name,
               remappedItem.id,
-              remoteRecordId,
+              fallbackRemoteRecordId,
             );
-            remappedItem.id = remoteRecordId;
+            remappedItem.id = fallbackRemoteRecordId;
           }
 
           const snakeItem = camelToSnake(remappedItem);

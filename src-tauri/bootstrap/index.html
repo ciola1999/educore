@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>EduCore Desktop Bootstrap</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1e8;
+        --panel: rgba(255, 255, 255, 0.92);
+        --panel-border: rgba(116, 89, 55, 0.12);
+        --text: #201910;
+        --muted: #6e5a45;
+        --accent: #9b5a2e;
+        --accent-soft: rgba(155, 90, 46, 0.14);
+        --danger: #b23527;
+        --danger-soft: rgba(178, 53, 39, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 48%),
+          linear-gradient(135deg, #efe4d2 0%, #f8f5ef 42%, #f0e5d8 100%);
+        display: grid;
+        place-items: center;
+      }
+
+      .shell {
+        width: min(560px, calc(100vw - 32px));
+        padding: 32px;
+        border-radius: 24px;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        box-shadow: 0 24px 80px rgba(32, 25, 16, 0.12);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 18px 0 10px;
+        font-size: 30px;
+        line-height: 1.08;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .status {
+        margin-top: 22px;
+        padding: 18px 18px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(116, 89, 55, 0.1);
+      }
+
+      .status[data-state="error"] {
+        background: rgba(255, 248, 247, 0.96);
+        border-color: rgba(178, 53, 39, 0.18);
+      }
+
+      .status-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 8px var(--accent-soft);
+        animation: pulse 1.5s infinite;
+      }
+
+      .status[data-state="error"] .dot {
+        background: var(--danger);
+        box-shadow: 0 0 0 8px var(--danger-soft);
+        animation: none;
+      }
+
+      .details {
+        margin-top: 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 14px;
+      }
+
+      .hint {
+        margin-top: 18px;
+        font-size: 13px;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(0.92);
+          opacity: 0.7;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <span class="eyebrow">Desktop Startup</span>
+      <h1>EduCore sedang menyiapkan runtime lokal.</h1>
+      <p>
+        Window utama baru dibuka setelah embedded app server sehat agar desktop
+        production tidak jatuh ke blank screen atau static export palsu.
+      </p>
+
+      <section class="status" id="status" data-state="loading">
+        <div class="status-label">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="title">Memulai bootstrap runtime...</span>
+        </div>
+        <p class="details" id="detail">
+          Menunggu startup manager native menyelesaikan health check loopback.
+        </p>
+      </section>
+
+      <p class="hint">
+        Jika startup berhenti lama, cek log desktop dan pastikan paket runtime
+        desktop terbangun lengkap.
+      </p>
+    </main>
+
+    <script>
+      const titleNode = document.getElementById("title");
+      const detailNode = document.getElementById("detail");
+      const statusNode = document.getElementById("status");
+
+      window.__EDUCORE_BOOTSTRAP__ = {
+        setState(payload) {
+          const state = payload && payload.state === "error" ? "error" : "loading";
+          statusNode.dataset.state = state;
+          titleNode.textContent = payload?.title || "Memulai bootstrap runtime...";
+          detailNode.textContent =
+            payload?.detail ||
+            "Menunggu startup manager native menyelesaikan health check loopback.";
+        },
+      };
+    </script>
+  </body>
+</html>

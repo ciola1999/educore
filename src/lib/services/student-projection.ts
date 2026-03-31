@@ -194,6 +194,38 @@ export async function syncUsersToStudentsProjection(): Promise<{
     classCreated++;
   }
 
+  // 2b. Repair standalone student grade references that still store class UUIDs.
+  for (const student of existingStudents) {
+    const rawGrade = student.grade?.trim();
+    if (!rawGrade || !isUuidLikeClassValue(rawGrade)) {
+      continue;
+    }
+
+    const resolvedGrade = sanitizeClassDisplayName(classById.get(rawGrade));
+    if (resolvedGrade === "UNASSIGNED" || resolvedGrade === rawGrade) {
+      continue;
+    }
+
+    await db
+      .update(students)
+      .set({
+        grade: resolvedGrade,
+        updatedAt: now,
+        syncStatus: "pending",
+      })
+      .where(eq(students.id, student.id));
+
+    const repairedRecord = {
+      ...student,
+      grade: resolvedGrade,
+      updatedAt: now,
+      syncStatus: "pending" as const,
+    };
+    studentMap.set(student.nis, repairedRecord);
+    studentMapById.set(student.id, repairedRecord);
+    studentUpserted++;
+  }
+
   // 3. Student upsert optimization
   for (const entry of uniqueUsersByNis.values()) {
     const { user, className } = entry;

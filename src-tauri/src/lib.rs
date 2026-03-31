@@ -6,16 +6,17 @@ use crate::auth::service::{
     verify_password,
 };
 use crate::runtime::service::{
-    get_runtime_bootstrap_config, probe_runtime_bootstrap_health,
+    ensure_runtime_bootstrap_ready, get_runtime_bootstrap_config, probe_runtime_bootstrap_health,
+    setup_desktop_runtime, shutdown_desktop_runtime, DesktopRuntimeManagerState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
-
+        .manage(DesktopRuntimeManagerState::default())
         .invoke_handler(tauri::generate_handler![
             login,
             authenticate_with_biometric,
@@ -24,18 +25,32 @@ pub fn run() {
             get_sync_config,
             set_sync_config,
             get_runtime_bootstrap_config,
-            probe_runtime_bootstrap_health
+            probe_runtime_bootstrap_health,
+            ensure_runtime_bootstrap_ready
         ])
         .setup(|app| {
-                if cfg!(debug_assertions) {
-                    app.handle().plugin(
-                        tauri_plugin_log::Builder::default()
-                            .level(log::LevelFilter::Info)
-                            .build(),
-                    )?;
-                }
-                Ok(())
-            })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+
+            setup_desktop_runtime(&app.handle())
+                .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if matches!(
+            event,
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+        ) {
+            let _ = shutdown_desktop_runtime(&app_handle);
+        }
+    });
 }

@@ -235,6 +235,49 @@ function getAcademicYearLabel(): string {
   return `${year}/${year + 1}`;
 }
 
+async function ensureClassReference(
+  db: Awaited<ReturnType<typeof getDb>>,
+  grade: string | null | undefined,
+  now: Date,
+) {
+  const normalizedGrade = sanitizeClassDisplayName(grade);
+  if (normalizedGrade === "UNASSIGNED") {
+    return {
+      normalizedGrade,
+      kelasId: null as string | null,
+    };
+  }
+
+  const existingClass = await db
+    .select({ id: classes.id })
+    .from(classes)
+    .where(and(eq(classes.name, normalizedGrade), isNull(classes.deletedAt)))
+    .limit(1);
+
+  if (existingClass[0]?.id) {
+    return {
+      normalizedGrade,
+      kelasId: existingClass[0].id,
+    };
+  }
+
+  const kelasId = crypto.randomUUID();
+  await db.insert(classes).values({
+    id: kelasId,
+    name: normalizedGrade,
+    academicYear: getAcademicYearLabel(),
+    isActive: true,
+    syncStatus: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    normalizedGrade,
+    kelasId,
+  };
+}
+
 async function resolveStudentGrades<T extends StudentRowWithAccountClass>(
   db: Awaited<ReturnType<typeof getDb>>,
   rows: T[],
@@ -503,8 +546,12 @@ export async function POST(request: Request) {
   const normalizedNis = data.nis.trim();
   const normalizedAccountEmail = data.account?.email.trim().toLowerCase();
   const normalizedFullName = data.fullName.trim();
-  const normalizedGrade = sanitizeClassDisplayName(data.grade);
   const now = new Date();
+  const { normalizedGrade, kelasId } = await ensureClassReference(
+    db,
+    data.grade,
+    now,
+  );
 
   const existing = await db
     .select({ id: students.id, deletedAt: students.deletedAt })
@@ -574,33 +621,26 @@ export async function POST(request: Request) {
     });
   }
 
+  await db
+    .update(users)
+    .set({
+      fullName: normalizedFullName,
+      nis: normalizedNis,
+      nisn: data.nisn || null,
+      tempatLahir: data.tempatLahir || null,
+      tanggalLahir: data.tanggalLahir || null,
+      jenisKelamin: data.gender,
+      alamat: data.alamat || null,
+      kelasId,
+      syncStatus: "pending",
+      updatedAt: now,
+    })
+    .where(
+      and(eq(users.id, id), eq(users.role, "student"), isNull(users.deletedAt)),
+    );
+
   let userCreated = false;
   if (data.account && normalizedAccountEmail) {
-    const gradeName = normalizedGrade;
-    let kelasId: string | null = null;
-    if (gradeName && gradeName !== "UNASSIGNED") {
-      const classRows = await db
-        .select({ id: classes.id })
-        .from(classes)
-        .where(and(eq(classes.name, gradeName), isNull(classes.deletedAt)))
-        .limit(1);
-
-      if (classRows.length > 0) {
-        kelasId = classRows[0]?.id ?? null;
-      } else {
-        kelasId = crypto.randomUUID();
-        await db.insert(classes).values({
-          id: kelasId,
-          name: gradeName,
-          academicYear: getAcademicYearLabel(),
-          isActive: true,
-          syncStatus: "pending",
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
-
     const passwordHash = await hashPassword(data.account.password);
     const existingUserById = await db
       .select({ id: users.id, role: users.role })

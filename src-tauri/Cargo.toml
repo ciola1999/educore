@@ -33,3 +33,4 @@ rand = "0.8"
 chrono = "0.4"
 keyring = "3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tar = "0.4"

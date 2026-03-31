@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/core/db/connection";
 
+function isDesktopEmbeddedServerRuntime() {
+  return process.env.EDUCORE_DESKTOP_RUNTIME === "embedded-local-web-server";
+}
+
 export async function GET() {
   try {
-    await getDatabase();
+    if (!isDesktopEmbeddedServerRuntime()) {
+      await getDatabase();
+    }
+
     return NextResponse.json({
       success: true,
       data: {

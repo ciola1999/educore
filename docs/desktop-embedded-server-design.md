@@ -64,8 +64,10 @@ Urutannya:
 Status fondasi saat ini:
 - native command `get_runtime_bootstrap_config` sudah tersedia di Tauri
 - native command `probe_runtime_bootstrap_health` sudah tersedia untuk mengecek loopback health endpoint
+- native command `ensure_runtime_bootstrap_ready` sudah tersedia sebagai startup-manager scaffold
 - frontend helper [desktop-bootstrap-config.ts](/e:/Freelance/Project/educore/src/lib/runtime/desktop-bootstrap-config.ts) sudah bisa membaca kontrak bootstrap ini
 - frontend helper yang sama juga sudah bisa memanggil probe health native
+- startup manager saat ini sudah bisa mengembalikan status `not-started` dan `spawn-not-implemented`
 - implementasi spawn process lokal belum dibuka
 
 ### C. Runtime Env Desktop

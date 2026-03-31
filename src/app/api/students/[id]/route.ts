@@ -6,10 +6,7 @@ import { hashPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
-import {
-  isUuidLikeClassValue,
-  sanitizeClassDisplayName,
-} from "@/lib/utils/class-name";
+import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import { studentUpdateSchema } from "@/lib/validations/schemas";
 
 const studentUpdateRequestSchema = studentUpdateSchema.extend({
@@ -46,6 +43,49 @@ function normalizeStudentPayload(payload: StudentUpdatePayload) {
 function getAcademicYearLabel(): string {
   const year = new Date().getFullYear();
   return `${year}/${year + 1}`;
+}
+
+async function ensureClassReference(
+  db: Awaited<ReturnType<typeof getDb>>,
+  grade: string | null | undefined,
+  now: Date,
+) {
+  const normalizedGrade = sanitizeClassDisplayName(grade);
+  if (normalizedGrade === "UNASSIGNED") {
+    return {
+      normalizedGrade,
+      kelasId: null as string | null,
+    };
+  }
+
+  const existingClass = await db
+    .select({ id: classes.id })
+    .from(classes)
+    .where(and(eq(classes.name, normalizedGrade), isNull(classes.deletedAt)))
+    .limit(1);
+
+  if (existingClass[0]?.id) {
+    return {
+      normalizedGrade,
+      kelasId: existingClass[0].id,
+    };
+  }
+
+  const kelasId = crypto.randomUUID();
+  await db.insert(classes).values({
+    id: kelasId,
+    name: normalizedGrade,
+    academicYear: getAcademicYearLabel(),
+    isActive: true,
+    syncStatus: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    normalizedGrade,
+    kelasId,
+  };
 }
 
 export async function PATCH(
@@ -106,6 +146,11 @@ export async function PATCH(
   }
 
   const now = new Date();
+  const { normalizedGrade, kelasId } = await ensureClassReference(
+    db,
+    payload.grade,
+    now,
+  );
   await db
     .update(students)
     .set({
@@ -113,7 +158,7 @@ export async function PATCH(
       nisn: payload.nisn ?? undefined,
       fullName: payload.fullName ?? undefined,
       gender: payload.gender ?? undefined,
-      grade: payload.grade ?? undefined,
+      grade: normalizedGrade,
       parentName: payload.parentName ?? undefined,
       parentPhone: payload.parentPhone ?? undefined,
       tempatLahir: payload.tempatLahir ?? undefined,
@@ -123,34 +168,6 @@ export async function PATCH(
       updatedAt: now,
     })
     .where(eq(students.id, id));
-
-  let kelasId: string | null | undefined;
-  if (payload.grade && payload.grade !== "UNASSIGNED") {
-    const existingClass = await db
-      .select({ id: classes.id })
-      .from(classes)
-      .where(and(eq(classes.name, payload.grade), isNull(classes.deletedAt)))
-      .limit(1);
-
-    if (existingClass.length > 0) {
-      kelasId = existingClass[0]?.id ?? null;
-    } else if (!isUuidLikeClassValue(payload.grade)) {
-      kelasId = crypto.randomUUID();
-      await db.insert(classes).values({
-        id: kelasId,
-        name: payload.grade,
-        academicYear: getAcademicYearLabel(),
-        isActive: true,
-        syncStatus: "pending",
-        createdAt: now,
-        updatedAt: now,
-      });
-    } else {
-      kelasId = null;
-    }
-  } else {
-    kelasId = null;
-  }
 
   await db
     .update(users)

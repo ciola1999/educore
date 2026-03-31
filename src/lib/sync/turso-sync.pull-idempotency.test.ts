@@ -310,4 +310,90 @@ describe("turso full sync idempotency", () => {
     expect(pullExecutorMock).toHaveBeenCalledTimes(2);
     expect(result.message).toContain("recovered after foreign key repair");
   });
+
+  it("reuses the remote guru-mapel id when class changes but teacher-subject-semester identity stays unique", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let pendingSelectServed = false;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => {
+            if (!pendingSelectServed) {
+              pendingSelectServed = true;
+              return Promise.resolve([
+                {
+                  id: "local-assignment-1",
+                  guruId: "remote-teacher-1",
+                  mataPelajaranId: "remote-subject-1",
+                  kelasId: "remote-class-2",
+                  semesterId: "remote-semester-1",
+                  updatedAt: new Date("2026-03-31T00:00:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => []),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes('SELECT id FROM "guru_mapel" WHERE "guru_id" = ?') &&
+        sql.includes('"kelas_id" = ?')
+      ) {
+        return { rows: [] };
+      }
+
+      if (
+        sql.includes('SELECT id FROM "guru_mapel" WHERE "guru_id" = ?') &&
+        !sql.includes('"kelas_id" = ?')
+      ) {
+        return {
+          rows: [{ id: "remote-assignment-1" }],
+        };
+      }
+
+      if (sql.includes('INSERT INTO "guru_mapel"')) {
+        expect(statement.args).toContain("remote-assignment-1");
+        expect(statement.args).not.toContain("local-assignment-1");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["guru_mapel"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(syncedUpdates).toHaveLength(1);
+    expect(executeMock).toHaveBeenCalled();
+  });
 });

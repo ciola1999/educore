@@ -42,9 +42,9 @@ import { checkPermission } from "@/lib/auth/rbac";
 import { sendSettingsAuthTelemetry } from "@/lib/observability/settings-auth-telemetry";
 import {
   type DesktopRuntimeBootstrapConfig,
+  type DesktopRuntimeBootstrapEnsureResult,
   type DesktopRuntimeBootstrapHealth,
-  getDesktopRuntimeBootstrapConfig,
-  probeDesktopRuntimeBootstrapHealth,
+  ensureDesktopRuntimeBootstrapReady,
 } from "@/lib/runtime/desktop-bootstrap-config";
 import { runFullSync, runPullSync, runPushSync } from "@/lib/sync/actions";
 import type { SyncResult } from "@/lib/sync/client";
@@ -234,6 +234,8 @@ export default function SettingsPage() {
     useState<DesktopRuntimeBootstrapConfig | null>(null);
   const [desktopBootstrapHealth, setDesktopBootstrapHealth] =
     useState<DesktopRuntimeBootstrapHealth | null>(null);
+  const [desktopBootstrapEnsureResult, setDesktopBootstrapEnsureResult] =
+    useState<DesktopRuntimeBootstrapEnsureResult | null>(null);
   const [desktopBootstrapLoading, setDesktopBootstrapLoading] = useState(false);
   const [desktopBootstrapError, setDesktopBootstrapError] = useState<
     string | null
@@ -908,6 +910,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!desktopRuntime) {
+      setDesktopBootstrapEnsureResult(null);
       setDesktopBootstrapConfig(null);
       setDesktopBootstrapHealth(null);
       setDesktopBootstrapError(null);
@@ -917,19 +920,18 @@ export default function SettingsPage() {
     setDesktopBootstrapLoading(true);
     setDesktopBootstrapError(null);
 
-    void Promise.all([
-      getDesktopRuntimeBootstrapConfig(),
-      probeDesktopRuntimeBootstrapHealth(),
-    ])
-      .then(([config, health]) => {
-        setDesktopBootstrapConfig(config);
-        setDesktopBootstrapHealth(health);
+    void ensureDesktopRuntimeBootstrapReady()
+      .then((result) => {
+        setDesktopBootstrapEnsureResult(result);
+        setDesktopBootstrapConfig(result?.config ?? null);
+        setDesktopBootstrapHealth(result?.health ?? null);
       })
       .catch((error) => {
         const message = extractUnknownErrorMessage(
           error,
           "Gagal membaca status bootstrap desktop runtime",
         );
+        setDesktopBootstrapEnsureResult(null);
         setDesktopBootstrapConfig(null);
         setDesktopBootstrapHealth(null);
         setDesktopBootstrapError(message);
@@ -1604,11 +1606,13 @@ export default function SettingsPage() {
                 description={
                   desktopBootstrapError
                     ? desktopBootstrapError
-                    : desktopBootstrapHealth
-                      ? `${desktopBootstrapHealth.message} Target: ${desktopBootstrapHealth.url}`
-                      : desktopBootstrapLoading
-                        ? "Memeriksa loopback runtime desktop production..."
-                        : "Kontrak bootstrap desktop sudah tersedia, tetapi embedded local server production belum diaktifkan."
+                    : desktopBootstrapEnsureResult
+                      ? `${desktopBootstrapEnsureResult.message} Target: ${desktopBootstrapEnsureResult.health.url}`
+                      : desktopBootstrapHealth
+                        ? `${desktopBootstrapHealth.message} Target: ${desktopBootstrapHealth.url}`
+                        : desktopBootstrapLoading
+                          ? "Memeriksa loopback runtime desktop production..."
+                          : "Kontrak bootstrap desktop sudah tersedia, tetapi embedded local server production belum diaktifkan."
                 }
                 actionLabel={
                   desktopBootstrapLoading ? undefined : "Cek Bootstrap Runtime"
@@ -1616,19 +1620,18 @@ export default function SettingsPage() {
                 onAction={() => {
                   setDesktopBootstrapLoading(true);
                   setDesktopBootstrapError(null);
-                  void Promise.all([
-                    getDesktopRuntimeBootstrapConfig(),
-                    probeDesktopRuntimeBootstrapHealth(),
-                  ])
-                    .then(([config, health]) => {
-                      setDesktopBootstrapConfig(config);
-                      setDesktopBootstrapHealth(health);
+                  void ensureDesktopRuntimeBootstrapReady()
+                    .then((result) => {
+                      setDesktopBootstrapEnsureResult(result);
+                      setDesktopBootstrapConfig(result?.config ?? null);
+                      setDesktopBootstrapHealth(result?.health ?? null);
                     })
                     .catch((error) => {
                       const message = extractUnknownErrorMessage(
                         error,
                         "Gagal membaca status bootstrap desktop runtime",
                       );
+                      setDesktopBootstrapEnsureResult(null);
                       setDesktopBootstrapConfig(null);
                       setDesktopBootstrapHealth(null);
                       setDesktopBootstrapError(message);
@@ -1644,6 +1647,15 @@ export default function SettingsPage() {
                       ? "warning"
                       : "info"
                 }
+                className="text-xs"
+              />
+            ) : null}
+
+            {desktopRuntime && desktopBootstrapEnsureResult ? (
+              <InlineState
+                title="Startup manager scaffold aktif"
+                description={`phase=${desktopBootstrapEnsureResult.phase}; action=${desktopBootstrapEnsureResult.action}`}
+                variant={desktopBootstrapEnsureResult.ok ? "info" : "warning"}
                 className="text-xs"
               />
             ) : null}
