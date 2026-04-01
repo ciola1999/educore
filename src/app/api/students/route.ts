@@ -25,6 +25,8 @@ import {
 import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import { studentInsertSchema } from "@/lib/validations/schemas";
 
+export const dynamic = "force-dynamic";
+
 type StudentListItem = {
   id: string;
   nis: string;
@@ -51,6 +53,8 @@ type SessionUserLike = {
   id?: string;
   role?: string;
 };
+
+type AccountFilter = "all" | "with_account" | "without_account";
 
 type AttendanceTodayStatus =
   | "present"
@@ -379,6 +383,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const page = Math.max(Number(searchParams.get("page") || "1"), 1);
+  const exportAll = searchParams.get("exportAll") === "1";
   const limit = Math.min(
     Math.max(Number(searchParams.get("limit") || "12"), 1),
     50,
@@ -386,6 +391,8 @@ export async function GET(request: Request) {
   const search = searchParams.get("search")?.trim() || "";
   const sortBy = searchParams.get("sortBy") || "createdAt";
   const sortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
+  const accountFilter =
+    (searchParams.get("accountFilter") as AccountFilter | null) ?? "all";
   const includeStats = searchParams.get("includeStats") === "1";
   const includeAttendanceToday =
     searchParams.get("includeAttendanceToday") === "1";
@@ -414,56 +421,56 @@ export async function GET(request: Request) {
     }
   }
 
-  const [rawRows, totalResult, stats] = await Promise.all([
-    db
-      .select({
-        id: students.id,
-        nis: students.nis,
-        nisn: students.nisn,
-        fullName: students.fullName,
-        gender: students.gender,
-        grade: students.grade,
-        parentName: students.parentName,
-        parentPhone: students.parentPhone,
-        tempatLahir: students.tempatLahir,
-        tanggalLahir: students.tanggalLahir,
-        alamat: students.alamat,
-        createdAt: students.createdAt,
-        accountClassName: classes.name,
-      })
-      .from(students)
-      .leftJoin(
-        users,
-        and(
-          eq(users.id, students.id),
-          eq(users.role, "student"),
-          isNull(users.deletedAt),
-        ),
-      )
-      .leftJoin(
-        classes,
-        and(eq(users.kelasId, classes.id), isNull(classes.deletedAt)),
-      )
-      .where(conditions)
-      .orderBy(
-        sortBy === "fullName"
+  const baseStudentQuery = db
+    .select({
+      id: students.id,
+      nis: students.nis,
+      nisn: students.nisn,
+      fullName: students.fullName,
+      gender: students.gender,
+      grade: students.grade,
+      parentName: students.parentName,
+      parentPhone: students.parentPhone,
+      tempatLahir: students.tempatLahir,
+      tanggalLahir: students.tanggalLahir,
+      alamat: students.alamat,
+      createdAt: students.createdAt,
+      accountClassName: classes.name,
+    })
+    .from(students)
+    .leftJoin(
+      users,
+      and(
+        eq(users.id, students.id),
+        eq(users.role, "student"),
+        isNull(users.deletedAt),
+      ),
+    )
+    .leftJoin(
+      classes,
+      and(eq(users.kelasId, classes.id), isNull(classes.deletedAt)),
+    )
+    .where(conditions)
+    .orderBy(
+      sortBy === "fullName"
+        ? sortDir === "asc"
+          ? students.fullName
+          : desc(students.fullName)
+        : sortBy === "nis"
           ? sortDir === "asc"
-            ? students.fullName
-            : desc(students.fullName)
-          : sortBy === "nis"
+            ? students.nis
+            : desc(students.nis)
+          : sortBy === "grade"
             ? sortDir === "asc"
-              ? students.nis
-              : desc(students.nis)
-            : sortBy === "grade"
-              ? sortDir === "asc"
-                ? students.grade
-                : desc(students.grade)
-              : sortDir === "asc"
-                ? students.createdAt
-                : desc(students.createdAt),
-      )
-      .limit(limit)
-      .offset(offset),
+              ? students.grade
+              : desc(students.grade)
+            : sortDir === "asc"
+              ? students.createdAt
+              : desc(students.createdAt),
+    );
+
+  const [rawRows, totalResult, stats] = await Promise.all([
+    exportAll ? baseStudentQuery : baseStudentQuery.limit(limit).offset(offset),
     db.select({ value: count() }).from(students).where(conditions),
     includeStats ? getStudentStatsSummary(db) : Promise.resolve(null),
   ]);
@@ -490,30 +497,54 @@ export async function GET(request: Request) {
       );
     accountIds = new Set(accounts.map((item) => item.id));
     const accountById = new Map(accounts.map((item) => [item.id, item.email]));
-    return apiOk({
-      data: rows.map((row) => ({
+    const mappedRows = rows
+      .map((row) => ({
         ...row,
         hasAccount: accountIds.has(row.id),
         accountEmail: accountById.get(row.id) ?? null,
         attendanceToday: attendanceMap.get(row.id) ?? null,
-      })) satisfies StudentListItem[],
-      total,
-      page,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
+      }))
+      .filter((row) => {
+        if (accountFilter === "with_account") {
+          return row.hasAccount;
+        }
+        if (accountFilter === "without_account") {
+          return !row.hasAccount;
+        }
+        return true;
+      }) satisfies StudentListItem[];
+
+    return apiOk({
+      data: mappedRows,
+      total: exportAll ? mappedRows.length : total,
+      page: exportAll ? 1 : page,
+      totalPages: exportAll ? 1 : Math.max(1, Math.ceil(total / limit)),
       stats,
     });
   }
 
-  return apiOk({
-    data: rows.map((row) => ({
+  const mappedRows = rows
+    .map((row) => ({
       ...row,
       hasAccount: accountIds.has(row.id),
       accountEmail: null,
       attendanceToday: attendanceMap.get(row.id) ?? null,
-    })) satisfies StudentListItem[],
-    total,
-    page,
-    totalPages: Math.max(1, Math.ceil(total / limit)),
+    }))
+    .filter((row) => {
+      if (accountFilter === "with_account") {
+        return row.hasAccount;
+      }
+      if (accountFilter === "without_account") {
+        return !row.hasAccount;
+      }
+      return true;
+    }) satisfies StudentListItem[];
+
+  return apiOk({
+    data: mappedRows,
+    total: exportAll ? mappedRows.length : total,
+    page: exportAll ? 1 : page,
+    totalPages: exportAll ? 1 : Math.max(1, Math.ceil(total / limit)),
     stats,
   });
 }

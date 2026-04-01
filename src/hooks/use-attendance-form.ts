@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { apiGet, apiPost } from "@/lib/api/request";
 import { useStore } from "@/lib/store/use-store";
-import type { AttendanceStatus } from "@/lib/validations/schemas";
+import type { AttendanceStatus } from "@/types/attendance";
 
 export interface StudentRecord {
   id: string;

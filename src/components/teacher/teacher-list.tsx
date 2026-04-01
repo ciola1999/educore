@@ -1,18 +1,22 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Filter,
   GraduationCap,
   IdCard,
   Loader2,
   RefreshCw,
+  Search,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
+import { parseAsString, parseAsStringEnum, useQueryState } from "nuqs";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +25,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -30,15 +42,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { type Teacher, useTeacherList } from "@/hooks/use-teacher-list";
+import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 import { cn } from "@/lib/utils";
 import { InlineState } from "../common/inline-state";
-import { IDCardView } from "../id-card/id-card-view";
 import { DeleteTeacherDialog } from "./delete-teacher-dialog";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
+const IDCardView = dynamic(
+  () => import("../id-card/id-card-view").then((module) => module.IDCardView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="py-6 text-sm text-zinc-500">Menyiapkan kartu...</div>
+    ),
+  },
+);
+
 export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
+  const teacherOutlineButtonClass = `inline-flex h-11 items-center gap-1 rounded-xl px-3 text-sm transition ${outlineButtonStyles.neutral}`;
+  const [search, setSearch] = useQueryState(
+    "q",
+    parseAsString.withDefault("").withOptions({ shallow: false }),
+  );
+  const [roleFilter, setRoleFilter] = useQueryState(
+    "role",
+    parseAsStringEnum(["super_admin", "admin", "teacher", "staff"]).withOptions(
+      {
+        shallow: false,
+      },
+    ),
+  );
   const {
     teachers,
     loading,
@@ -51,13 +86,14 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
     deleteTeacher,
     handleDelete,
     fetchTeachers,
-  } = useTeacherList(refreshToken);
+  } = useTeacherList({ refreshToken, search, roleFilter });
 
   const [idCardOpen, setIdCardOpen] = useState(false);
   const [selectedTeacherForCard, setSelectedTeacherForCard] =
     useState<Teacher | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
+  const hasActiveFilter = Boolean(search.trim()) || Boolean(roleFilter);
 
   const totalPages = Math.max(1, Math.ceil(teachers.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -115,11 +151,7 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
 
   if (teachers.length === 0) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col items-center justify-center space-y-6 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 text-center"
-      >
+      <div className="flex flex-col items-center justify-center space-y-6 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2">
         <div className="rounded-full bg-linear-to-b from-zinc-800 to-zinc-900 p-6 ring-1 ring-zinc-700 shadow-xl">
           <GraduationCap className="h-12 w-12 text-zinc-500" />
         </div>
@@ -140,13 +172,73 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
         >
           Refresh Data
         </Button>
-      </motion.div>
+      </div>
     );
   }
 
   return (
     <>
       <div className="space-y-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                placeholder="Cari berdasarkan nama atau email..."
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-11 rounded-xl border-zinc-800 bg-zinc-900/50 pl-10 transition-all focus:ring-blue-500/20"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Select
+                value={roleFilter || "all"}
+                onValueChange={(value) => {
+                  setRoleFilter(
+                    value === "all"
+                      ? null
+                      : (value as
+                          | "super_admin"
+                          | "admin"
+                          | "teacher"
+                          | "staff"),
+                  );
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="h-11 w-[170px] rounded-xl border-zinc-800 bg-zinc-900/50">
+                  <Filter className="mr-2 h-4 w-4 text-zinc-500" />
+                  <SelectValue placeholder="Semua Role" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-zinc-800 bg-zinc-900 text-white">
+                  <SelectItem value="all">Semua Role</SelectItem>
+                  <SelectItem value="teacher">Guru</SelectItem>
+                  <SelectItem value="staff">Staf</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
+                </SelectContent>
+              </Select>
+              {hasActiveFilter ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setRoleFilter(null);
+                    setCurrentPage(1);
+                  }}
+                  className={teacherOutlineButtonClass}
+                >
+                  <X className="h-4 w-4" />
+                  Reset
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 text-sm text-zinc-300">
             <div className="rounded-lg bg-zinc-900 p-2">
@@ -238,78 +330,73 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <AnimatePresence mode="popLayout">
-                  {pagedTeachers.map((teacher, index) => (
-                    <motion.tr
-                      key={teacher.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.98 }}
-                      transition={{ delay: index * 0.03 }}
-                      className="group border-b border-zinc-800 transition-colors hover:bg-white/5"
-                    >
-                      <TableCell className="py-4 font-semibold text-white">
-                        {teacher.fullName}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm text-zinc-400">
-                        {teacher.email}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 shadow-xs",
-                            roleColors[teacher.role] ||
-                              "bg-zinc-800 text-zinc-400 ring-zinc-700",
-                          )}
+                {pagedTeachers.map((teacher, index) => (
+                  <TableRow
+                    key={teacher.id}
+                    className="group border-b border-zinc-800 transition-all duration-200 hover:bg-white/5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <TableCell className="py-4 font-semibold text-white">
+                      {teacher.fullName}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-zinc-400">
+                      {teacher.email}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 shadow-xs",
+                          roleColors[teacher.role] ||
+                            "bg-zinc-800 text-zinc-400 ring-zinc-700",
+                        )}
+                      >
+                        {roleLabels[teacher.role]}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                          teacher.isActive
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-zinc-700/40 text-zinc-300",
+                        )}
+                      >
+                        {teacher.isActive ? "Aktif" : "Nonaktif"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-sm text-zinc-300">
+                      {teacher.isHomeroomTeacher ? "Ya" : "Tidak"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <EditTeacherDialog
+                          teacher={teacher}
+                          onSuccess={fetchTeachers}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 rounded-lg text-zinc-400 hover:bg-blue-400/10 hover:text-blue-400"
+                          onClick={() => {
+                            setSelectedTeacherForCard(teacher);
+                            setIdCardOpen(true);
+                          }}
                         >
-                          {roleLabels[teacher.role]}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                            teacher.isActive
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : "bg-zinc-700/40 text-zinc-300",
-                          )}
+                          <IdCard className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 rounded-lg text-zinc-400 hover:bg-red-400/10 hover:text-red-400"
+                          onClick={() => handleDelete(teacher)}
                         >
-                          {teacher.isActive ? "Aktif" : "Nonaktif"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-zinc-300">
-                        {teacher.isHomeroomTeacher ? "Ya" : "Tidak"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <EditTeacherDialog
-                            teacher={teacher}
-                            onSuccess={fetchTeachers}
-                          />
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-9 w-9 rounded-lg text-zinc-400 hover:bg-blue-400/10 hover:text-blue-400"
-                            onClick={() => {
-                              setSelectedTeacherForCard(teacher);
-                              setIdCardOpen(true);
-                            }}
-                          >
-                            <IdCard className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-9 w-9 rounded-lg text-zinc-400 hover:bg-red-400/10 hover:text-red-400"
-                            onClick={() => handleDelete(teacher)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

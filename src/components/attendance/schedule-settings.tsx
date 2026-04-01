@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiDelete, apiGet, apiPost } from "@/lib/api/request";
-import type { AttendanceSetting } from "@/lib/db/schema";
+import type { AttendanceSetting } from "@/types/attendance";
 import { InlineState } from "../common/inline-state";
 
 const DAY_OPTIONS = [

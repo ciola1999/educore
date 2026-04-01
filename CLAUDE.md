@@ -96,6 +96,11 @@ Desktop adalah jalur distribusi offline-first:
 Desktop production build **tidak boleh** dibuka jika masih ada flow inti yang bergantung ke runtime web.
 Lebih baik build desktop **fail-secure** daripada menghasilkan installer yang terlihat valid tapi rusak.
 
+Status aktual saat ini:
+- jalur Windows desktop yang sudah disignoff = `MSI`
+- `NSIS` belum otomatis ikut dianggap siap
+- signoff desktop harus disebut per-channel installer, bukan digeneralisasi
+
 ---
 
 ## 5. Technology Baseline
@@ -186,6 +191,8 @@ Fallback:
 - desktop harus punya flow auth/session lokal sendiri
 - desktop tidak boleh mewajibkan `SessionProvider` web untuk berfungsi
 - logout / refresh / change-password desktop harus aman di runtime lokal
+- packaged desktop auth harus dianggap berbeda dari `tauri dev`
+- route desktop yang dijaga middleware harus punya proof runtime server-side yang stabil
 
 ### Shared auth rules
 Harus konsisten lintas runtime:
@@ -274,6 +281,7 @@ Jika AI agent bekerja di repo ini:
 3. baca file terkait dulu
 4. pahami boundary runtime yang terlibat
 5. cek apakah perubahan menyentuh schema, sync, auth, atau build path
+6. jika bug hanya muncul di deploy/installer, anggap itu sebagai **runtime boundary issue** sampai terbukti sebaliknya
 
 ### Saat mengubah kode
 AI harus:
@@ -288,6 +296,7 @@ AI harus validasi bertahap:
 2. `bunx tsc --noEmit`
 3. `bun run build`
 4. jika relevan desktop production path: `bun run build:desktop`
+5. jika menyentuh packaged desktop path: `bun tauri build`
 
 Kalau ada kegagalan, AI harus jelaskan:
 - akar masalah
@@ -329,6 +338,9 @@ Untuk task baru, AI harus memakai urutan ini:
    - langkah retest
    - residual risk
 
+Untuk incident deploy/packaged yang terasa sulit, baca juga:
+- [docs/runtime-boundary-incident-postmortem.md](/e:/Freelance/Project/educore/docs/runtime-boundary-incident-postmortem.md)
+
 ---
 
 ## 14. Definition of Done
@@ -349,6 +361,7 @@ Sebuah perubahan dianggap selesai jika:
 Tambahan untuk desktop production-safe area:
 - tidak bergantung ke route web untuk flow inti
 - tidak menarik dependency server/native ke browser bundle
+- jika signoff disebut “final”, sebutkan channel installer yang benar-benar lolos, misalnya `MSI`
 
 ---
 
@@ -452,6 +465,6 @@ bun run build:desktop
 ```
 
 Catatan:
-- `bun run build:desktop` boleh tetap fail-secure jika desktop production path belum siap.
-- Jangan membuka jalur release desktop palsu hanya demi membuat build “hijau”.
-
+- desktop production path saat ini sudah sehat untuk `MSI`.
+- `NSIS` belum otomatis ikut sehat hanya karena `MSI` lulus.
+- jangan menyebut “desktop final” tanpa menyebut channel installer yang benar-benar lolos.

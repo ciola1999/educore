@@ -13,6 +13,8 @@ Jaga agar desktop runtime benar-benar local-first dan tidak diam-diam bergantung
 3. Jangan import module server-only, node-only, atau native-only ke jalur client browser sembarangan.
 4. Desktop login/logout/change-password harus bisa jalan tanpa auth web.
 5. Jika sebuah halaman belum desktop-safe, lebih baik dibatasi eksplisit daripada dibiarkan tampak siap.
+6. Packaged desktop auth tidak boleh hanya bergantung pada state client; middleware/runtime server harus punya proof yang stabil.
+7. Signoff desktop harus disebut per channel installer. `MSI` sehat tidak otomatis berarti `NSIS` sehat.
 
 ## Audit Checklist
 
@@ -20,6 +22,8 @@ Jaga agar desktop runtime benar-benar local-first dan tidak diam-diam bergantung
 - Apakah ada route web yang masih jadi dependency CRUD desktop?
 - Apakah bundle browser bisa menarik dependency native/server dari import chain ini?
 - Apakah flow ini aman untuk `bun tauri dev` dan desktop production?
+- Jika bug hanya muncul di packaged desktop, apakah ada mismatch antara runtime dev vs installer?
+- Apakah logout/relogin merusak proof runtime desktop?
 - Jika belum aman, apakah harus di-port atau dibatasi?
 
 ## Required Output
@@ -29,4 +33,3 @@ Saat task selesai, jelaskan:
 - file yang diubah
 - boundary apa yang ditutup
 - residual risk desktop jika masih ada
-

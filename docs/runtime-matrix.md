@@ -28,16 +28,17 @@ Tujuannya:
 ### Login
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - Desktop auth harus lokal.
 - Tidak boleh kembali menggantung ke session web.
+- Signoff channel saat ini: `MSI`
 
 ### Logout / Change Password
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 ---
 
@@ -46,7 +47,7 @@ Catatan:
 ### Dashboard Home
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - Jika insight/kpi tertentu belum desktop-safe, tampilkan safe mode atau batasi eksplisit.
@@ -54,7 +55,7 @@ Catatan:
 ### Attendance Risk Insights
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 ---
 
@@ -63,7 +64,7 @@ Catatan:
 ### Courses / Classes / Subjects
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - master data inti sudah desktop-safe untuk retest melalui dashboard courses
@@ -72,7 +73,7 @@ Catatan:
 ### Teachers / User Management terkait Master Data
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - CRUD dan import inti sekarang sudah bisa diretest di desktop
@@ -85,7 +86,7 @@ Catatan:
 ### Schedule Management
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - jalur courses/schedule sudah cukup aman untuk retest desktop
@@ -98,17 +99,17 @@ Catatan:
 ### Attendance Input
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 ### Attendance History / Reporting
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 ### QR Attendance
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - read-side, mutation inti, settings, holidays, risk insights, dan follow-up sudah punya local desktop path
@@ -133,7 +134,7 @@ Catatan:
 ### Student List / CRUD
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - desktop sekarang sudah mendukung roster, CRUD inti, import Excel, dan account ops utama
@@ -146,7 +147,7 @@ Catatan:
 ### Settings Core
 - Web: `web-ready`
 - Desktop dev: `desktop-dev-ready`
-- Desktop release: `partially-ready`
+- Desktop release: `desktop-release-ready`
 
 Catatan:
 - karena settings/auth sudah distabilkan, perubahan di sini harus sangat hati-hati
@@ -161,6 +162,11 @@ Sebuah area boleh disebut `desktop-release-ready` hanya jika:
 - tidak menarik dependency server/native yang salah ke browser bundle
 - validasi dan source of truth jelas
 - sudah lolos build gate yang relevan
+- sudah lolos smoke artifact installer pada channel yang disignoff
+
+Catatan policy:
+- channel Windows yang saat ini disignoff adalah `MSI`
+- `NSIS` belum otomatis ikut berstatus `desktop-release-ready`
 
 Jika belum, status yang benar adalah:
 - `guarded`

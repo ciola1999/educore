@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 function getNodeMajorVersion(): number {
@@ -49,9 +49,19 @@ function sanitizeNodeOptions(
   return sanitizedTokens.join(" ");
 }
 
+function resetNextBuildOutput() {
+  rmSync(resolve(process.cwd(), ".next"), {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+  });
+}
+
 function run() {
   const nodeMajor = getNodeMajorVersion();
   const env = { ...process.env };
+
+  resetNextBuildOutput();
 
   // Node >= 22 may warn when localStorage flag is malformed/empty.
   // Normalize once so Next worker processes get a valid path.
@@ -73,7 +83,7 @@ function run() {
   const runtimeBinary = basename(process.execPath).toLowerCase().includes("bun")
     ? "node"
     : process.execPath;
-  const result = spawnSync(runtimeBinary, [nextBin, "build"], {
+  const result = spawnSync(runtimeBinary, [nextBin, "build", "--webpack"], {
     stdio: "inherit",
     env,
   });

@@ -6,6 +6,8 @@ import {
   updateTeachingAssignment,
 } from "@/lib/services/academic";
 
+export const dynamic = "force-dynamic";
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },

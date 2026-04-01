@@ -7,6 +7,8 @@ import {
   getTeachers,
 } from "@/lib/services/teacher";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const session = await auth();
   const { searchParams } = new URL(request.url);

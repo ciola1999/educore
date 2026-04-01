@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { handlers } from "@/lib/auth/web/auth";
 
+export const dynamic = "force-dynamic";
+
 function unavailableAuthHandler() {
   return Response.json(
     {

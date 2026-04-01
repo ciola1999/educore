@@ -4,7 +4,6 @@ import type { Session } from "next-auth";
 import { SessionProvider, useSession } from "next-auth/react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { isTauri } from "@/core/env";
-import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 import { useStore } from "@/lib/store/use-store";
 
 type AuthSessionContextValue = {
@@ -53,7 +52,7 @@ function WebSessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SessionProvider refetchOnWindowFocus refetchInterval={5 * 60}>
+    <SessionProvider refetchOnWindowFocus={false} refetchInterval={0}>
       <SessionRuntimeBridge>{children}</SessionRuntimeBridge>
     </SessionProvider>
   );
@@ -101,7 +100,6 @@ export function AuthSessionProvider({
       }
 
       setRuntimeMode("web");
-      void ensureAppWarmup();
     }, 1500);
 
     resolveRuntimeMode();

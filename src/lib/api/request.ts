@@ -1,5 +1,5 @@
+import { isTauri } from "@/core/env";
 import { getApiTimeoutMs } from "@/lib/runtime/app-bootstrap";
-import { handleDesktopLocalApiRequest } from "@/lib/runtime/desktop-local-api";
 import {
   type ApiResponse,
   getApiErrorMessage,
@@ -10,6 +10,25 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   timeoutMs?: number;
 };
+
+const shouldLogApiDebug = process.env.NEXT_PUBLIC_DEBUG_API === "1";
+const shouldUseDesktopLocalApi =
+  process.env.NODE_ENV !== "production" && isTauri();
+
+async function getDesktopLocalApiResponse(
+  input: string,
+  options: { method: string; body: unknown },
+) {
+  if (!shouldUseDesktopLocalApi) {
+    return null;
+  }
+
+  const { handleDesktopLocalApiRequest } = await import(
+    "@/lib/runtime/desktop-local-api"
+  );
+
+  return handleDesktopLocalApiRequest(input, options);
+}
 
 async function requestJson<T>(
   input: string,
@@ -28,9 +47,11 @@ async function requestJson<T>(
     body = JSON.stringify(init.body);
   }
 
-  console.debug(`[API] Fetching ${input}...`);
+  if (shouldLogApiDebug) {
+    console.debug(`[API] Fetching ${input}...`);
+  }
   try {
-    const desktopResponse = await handleDesktopLocalApiRequest(input, {
+    const desktopResponse = await getDesktopLocalApiResponse(input, {
       method,
       body: init?.body,
     });
@@ -45,9 +66,11 @@ async function requestJson<T>(
       }));
 
     clearTimeout(timeoutId);
-    console.debug(
-      `[API] Response from ${input}: ${response.status} ${response.statusText}`,
-    );
+    if (shouldLogApiDebug) {
+      console.debug(
+        `[API] Response from ${input}: ${response.status} ${response.statusText}`,
+      );
+    }
 
     let payload: ApiResponse<T>;
     try {

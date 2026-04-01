@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { IDCardView } from "../id-card/id-card-view";
+
+const IDCardView = dynamic(
+  () => import("../id-card/id-card-view").then((module) => module.IDCardView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="py-6 text-sm text-zinc-500">Menyiapkan kartu...</div>
+    ),
+  },
+);
 
 type StudentCardPayload = {
   fullName: string;

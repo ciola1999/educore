@@ -1,9 +1,20 @@
 "use client";
 
 import { Users } from "lucide-react";
+import dynamic from "next/dynamic";
 import { PhaseBoundary } from "@/components/common/phase-boundary";
-import { StudentList } from "@/components/student/student-list";
 import { isTauri } from "@/core/env";
+
+const StudentList = dynamic(
+  () =>
+    import("@/components/student/student-list").then(
+      (module) => module.StudentList,
+    ),
+  {
+    ssr: false,
+    loading: () => <div>Memuat roster siswa...</div>,
+  },
+);
 
 export default function StudentsPage() {
   const desktopRuntime = isTauri();

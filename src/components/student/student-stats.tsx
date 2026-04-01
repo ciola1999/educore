@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { GraduationCap, UserCheck, UserMinus, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
@@ -59,11 +58,10 @@ export function StudentStats({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat, index) => (
-        <motion.div
+        <div
           key={stat.label}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: index * 0.1 }}
+          className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2"
+          style={{ animationDelay: `${index * 100}ms` }}
         >
           <Card
             className={`group relative overflow-hidden border border-zinc-800 bg-zinc-900/50 backdrop-blur-xl ${stat.border}`}
@@ -91,7 +89,7 @@ export function StudentStats({
               </div>
             </div>
           </Card>
-        </motion.div>
+        </div>
       ))}
     </div>
   );

@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { attendance, studentDailyAttendance } from "@/lib/db/schema";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const session = await auth();
   const guard = requirePermission(session, "attendance:read");

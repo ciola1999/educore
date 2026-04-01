@@ -30,6 +30,8 @@ function isDisabledParam(value: string | null) {
   return normalized === "0" || normalized === "false" || normalized === "no";
 }
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const session = await auth();
   const guard = requireRole(session, [

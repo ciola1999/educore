@@ -18,6 +18,8 @@ type SessionUserLike = {
   role?: string;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const session = await auth();
   const guard = requirePermission(session, "attendance:read");

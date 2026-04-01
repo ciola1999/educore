@@ -17,11 +17,11 @@ import { InlineState } from "@/components/common/inline-state";
 import { isTauri } from "@/core/env";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { apiPost } from "@/lib/api/request";
 import { checkPermission } from "@/lib/auth/rbac";
-import type { AttendanceSetting, Holiday } from "@/lib/db/schema";
 import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
+import { ensureAttendanceProjectionSync } from "@/lib/runtime/attendance-projection-sync";
 import { cn } from "@/lib/utils";
+import type { AttendanceSetting, Holiday } from "@/types/attendance";
 
 type AttendanceSection = "qr" | "manual" | "log" | "schedule" | "holiday";
 
@@ -38,16 +38,7 @@ type AttendanceSectionTheme = {
   badgeClass: string;
 };
 
-type AttendanceProjectionSyncResult = {
-  classCreated: number;
-  studentUpserted: number;
-  settingsSeeded: number;
-};
-
 type AttendanceBootstrapState = "idle" | "syncing" | "ready" | "failed";
-
-const ATTENDANCE_PROJECTION_LAST_SYNC_KEY = "attendance_projection_last_sync";
-const ATTENDANCE_PROJECTION_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
 
 const writeMenuItems: AttendanceMenuItem[] = [
   {
@@ -334,35 +325,15 @@ export function AttendancePageClient({
         return;
       }
 
-      const now = Date.now();
-      const lastSyncAt = Number(
-        window.sessionStorage.getItem(ATTENDANCE_PROJECTION_LAST_SYNC_KEY),
-      );
-      const hasRecentSync =
-        !options?.force &&
-        Number.isFinite(lastSyncAt) &&
-        now - lastSyncAt <= ATTENDANCE_PROJECTION_SYNC_COOLDOWN_MS;
-
-      if (hasRecentSync) {
-        setAttendanceBootstrapState("ready");
-        setAttendanceBootstrapError(null);
-        return;
-      }
-
       setAttendanceBootstrapState("syncing");
       setAttendanceBootstrapError(null);
-      window.sessionStorage.setItem(
-        ATTENDANCE_PROJECTION_LAST_SYNC_KEY,
-        now.toString(),
-      );
 
       try {
-        await apiPost<AttendanceProjectionSyncResult>(
-          "/api/attendance/projection-sync",
-        );
+        await ensureAttendanceProjectionSync({
+          force: options?.force,
+        });
         setAttendanceBootstrapState("ready");
       } catch (error) {
-        window.sessionStorage.removeItem(ATTENDANCE_PROJECTION_LAST_SYNC_KEY);
         setAttendanceBootstrapState("failed");
         setAttendanceBootstrapError(
           error instanceof Error

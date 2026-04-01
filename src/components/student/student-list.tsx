@@ -121,25 +121,10 @@ const studentAmberOutlineButtonClass = outlineButtonStyles.amber;
 const studentBlueOutlineButtonClass = outlineButtonStyles.blue;
 const studentRedOutlineButtonClass = outlineButtonStyles.red;
 
-type StudentListResponse = {
+type StudentExportResponse = {
   data: StudentListItem[];
   total: number;
-  page: number;
-  totalPages: number;
 };
-
-function matchesAccountFilter(
-  student: StudentListItem,
-  accountFilter: "all" | "with_account" | "without_account",
-) {
-  if (accountFilter === "with_account") {
-    return student.hasAccount;
-  }
-  if (accountFilter === "without_account") {
-    return !student.hasAccount;
-  }
-  return true;
-}
 
 function buildStudentExportRows(students: StudentListItem[]) {
   return students.map((student, index) => ({
@@ -269,32 +254,24 @@ export function StudentList() {
       let exportStudents = visibleStudents;
 
       if (scope === "all_filtered") {
-        const baseParams = new URLSearchParams({
-          limit: "50",
+        const exportParams = new URLSearchParams({
           sortBy,
           sortDir,
+          accountFilter,
           includeAttendanceToday: "1",
           date: today,
         });
         if (searchQuery.trim()) {
-          baseParams.set("search", searchQuery.trim());
+          exportParams.set("search", searchQuery.trim());
         }
 
-        const firstPage = await apiGet<StudentListResponse>(
-          `/api/students?${baseParams.toString()}&page=1`,
+        const exportResult = await apiGet<StudentExportResponse>(
+          `/api/students?${exportParams.toString()}&exportAll=1`,
+          {
+            timeoutMs: 60_000,
+          },
         );
-        const collected = [...firstPage.data];
-
-        for (let page = 2; page <= firstPage.totalPages; page += 1) {
-          const pageResult = await apiGet<StudentListResponse>(
-            `/api/students?${baseParams.toString()}&page=${page}`,
-          );
-          collected.push(...pageResult.data);
-        }
-
-        exportStudents = collected.filter((student) =>
-          matchesAccountFilter(student, accountFilter),
-        );
+        exportStudents = exportResult.data;
       }
 
       if (exportStudents.length === 0) {

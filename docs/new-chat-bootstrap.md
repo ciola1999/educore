@@ -23,6 +23,7 @@ Sebelum mulai, baca dan ikuti:
 - .agent/rules/schema-sync-safety.md
 
 Audit dulu, jangan asumsi. Jaga source of truth, runtime boundary, schema safety, sync safety, dan fail-secure desktop release.
+Kalau bug hanya muncul di deploy web atau installer desktop, anggap itu sebagai runtime boundary issue sampai terbukti bukan.
 ```
 
 ---
@@ -51,6 +52,8 @@ Fokus ke eksekusi, bukan teori panjang. Audit dulu, lalu jelaskan akar masalah s
 - bun run build
 
 Kalau ada issue runtime tertentu, jelaskan apakah web-only, desktop-only, atau keduanya.
+Kalau bug hanya muncul di deploy web atau packaged desktop, baca juga:
+- docs/runtime-boundary-incident-postmortem.md
 ```
 
 ---
@@ -138,6 +141,9 @@ Audit dulu:
 - apakah area ini desktop-dev-ready atau desktop-release-ready
 
 Kalau belum aman untuk desktop production, lebih baik fail-secure atau guarded daripada dipaksakan terlihat siap.
+Catatan status saat ini:
+- desktop Windows `MSI` sudah signed off
+- `NSIS` belum signed off
 ```
 
 ---
@@ -185,7 +191,10 @@ Validasi bertahap:
 - bun run build
 - bun run build:desktop
 
-Jika desktop release belum aman, jelaskan kenapa dan pertahankan fail-secure behavior.
+Jika task menyentuh packaged desktop:
+- jalankan `bun tauri build`
+- sebutkan channel installer yang benar-benar lolos
+- jangan menganggap `MSI ready` berarti `NSIS ready`
 ```
 
 ---
@@ -199,4 +208,3 @@ Kalau bingung harus pakai prompt mana:
 - task Tauri/desktop -> pakai `Bootstrap Desktop Runtime Task`
 - task bug -> pakai `Bootstrap Bug Audit`
 - task build/deploy -> pakai `Bootstrap Release / Build Task`
-

@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { apiGet, apiPost } from "@/lib/api/request";
-import { ensureAppWarmup, scheduleIdleTask } from "@/lib/runtime/app-bootstrap";
+import { apiGet } from "@/lib/api/request";
+import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 
 export type AttendanceTodayStatus =
   | "present"
@@ -55,7 +55,6 @@ type StudentListResponse = {
   total: number;
   page: number;
   totalPages: number;
-  stats?: StudentStats | null;
 };
 
 function getTodayDateString() {
@@ -107,6 +106,7 @@ export function useStudentList() {
       const requestId = ++listRequestRef.current;
       setLoading(true);
       setListError(null);
+
       try {
         await ensureAppWarmup();
 
@@ -115,10 +115,10 @@ export function useStudentList() {
           limit: "12",
           sortBy: nextSortBy,
           sortDir: nextSortDir,
-          includeStats: "1",
           includeAttendanceToday: "1",
           date: getTodayDateString(),
         });
+
         if (search.trim()) {
           params.set("search", search.trim());
         }
@@ -136,14 +136,11 @@ export function useStudentList() {
         setTotalPages(result.totalPages);
         setTotalCount(result.total);
         setCurrentPage(result.page);
-        if (result.stats) {
-          setStats(result.stats);
-          setStatsError(null);
-        }
       } catch (err) {
         if (requestId !== listRequestRef.current) {
           return;
         }
+
         setStudents([]);
         setTotalPages(1);
         setTotalCount(0);
@@ -163,19 +160,24 @@ export function useStudentList() {
     const requestId = ++statsRequestRef.current;
     setStatsLoading(true);
     setStatsError(null);
+
     try {
       await ensureAppWarmup();
+
       const result = await apiGet<StudentStats>("/api/students/stats", {
         timeoutMs: 20_000,
       });
+
       if (requestId !== statsRequestRef.current) {
         return;
       }
+
       setStats(result);
     } catch (err) {
       if (requestId !== statsRequestRef.current) {
         return;
       }
+
       setStats(null);
       setStatsError(
         err instanceof Error ? err.message : "Gagal memuat ringkasan siswa",
@@ -198,8 +200,8 @@ export function useStudentList() {
   }, [fetchStudents, resolveListParams]);
 
   const refreshAll = useCallback(async () => {
-    await refreshList();
-  }, [refreshList]);
+    await Promise.all([refreshList(), fetchStats()]);
+  }, [fetchStats, refreshList]);
 
   useEffect(() => {
     const params = resolveListParams();
@@ -212,37 +214,8 @@ export function useStudentList() {
   }, [fetchStudents, resolveListParams]);
 
   useEffect(() => {
-    const key = "students_projection_last_sync";
-    const cancelIdleTask = scheduleIdleTask(() => {
-      const lastSync = sessionStorage.getItem(key);
-      const now = Date.now();
-
-      if (lastSync && now - Number(lastSync) <= 300000) {
-        return;
-      }
-
-      void ensureAppWarmup()
-        .then(() =>
-          apiPost<{
-            classCreated: number;
-            studentUpserted: number;
-            settingsSeeded: number;
-          }>("/api/attendance/projection-sync", undefined, {
-            timeoutMs: 30_000,
-          }),
-        )
-        .then(() => {
-          sessionStorage.setItem(key, now.toString());
-        })
-        .catch(() => {
-          // Keep student list usable even when projection sync endpoint is unavailable.
-        });
-    }, 2_500);
-
-    return () => {
-      cancelIdleTask();
-    };
-  }, []);
+    void fetchStats();
+  }, [fetchStats]);
 
   return {
     loading,

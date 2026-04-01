@@ -7,6 +7,8 @@ import {
   type LegacyScheduleAuditStatus,
 } from "@/lib/services/legacy-schedule-audit";
 
+export const dynamic = "force-dynamic";
+
 const searchSchema = z.object({
   status: z
     .enum([

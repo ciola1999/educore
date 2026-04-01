@@ -9,6 +9,8 @@ import { classes, students, users } from "@/lib/db/schema";
 import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import { studentUpdateSchema } from "@/lib/validations/schemas";
 
+export const dynamic = "force-dynamic";
+
 const studentUpdateRequestSchema = studentUpdateSchema.extend({
   account: z
     .object({

@@ -11,6 +11,10 @@ Sebelum mulai, baca dan ikuti:
 
 Setelah itu, pilih bootstrap yang sesuai dari:
 - [docs/new-chat-bootstrap.md](/e:/Freelance/Project/educore/docs/new-chat-bootstrap.md)
+- atau gunakan template universal siap copy-paste:
+  - [docs/prompt-template-all-in-one.md](/e:/Freelance/Project/educore/docs/prompt-template-all-in-one.md)
+- jika task terkait deploy/packaged bug yang sulit, baca juga:
+  - [docs/runtime-boundary-incident-postmortem.md](/e:/Freelance/Project/educore/docs/runtime-boundary-incident-postmortem.md)
 
 ## Rule utama
 
@@ -19,6 +23,7 @@ Setelah itu, pilih bootstrap yang sesuai dari:
 - Jaga runtime boundary web vs desktop
 - Jaga schema safety dan sync safety
 - Jangan buka jalur desktop release palsu
+- Ingat bahwa signoff desktop saat ini adalah `MSI`, bukan otomatis semua bundler Windows
 
 ## Untuk task Fase 2
 
@@ -39,4 +44,4 @@ Wajib baca:
 - [docs/adr/ADR-004-release-strategy-web-desktop.md](/e:/Freelance/Project/educore/docs/adr/ADR-004-release-strategy-web-desktop.md)
 - [.agent/rules/desktop-runtime-boundary.md](/e:/Freelance/Project/educore/.agent/rules/desktop-runtime-boundary.md)
 - [.agent/rules/schema-sync-safety.md](/e:/Freelance/Project/educore/.agent/rules/schema-sync-safety.md)
-
+- [docs/runtime-boundary-incident-postmortem.md](/e:/Freelance/Project/educore/docs/runtime-boundary-incident-postmortem.md)

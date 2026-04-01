@@ -3,6 +3,8 @@ import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 import { createAuthDbClient } from "@/lib/auth/web/db";
 
+export const dynamic = "force-dynamic";
+
 const telemetryEventSchema = z.object({
   id: z.string().min(1).max(64),
   at: z.string().datetime(),

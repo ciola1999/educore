@@ -7,6 +7,8 @@ import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 import type { NewAttendanceSetting } from "@/lib/db/schema";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await auth();
   const guard = requirePermission(session, "attendance:read");

@@ -3,6 +3,8 @@ import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 import { deleteClass, updateClass } from "@/lib/services/academic";
 
+export const dynamic = "force-dynamic";
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },

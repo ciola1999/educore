@@ -90,9 +90,18 @@ function failSecure(message: string): never {
   process.exit(1);
 }
 
+function resetNextBuildOutput() {
+  rmSync(resolve(process.cwd(), ".next"), {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+  });
+}
+
 function runNextBuild() {
   const env = { ...process.env };
   const nodeMajor = getNodeMajorVersion();
+  resetNextBuildOutput();
   if (nodeMajor >= 22) {
     const localStorageDir = resolve(process.cwd(), ".next");
     mkdirSync(localStorageDir, { recursive: true });
@@ -111,7 +120,7 @@ function runNextBuild() {
   const runtimeBinary = basename(process.execPath).toLowerCase().includes("bun")
     ? "node"
     : process.execPath;
-  const result = spawnSync(runtimeBinary, [nextBin, "build"], {
+  const result = spawnSync(runtimeBinary, [nextBin, "build", "--webpack"], {
     cwd: process.cwd(),
     stdio: "inherit",
     env,

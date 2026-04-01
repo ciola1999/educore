@@ -1,7 +1,7 @@
 "use client";
 
-import { parseAsString, parseAsStringEnum, useQueryState } from "nuqs";
-import { useCallback, useEffect, useState } from "react";
+import { parseAsStringEnum, useQueryState } from "nuqs";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiGet } from "@/lib/api/request";
 
@@ -20,22 +20,15 @@ export interface Teacher {
   isHomeroomTeacher: boolean;
 }
 
-export function useTeacherList(refreshToken = 0) {
-  // --- URL STATE (nuqs) ---
-  const [search, setSearch] = useQueryState(
-    "q",
-    parseAsString.withDefault("").withOptions({ shallow: false }),
-  );
+type UseTeacherListOptions = {
+  refreshToken?: number;
+  search?: string;
+  roleFilter?: "super_admin" | "admin" | "teacher" | "staff" | null;
+};
 
-  const [roleFilter, setRoleFilter] = useQueryState(
-    "role",
-    parseAsStringEnum(["super_admin", "admin", "teacher", "staff"]).withOptions(
-      {
-        shallow: false,
-      },
-    ),
-  );
-
+export function useTeacherList(options: UseTeacherListOptions = {}) {
+  const { refreshToken = 0, search = "", roleFilter = null } = options;
+  const lastRefreshTokenRef = useRef(refreshToken);
   const [sortBy, setSortBy] = useQueryState(
     "sortBy",
     parseAsStringEnum(["fullName", "email", "createdAt"])
@@ -68,7 +61,7 @@ export function useTeacherList(refreshToken = 0) {
         sortBy,
         sortOrder,
       });
-      if (search) params.set("search", search);
+      if (search.trim()) params.set("search", search.trim());
       if (roleFilter) params.set("role", roleFilter);
 
       const data = await apiGet<Teacher[]>(
@@ -91,9 +84,12 @@ export function useTeacherList(refreshToken = 0) {
   }, [fetchTeachers]);
 
   useEffect(() => {
-    if (refreshToken > 0) {
-      void fetchTeachers();
+    if (refreshToken === lastRefreshTokenRef.current) {
+      return;
     }
+
+    lastRefreshTokenRef.current = refreshToken;
+    void fetchTeachers();
   }, [fetchTeachers, refreshToken]);
 
   // --- HANDLERS ---
@@ -117,11 +113,6 @@ export function useTeacherList(refreshToken = 0) {
     loading,
     errorMessage,
 
-    // Filters (nuqs)
-    search,
-    setSearch,
-    roleFilter,
-    setRoleFilter,
     sortBy,
     sortOrder,
     toggleSort,

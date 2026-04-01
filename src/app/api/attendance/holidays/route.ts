@@ -3,6 +3,8 @@ import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await auth();
   const guard = requirePermission(session, "attendance:read");

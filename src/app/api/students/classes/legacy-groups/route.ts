@@ -16,6 +16,8 @@ type LegacyGroup = {
   }>;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await auth();
   const guard = requireRole(session, ["admin", "super_admin"]);

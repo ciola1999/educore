@@ -6,6 +6,8 @@ import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 
+export const dynamic = "force-dynamic";
+
 type SessionUserLike = {
   id?: string;
   role?: string;

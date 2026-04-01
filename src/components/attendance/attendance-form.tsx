@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { isTauri } from "@/core/env";
 import { useAttendanceForm } from "@/hooks/use-attendance-form";
-import type { AttendanceStatus } from "@/lib/validations/schemas";
+import type { AttendanceStatus } from "@/types/attendance";
 import { InlineState } from "../common/inline-state";
 
 type AttendanceFormProps = {

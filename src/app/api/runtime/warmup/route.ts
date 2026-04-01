@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/core/db/connection";
 
+export const dynamic = "force-dynamic";
+
 function isDesktopEmbeddedServerRuntime() {
   return process.env.EDUCORE_DESKTOP_RUNTIME === "embedded-local-web-server";
 }

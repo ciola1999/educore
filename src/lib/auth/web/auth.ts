@@ -16,8 +16,7 @@ import {
 } from "@/lib/auth/web/security";
 
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 5 * 60 * 1000; // 5 minutes
-const { trustHost, authSecret, cookieSameSite } = resolveAuthRuntimeConfig();
+const LOCKOUT_DURATION = 5 * 60 * 1000;
 
 type AuthRow = {
   id: string;
@@ -88,196 +87,224 @@ function normalizeVersion(value: unknown): number {
   return 1;
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      authorize: async (credentials, request) => {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
+type AuthBundle = ReturnType<typeof NextAuth>;
+
+let authBundle: AuthBundle | null = null;
+
+function getAuthBundle(): AuthBundle {
+  if (authBundle) {
+    return authBundle;
+  }
+
+  const { trustHost, authSecret, cookieSameSite } = resolveAuthRuntimeConfig();
+
+  authBundle = NextAuth({
+    providers: [
+      Credentials({
+        name: "credentials",
+        credentials: {
+          email: { label: "Email", type: "email" },
+          password: { label: "Password", type: "password" },
+        },
+        authorize: async (credentials, request) => {
+          if (!credentials?.email || !credentials?.password) {
+            return null;
+          }
+
+          const email = credentials.email as string;
+          const password = credentials.password as string;
+
+          try {
+            const client = createAuthDbClient();
+            const clientIp = extractClientIp(request);
+            const identifier = normalizeLoginIdentifier(email);
+            const emailCandidates = buildLoginEmailCandidates(identifier);
+
+            if (emailCandidates.length === 0) {
+              return null;
+            }
+
+            const [emailLimit, ipLimit] = await Promise.all([
+              consumeRateLimit(client, {
+                scope: "login:email",
+                key: identifier,
+                maxAttempts: MAX_ATTEMPTS,
+                windowMs: LOCKOUT_DURATION,
+                blockMs: LOCKOUT_DURATION,
+              }),
+              consumeRateLimit(client, {
+                scope: "login:ip",
+                key: clientIp,
+                maxAttempts: MAX_ATTEMPTS * 2,
+                windowMs: LOCKOUT_DURATION,
+                blockMs: LOCKOUT_DURATION,
+              }),
+            ]);
+
+            const blockedLimit = !emailLimit.allowed ? emailLimit : ipLimit;
+
+            if (!emailLimit.allowed || !ipLimit.allowed) {
+              throw new Error(
+                `Akun terkunci. Coba lagi dalam ${Math.ceil(
+                  blockedLimit.retryAfterSeconds / 60,
+                )} menit.`,
+              );
+            }
+
+            const result = await client.execute({
+              sql: `SELECT id, email, full_name, role, version, password_hash
+                    FROM users
+                    WHERE (
+                      lower(email) IN (${emailCandidates.map(() => "?").join(", ")})
+                      OR (? NOT LIKE '%@%' AND lower(COALESCE(nip, '')) = ?)
+                      OR (? NOT LIKE '%@%' AND lower(COALESCE(nis, '')) = ?)
+                    )
+                      AND deleted_at IS NULL
+                      AND is_active = 1
+                    LIMIT 1`,
+              args: [
+                ...emailCandidates,
+                identifier,
+                identifier,
+                identifier,
+                identifier,
+              ],
+            });
+
+            const rows = result.rows as unknown as AuthRow[];
+
+            if (!rows || rows.length === 0) {
+              return null;
+            }
+
+            const user = rows[0];
+            const storedHash =
+              typeof user.password_hash === "string" ? user.password_hash : "";
+            const isValidPassword = await verifyAndUpgradeLegacyPassword({
+              userId: user.id,
+              password,
+              storedHash,
+            });
+
+            if (!isValidPassword) {
+              return null;
+            }
+
+            await Promise.all([
+              resetRateLimit(client, "login:email", identifier),
+              resetRateLimit(client, "login:ip", clientIp),
+            ]);
+
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.fullName || user.full_name,
+              role: user.role,
+              version: normalizeVersion(user.version),
+            };
+          } catch (error) {
+            console.error("Auth error:", error);
+            throw error;
+          }
+        },
+      }),
+    ],
+    callbacks: {
+      async jwt({ token, user }) {
+        if (user) {
+          token.id = user.id;
+          token.role = (user as SessionUserWithRole).role;
+          token.version = normalizeVersion(
+            (user as SessionUserWithRole).version,
+          );
+          token.sessionRevoked = false;
+          return token;
         }
 
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-
-        try {
-          const client = createAuthDbClient();
-          const clientIp = extractClientIp(request);
-          const identifier = normalizeLoginIdentifier(email);
-          const emailCandidates = buildLoginEmailCandidates(identifier);
-
-          if (emailCandidates.length === 0) {
-            return null;
-          }
-
-          const [emailLimit, ipLimit] = await Promise.all([
-            consumeRateLimit(client, {
-              scope: "login:email",
-              key: identifier,
-              maxAttempts: MAX_ATTEMPTS,
-              windowMs: LOCKOUT_DURATION,
-              blockMs: LOCKOUT_DURATION,
-            }),
-            consumeRateLimit(client, {
-              scope: "login:ip",
-              key: clientIp,
-              maxAttempts: MAX_ATTEMPTS * 2,
-              windowMs: LOCKOUT_DURATION,
-              blockMs: LOCKOUT_DURATION,
-            }),
-          ]);
-
-          const blockedLimit = !emailLimit.allowed ? emailLimit : ipLimit;
-
-          if (!emailLimit.allowed || !ipLimit.allowed) {
-            throw new Error(
-              `Akun terkunci. Coba lagi dalam ${Math.ceil(
-                blockedLimit.retryAfterSeconds / 60,
-              )} menit.`,
-            );
-          }
-
-          // Find user by email using raw SQL
-          const result = await client.execute({
-            sql: `SELECT id, email, full_name, role, version, password_hash
-                  FROM users
-                  WHERE (
-                    lower(email) IN (${emailCandidates.map(() => "?").join(", ")})
-                    OR (? NOT LIKE '%@%' AND lower(COALESCE(nip, '')) = ?)
-                    OR (? NOT LIKE '%@%' AND lower(COALESCE(nis, '')) = ?)
-                  )
-                    AND deleted_at IS NULL
-                    AND is_active = 1
-                  LIMIT 1`,
-            args: [
-              ...emailCandidates,
-              identifier,
-              identifier,
-              identifier,
-              identifier,
-            ],
-          });
-
-          const rows = result.rows as unknown as AuthRow[];
-
-          if (!rows || rows.length === 0) {
-            return null;
-          }
-
-          const user = rows[0];
-
-          // Verify password
-          // For web, we need to use a server-side compatible hash verification
-          // Since argon2 is not available in browser, we'll use a simple comparison for now
-          // In production, implement proper server-side password verification
-          const storedHash =
-            typeof user.password_hash === "string" ? user.password_hash : "";
-          const isValidPassword = await verifyAndUpgradeLegacyPassword({
-            userId: user.id,
-            password,
-            storedHash,
-          });
-
-          if (!isValidPassword) {
-            return null;
-          }
-
-          await Promise.all([
-            resetRateLimit(client, "login:email", identifier),
-            resetRateLimit(client, "login:ip", clientIp),
-          ]);
-
-          // Return user object
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.fullName || user.full_name,
-            role: user.role,
-            version: normalizeVersion(user.version),
-          };
-        } catch (error) {
-          console.error("Auth error:", error);
-          throw error;
+        if (!token.id || token.sessionRevoked) {
+          return token;
         }
+
+        const client = createAuthDbClient();
+        const userState = await getUserSessionState(client, token.id as string);
+
+        if (
+          !userState ||
+          !userState.isActive ||
+          userState.deletedAt !== null ||
+          userState.version !== normalizeVersion(token.version)
+        ) {
+          console.error("[AUTH][jwt] Revoking session", {
+            tokenId: token.id,
+            tokenRole: token.role ?? null,
+            tokenVersion: normalizeVersion(token.version),
+            userState,
+          });
+          token.sessionRevoked = true;
+          return token;
+        }
+
+        token.role = userState.role;
+        token.version = userState.version;
+        return token;
       },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.role = (user as SessionUserWithRole).role;
-        token.version = normalizeVersion((user as SessionUserWithRole).version);
-        token.sessionRevoked = false;
-        return token;
-      }
+      async session({ session, token }) {
+        if (token.sessionRevoked || !session.user) {
+          return null as never;
+        }
 
-      if (!token.id || token.sessionRevoked) {
-        return token;
-      }
+        if (session.user) {
+          session.user.id = token.id as string;
+          (session.user as SessionUserWithRole).role = token.role as AuthRole;
+          (session.user as SessionUserWithRole).version = normalizeVersion(
+            token.version,
+          );
+        }
 
-      const client = createAuthDbClient();
-      const userState = await getUserSessionState(client, token.id as string);
-
-      if (
-        !userState ||
-        !userState.isActive ||
-        userState.deletedAt !== null ||
-        userState.version !== normalizeVersion(token.version)
-      ) {
-        console.error("[AUTH][jwt] Revoking session", {
-          tokenId: token.id,
-          tokenRole: token.role ?? null,
-          tokenVersion: normalizeVersion(token.version),
-          userState,
-        });
-        token.sessionRevoked = true;
-        return token;
-      }
-
-      token.role = userState.role;
-      token.version = userState.version;
-      return token;
-    },
-    async session({ session, token }) {
-      if (token.sessionRevoked || !session.user) {
-        return null as never;
-      }
-
-      if (session.user) {
-        session.user.id = token.id as string;
-        (session.user as SessionUserWithRole).role = token.role as AuthRole;
-        (session.user as SessionUserWithRole).version = normalizeVersion(
-          token.version,
-        );
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
-  },
-  cookies: {
-    sessionToken: {
-      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: cookieSameSite,
-        path: "/",
-        maxAge: 24 * 60 * 60, // 24 hours
+        return session;
       },
     },
+    pages: {
+      signIn: "/login",
+      error: "/login",
+    },
+    session: {
+      strategy: "jwt",
+      maxAge: 24 * 60 * 60,
+    },
+    cookies: {
+      sessionToken: {
+        name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}next-auth.session-token`,
+        options: {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: cookieSameSite,
+          path: "/",
+          maxAge: 24 * 60 * 60,
+        },
+      },
+    },
+    secret: authSecret,
+    trustHost,
+  });
+
+  return authBundle;
+}
+
+export const handlers = {
+  GET(...args: Parameters<AuthBundle["handlers"]["GET"]>) {
+    return getAuthBundle().handlers.GET(...args);
   },
-  secret: authSecret,
-  trustHost,
-});
+  POST(...args: Parameters<AuthBundle["handlers"]["POST"]>) {
+    return getAuthBundle().handlers.POST(...args);
+  },
+};
+
+export const auth = ((...args: Parameters<AuthBundle["auth"]>) =>
+  getAuthBundle().auth(...args)) as AuthBundle["auth"];
+
+export const signIn = ((...args: Parameters<AuthBundle["signIn"]>) =>
+  getAuthBundle().signIn(...args)) as AuthBundle["signIn"];
+
+export const signOut = ((...args: Parameters<AuthBundle["signOut"]>) =>
+  getAuthBundle().signOut(...args)) as AuthBundle["signOut"];

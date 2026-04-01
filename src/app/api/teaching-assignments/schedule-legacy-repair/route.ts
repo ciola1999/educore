@@ -8,6 +8,8 @@ import {
   repairLegacySchedule,
 } from "@/lib/services/legacy-schedule-repair";
 
+export const dynamic = "force-dynamic";
+
 const repairSchema = z.object({
   legacyScheduleId: z.string().uuid("Legacy schedule wajib valid."),
   guruMapelId: z.string().uuid("Assignment guru-mapel tidak valid.").optional(),
