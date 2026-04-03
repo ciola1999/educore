@@ -1,4 +1,3 @@
-import { createAttendanceRiskFollowUp } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -70,6 +69,9 @@ export async function POST(request: Request) {
       );
     }
 
+    const { createAttendanceRiskFollowUp } = await import(
+      "@/core/services/attendance-service"
+    );
     await createAttendanceRiskFollowUp({
       actorUserId: sessionUser.id,
       studentId: body.studentId,

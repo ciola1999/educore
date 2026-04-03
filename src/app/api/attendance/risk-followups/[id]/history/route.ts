@@ -1,4 +1,3 @@
-import { getAttendanceRiskFollowUpAuditTrail } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -31,6 +30,9 @@ export async function GET(
       return apiError("ID follow-up tidak valid", 400, "VALIDATION_ERROR");
     }
 
+    const { getAttendanceRiskFollowUpAuditTrail } = await import(
+      "@/core/services/attendance-service"
+    );
     const rows = await getAttendanceRiskFollowUpAuditTrail(
       params.id,
       sessionUser.id,

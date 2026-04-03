@@ -1,9 +1,6 @@
-import { isNull } from "drizzle-orm";
 import { requirePermission } from "@/lib/api/authz";
 import { apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { getDb } from "@/lib/db";
-import { classes } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +11,11 @@ export async function GET() {
     return guard;
   }
 
+  const [{ isNull }, { getDb }, { classes }] = await Promise.all([
+    import("drizzle-orm"),
+    import("@/lib/db"),
+    import("@/lib/db/schema"),
+  ]);
   const db = await getDb();
   const data = await db
     .select({ id: classes.id, name: classes.name })

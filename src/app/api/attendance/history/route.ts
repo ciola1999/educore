@@ -1,14 +1,3 @@
-import {
-  getAttendanceHistory,
-  getAttendanceHistoryAnalyticsBundle,
-  getAttendanceHistoryClassSummary,
-  getAttendanceHistoryCount,
-  getAttendanceHistoryExportRows,
-  getAttendanceHistoryHeatmap,
-  getAttendanceHistoryStudentSummary,
-  getAttendanceHistorySummary,
-  getAttendanceHistoryTrend,
-} from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -68,8 +57,12 @@ export async function GET(request: Request) {
   }
 
   try {
+    const attendanceService = await import(
+      "@/core/services/attendance-service"
+    );
+
     if (summaryMode) {
-      const summary = await getAttendanceHistorySummary({
+      const summary = await attendanceService.getAttendanceHistorySummary({
         startDate,
         endDate,
         sortBy,
@@ -84,7 +77,7 @@ export async function GET(request: Request) {
     }
 
     if (classSummaryMode) {
-      const summary = await getAttendanceHistoryClassSummary({
+      const summary = await attendanceService.getAttendanceHistoryClassSummary({
         startDate,
         endDate,
         sortBy,
@@ -99,22 +92,23 @@ export async function GET(request: Request) {
     }
 
     if (studentSummaryMode) {
-      const summary = await getAttendanceHistoryStudentSummary({
-        startDate,
-        endDate,
-        sortBy,
-        studentId,
-        status,
-        searchQuery,
-        source,
-        className,
-      });
+      const summary =
+        await attendanceService.getAttendanceHistoryStudentSummary({
+          startDate,
+          endDate,
+          sortBy,
+          studentId,
+          status,
+          searchQuery,
+          source,
+          className,
+        });
 
       return apiOk(summary);
     }
 
     if (trendMode) {
-      const trend = await getAttendanceHistoryTrend({
+      const trend = await attendanceService.getAttendanceHistoryTrend({
         startDate,
         endDate,
         sortBy,
@@ -129,7 +123,7 @@ export async function GET(request: Request) {
     }
 
     if (heatmapMode) {
-      const heatmap = await getAttendanceHistoryHeatmap({
+      const heatmap = await attendanceService.getAttendanceHistoryHeatmap({
         startDate,
         endDate,
         sortBy,
@@ -144,23 +138,24 @@ export async function GET(request: Request) {
     }
 
     if (analyticsBundleMode) {
-      const analytics = await getAttendanceHistoryAnalyticsBundle({
-        startDate,
-        endDate,
-        sortBy,
-        studentId,
-        status,
-        searchQuery,
-        source,
-        className,
-      });
+      const analytics =
+        await attendanceService.getAttendanceHistoryAnalyticsBundle({
+          startDate,
+          endDate,
+          sortBy,
+          studentId,
+          status,
+          searchQuery,
+          source,
+          className,
+        });
 
       return apiOk(analytics);
     }
 
     const [data, total] = await Promise.all([
       exportMode
-        ? getAttendanceHistoryExportRows({
+        ? attendanceService.getAttendanceHistoryExportRows({
             startDate,
             endDate,
             sortBy,
@@ -170,7 +165,7 @@ export async function GET(request: Request) {
             source,
             className,
           })
-        : getAttendanceHistory({
+        : attendanceService.getAttendanceHistory({
             startDate,
             endDate,
             sortBy,
@@ -182,7 +177,7 @@ export async function GET(request: Request) {
             source,
             className,
           }),
-      getAttendanceHistoryCount({
+      attendanceService.getAttendanceHistoryCount({
         startDate,
         endDate,
         sortBy,

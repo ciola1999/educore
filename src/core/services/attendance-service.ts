@@ -2013,13 +2013,15 @@ export async function upsertAttendanceRiskSettings(
 export async function getAttendanceRiskStudents(
   filter: AttendanceHistoryFilter,
   settings?: AttendanceRiskSettings,
+  limit?: number,
+  offset?: number,
 ): Promise<AttendanceRiskStudent[]> {
   const [resolvedSettings, studentSummary] = await Promise.all([
     settings ? Promise.resolve(settings) : getAttendanceRiskSettings(),
     getAttendanceHistoryStudentSummary(filter),
   ]);
 
-  return studentSummary
+  const riskStudents = studentSummary
     .map((student) => {
       const riskFlags: string[] = [];
       if (student.absent >= resolvedSettings.alphaThreshold) {
@@ -2042,6 +2044,11 @@ export async function getAttendanceRiskStudents(
         b.late - a.late ||
         a.studentName.localeCompare(b.studentName),
     );
+
+  // Apply pagination
+  const startIndex = offset ?? 0;
+  const endIndex = limit != null ? startIndex + limit : riskStudents.length;
+  return riskStudents.slice(startIndex, endIndex);
 }
 
 function buildAttendanceRiskFollowUpMessage(input: {

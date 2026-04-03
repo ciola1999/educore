@@ -2,7 +2,6 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
-import { hashPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
@@ -10,6 +9,8 @@ import {
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
+
+export const dynamic = "force-dynamic";
 
 const bulkCreateStudentAccountsSchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1, "Pilih minimal 1 siswa"),
@@ -121,6 +122,7 @@ export async function POST(request: Request) {
     .from(users)
     .where(inArray(users.email, candidateEmails));
   const now = new Date();
+  const { hashPassword } = await import("@/lib/auth/hash");
   const passwordHash = await hashPassword(password);
   const rawGradeIds = Array.from(
     new Set(

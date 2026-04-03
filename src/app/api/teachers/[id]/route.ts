@@ -1,7 +1,6 @@
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { deleteTeacher, updateTeacher } from "@/lib/services/teacher";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +16,7 @@ export async function PATCH(
 
   const { id } = await context.params;
   const body = await request.json();
+  const { updateTeacher } = await import("@/lib/services/teacher");
   const result = await updateTeacher(id, body);
 
   if (!result.success) {
@@ -49,6 +49,7 @@ export async function DELETE(
   }
 
   const { id } = await context.params;
+  const { deleteTeacher } = await import("@/lib/services/teacher");
   const result = await deleteTeacher(id);
 
   if (!result.success) {

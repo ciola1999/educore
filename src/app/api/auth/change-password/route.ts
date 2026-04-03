@@ -1,10 +1,11 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { apiError, apiOk } from "@/lib/api/response";
-import { hashPassword, verifyPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+
+export const dynamic = "force-dynamic";
 
 const changePasswordSchema = z
   .object({
@@ -36,6 +37,7 @@ async function validateCurrentPassword(
   }
 
   if (isArgon2Hash(storedHash)) {
+    const { verifyPassword } = await import("@/lib/auth/hash");
     return verifyPassword(inputPassword, storedHash);
   }
 
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
     return apiError("Password saat ini salah", 400, "INVALID_CURRENT_PASSWORD");
   }
 
+  const { hashPassword } = await import("@/lib/auth/hash");
   const nextHash = await hashPassword(validation.data.newPassword);
   await db
     .update(users)

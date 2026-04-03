@@ -10,6 +10,8 @@ import {
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
 
+export const dynamic = "force-dynamic";
+
 const repairStudentClassesSchema = z.object({
   studentIds: z.array(z.string().uuid()).optional(),
   sourceToken: z.string().trim().optional(),

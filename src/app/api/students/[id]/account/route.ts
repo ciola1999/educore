@@ -2,7 +2,6 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
-import { hashPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
@@ -10,6 +9,8 @@ import {
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
+
+export const dynamic = "force-dynamic";
 
 const createStudentAccountSchema = z.object({
   email: z.string().email("Email akun siswa tidak valid"),
@@ -87,6 +88,7 @@ export async function POST(
     return apiError("Email akun siswa sudah terdaftar", 409, "EMAIL_EXISTS");
   }
 
+  const { hashPassword } = await import("@/lib/auth/hash");
   const passwordHash = await hashPassword(validation.data.password);
   const existingById = await db
     .select({ id: users.id, role: users.role })

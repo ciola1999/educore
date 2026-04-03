@@ -42,11 +42,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { type Teacher, useTeacherList } from "@/hooks/use-teacher-list";
-import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 import { cn } from "@/lib/utils";
 import { InlineState } from "../common/inline-state";
-import { DeleteTeacherDialog } from "./delete-teacher-dialog";
-import { EditTeacherDialog } from "./edit-teacher-dialog";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -60,8 +57,17 @@ const IDCardView = dynamic(
   },
 );
 
+const EditTeacherDialog = dynamic(() =>
+  import("./edit-teacher-dialog").then((module) => module.EditTeacherDialog),
+);
+
+const DeleteTeacherDialog = dynamic(() =>
+  import("./delete-teacher-dialog").then(
+    (module) => module.DeleteTeacherDialog,
+  ),
+);
+
 export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
-  const teacherOutlineButtonClass = `inline-flex h-11 items-center gap-1 rounded-xl px-3 text-sm transition ${outlineButtonStyles.neutral}`;
   const [search, setSearch] = useQueryState(
     "q",
     parseAsString.withDefault("").withOptions({ shallow: false }),
@@ -178,42 +184,44 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        {/* 🔍 Filter Hub */}
+        <div className="rounded-[2rem] border border-zinc-800/80 bg-zinc-950/40 p-4 shadow-xl backdrop-blur-md md:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            {/* Search Bar */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Search className="absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-zinc-500" />
               <Input
-                placeholder="Cari berdasarkan nama atau email..."
+                placeholder="Cari nama, email, atau NIP..."
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value);
                   setCurrentPage(1);
                 }}
-                className="h-11 rounded-xl border-zinc-800 bg-zinc-900/50 pl-10 transition-all focus:ring-blue-500/20"
+                className="h-12 w-full rounded-2xl border-zinc-800 bg-zinc-900/40 pl-12 pr-4 text-sm transition-all focus:border-emerald-500/50 focus:ring-emerald-500/10 placeholder:text-zinc-600"
               />
             </div>
-            <div className="flex gap-2">
+
+            {/* Actions Bar */}
+            <div className="flex flex-wrap items-center gap-3">
               <Select
                 value={roleFilter || "all"}
                 onValueChange={(value) => {
                   setRoleFilter(
                     value === "all"
                       ? null
-                      : (value as
-                          | "super_admin"
-                          | "admin"
-                          | "teacher"
-                          | "staff"),
+                      : (value as "super_admin" | "admin" | "teacher" | "staff"),
                   );
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="h-11 w-[170px] rounded-xl border-zinc-800 bg-zinc-900/50">
-                  <Filter className="mr-2 h-4 w-4 text-zinc-500" />
-                  <SelectValue placeholder="Semua Role" />
+                <SelectTrigger className="h-12 w-[180px] rounded-2xl border-zinc-800 bg-zinc-900/40 text-sm focus:ring-emerald-500/10">
+                  <div className="flex items-center gap-2.5">
+                    <Filter className="h-4 w-4 text-emerald-400" />
+                    <SelectValue placeholder="Semua Role" />
+                  </div>
                 </SelectTrigger>
-                <SelectContent className="rounded-xl border-zinc-800 bg-zinc-900 text-white">
+                <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-900 shadow-2xl">
                   <SelectItem value="all">Semua Role</SelectItem>
                   <SelectItem value="teacher">Guru</SelectItem>
                   <SelectItem value="staff">Staf</SelectItem>
@@ -221,76 +229,75 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
                   <SelectItem value="super_admin">Super Admin</SelectItem>
                 </SelectContent>
               </Select>
-              {hasActiveFilter ? (
-                <button
+
+              <div className="flex items-center gap-2">
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-12 w-12 rounded-2xl border border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:bg-zinc-800 hover:text-white"
                   onClick={() => {
-                    setSearch("");
-                    setRoleFilter(null);
+                    void fetchTeachers();
+                  }}
+                >
+                  <RefreshCw className={cn("h-4.5 w-4.5", loading && "animate-spin text-emerald-400")} />
+                </Button>
+
+                {hasActiveFilter && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("");
+                      setRoleFilter(null);
+                      setCurrentPage(1);
+                    }}
+                    className="h-12 rounded-2xl border-zinc-800 bg-zinc-900/40 px-5 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Reset
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-4 border-t border-zinc-800/50 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10">
+                <Users className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 leading-none mb-1">
+                  Database Stats
+                </p>
+                <p className="text-sm font-medium text-zinc-300">
+                  <span className="text-white font-bold">{pagedTeachers.length}</span> Entitas Ditampilkan
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="hidden h-8 w-px bg-zinc-800 sm:block" />
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-600">Baris</span>
+                <select
+                  id="page-size"
+                  value={String(pageSize)}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
                     setCurrentPage(1);
                   }}
-                  className={teacherOutlineButtonClass}
+                  className="h-9 w-20 rounded-xl border border-zinc-800 bg-black/40 px-3 text-sm font-bold text-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                 >
-                  <X className="h-4 w-4" />
-                  Reset
-                </button>
-              ) : null}
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3 text-sm text-zinc-300">
-            <div className="rounded-lg bg-zinc-900 p-2">
-              <Users className="h-4 w-4 text-sky-400" />
-            </div>
-            <p>
-              Menampilkan{" "}
-              <span className="font-semibold text-white">
-                {pagedTeachers.length}
-              </span>{" "}
-              dari{" "}
-              <span className="font-semibold text-white">
-                {teachers.length}
-              </span>{" "}
-              user
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <label htmlFor="page-size" className="text-zinc-400">
-              Baris
-            </label>
-            <select
-              id="page-size"
-              value={String(pageSize)}
-              onChange={(event) => {
-                setPageSize(Number(event.target.value));
-                setCurrentPage(1);
-              }}
-              className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-zinc-200"
-            >
-              {PAGE_SIZE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                void fetchTeachers();
-              }}
-              className="gap-2 text-zinc-400 hover:text-white"
-            >
-              <RefreshCw
-                className={cn(
-                  "h-4 w-4",
-                  loading && "animate-spin text-blue-500",
-                )}
-              />
-              Refresh
-            </Button>
           </div>
         </div>
 

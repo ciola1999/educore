@@ -1,7 +1,6 @@
 import { requirePermission } from "@/lib/api/authz";
 import { apiCreated, apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { addSubject, getSubjects } from "@/lib/services/academic";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +11,7 @@ export async function GET() {
     return guard;
   }
 
+  const { getSubjects } = await import("@/lib/services/academic");
   const data = await getSubjects();
   return apiOk(data);
 }
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
+  const { addSubject } = await import("@/lib/services/academic");
   const result = (await addSubject(body)) as {
     success: boolean;
     error?: string;

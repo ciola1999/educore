@@ -22,7 +22,8 @@ import {
   users,
 } from "../db/schema";
 import { syncUsersToStudentsProjection } from "../services/student-projection";
-import { getTursoCloudClient, type SyncResult } from "./client";
+import { getTursoCloudClient } from "./client";
+import type { SyncResult } from "./types";
 
 export type { SyncResult };
 type PullFromCloudDeps = {

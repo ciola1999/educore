@@ -2,7 +2,6 @@
 
 import { Users } from "lucide-react";
 import dynamic from "next/dynamic";
-import { PhaseBoundary } from "@/components/common/phase-boundary";
 import { isTauri } from "@/core/env";
 
 const StudentList = dynamic(
@@ -20,92 +19,78 @@ export default function StudentsPage() {
   const desktopRuntime = isTauri();
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <section className="relative overflow-hidden rounded-[2rem] border border-zinc-800/80 bg-linear-to-br from-zinc-950 via-zinc-950 to-sky-950/40 p-6 shadow-[0_30px_80px_-50px_rgba(14,165,233,0.35)] md:p-8">
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_58%)]" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-sky-200">
+    <div className="min-h-full space-y-8 p-4 md:p-1 md:pt-4 animate-in fade-in duration-700">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-zinc-800/80 bg-zinc-950/40 p-6 shadow-2xl backdrop-blur-md md:p-10 lg:p-12">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-y-0 right-0 w-full lg:w-1/2">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.15),transparent_60%)]" />
+          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-sky-500/10 blur-[100px]" />
+          <div className="absolute top-1/2 -right-48 h-96 w-96 rounded-full bg-indigo-500/5 blur-[120px]" />
+        </div>
+        
+        <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-sky-300">
               <Users className="h-3.5 w-3.5" />
-              Students Workspace
+              <span>Students Workspace</span>
             </div>
-            <div className="space-y-3">
-              <h1 className="bg-linear-to-r from-white via-sky-100 to-zinc-400 bg-clip-text text-4xl font-black tracking-tight text-transparent md:text-5xl">
+            
+            <div className="space-y-4">
+              <h1 className="bg-linear-to-r from-white via-sky-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
                 Data Siswa
               </h1>
-              <p className="max-w-2xl text-sm leading-6 text-zinc-300 md:text-base">
+              <p className="max-w-2xl text-base leading-relaxed text-zinc-400 md:text-lg">
                 {desktopRuntime
-                  ? "Desktop membuka roster siswa, detail identitas, core CRUD, create account per siswa, bulk maintenance inti, shortcut attendance, export, dan cetak kartu lewat jalur local-safe."
-                  : "Workspace siswa untuk monitoring roster, absensi harian, identitas, akun, import, dan export dalam satu alur yang lebih rapi."}
+                  ? "Akses jalur runtime lokal untuk manajemen roster siswa secara full-depth. Kelola identitas, akun login, pemeliharaan massal, hingga pencetakan kartu ID dengan performa tinggi."
+                  : "Workspace komprehensif untuk pengolahan data siswa. Pantau kehadiran, kelola akun, dan navigasi roster aktif dalam satu antarmuka yang intuitif dan responsif."}
               </p>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[360px]">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                Fokus
-              </p>
-              <p className="mt-2 text-sm font-medium text-zinc-100">
-                Front-end Students
-              </p>
-            </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                Runtime
-              </p>
-              <p className="mt-2 text-sm font-medium text-zinc-100">
-                Web + Tauri
-              </p>
-            </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                Mode
-              </p>
-              <p className="mt-2 text-sm font-medium text-zinc-100">
-                {desktopRuntime ? "Roster & Core CRUD" : "Roster & CRUD"}
-              </p>
-            </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[220px]">
+            {[
+              { label: "Fokus", value: "Students" },
+              { label: "Runtime", value: desktopRuntime ? "Tauri App" : "Web Hub" },
+              { label: "Mode", value: "Core CRUD" },
+            ].map((item) => (
+              <div 
+                key={item.label}
+                className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
+              >
+                <div className="absolute inset-x-0 bottom-0 h-[2px] w-0 bg-sky-500 transition-all duration-300 group-hover:w-full" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                  {item.label}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-zinc-200">
+                  {item.value}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <PhaseBoundary
-        bannerDescription={
-          desktopRuntime
-            ? "Desktop saat ini sudah membuka roster, identitas, core CRUD siswa, import Excel, account creation per siswa, bulk account ops, repair kelas legacy, status absensi harian, export, dan shortcut attendance lewat local runtime yang sama."
-            : "Halaman siswa tetap fokus pada identitas dan monitoring. Status absensi harian sekarang aktif dan setiap kartu siswa punya shortcut ke riwayat attendance."
-        }
-        actions={[
-          {
-            href: "/dashboard/attendance",
-            label: "Buka Attendance",
-          },
-          {
-            href: "/dashboard/courses",
-            label: "Buka Data Akademik",
-            variant: "outline",
-          },
-        ]}
-      />
-
-      <section className="space-y-4">
-        <div className="flex items-center gap-3 text-zinc-300">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10">
-            <Users className="h-5 w-5 text-sky-300" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-zinc-100">
-              Roster & CRUD Siswa
-            </h2>
-            <p className="text-sm text-zinc-500">
-              Kelola roster aktif, akun siswa, dan shortcut attendance.
-            </p>
+      <section className="space-y-6">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between px-4 sm:px-2">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[1.25rem] border border-sky-500/20 bg-sky-500/10 shadow-[0_0_20px_rgba(14,165,233,0.1)]">
+              <Users className="h-6 w-6 text-sky-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-white">
+                Roster & Manajemen Siswa
+              </h2>
+              <p className="text-sm text-zinc-500">
+                Data real-time untuk seluruh profil siswa di database.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-zinc-800/80 bg-zinc-950/60 p-5 shadow-[0_30px_70px_-50px_rgba(15,23,42,0.9)] backdrop-blur-xl md:p-6">
-          <StudentList />
+        <div className="rounded-[2.5rem] border border-zinc-800/80 bg-zinc-950/40 p-1 shadow-2xl backdrop-blur-xl transition-all md:p-2">
+          <div className="p-4 md:p-6">
+            <StudentList />
+          </div>
         </div>
       </section>
     </div>

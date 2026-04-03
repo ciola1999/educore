@@ -2,6 +2,7 @@
 
 import {
   ArrowDownAZ,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -13,9 +14,11 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  UserCircle,
   UserRoundPlus,
   Users,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -34,7 +37,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import type { StudentListItem } from "@/hooks/use-student-list";
 import { useStudentList } from "@/hooks/use-student-list";
@@ -42,16 +44,47 @@ import { apiGet } from "@/lib/api/request";
 import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 import { InlineState } from "../common/inline-state";
-import { AddStudentDialog } from "./add-student-dialog";
-import { BulkCreateStudentAccountsDialog } from "./bulk-create-student-accounts-dialog";
-import { BulkRepairStudentClassesDialog } from "./bulk-repair-student-classes-dialog";
-import { BulkResetStudentPasswordDialog } from "./bulk-reset-student-password-dialog";
-import { CreateStudentAccountDialog } from "./create-student-account-dialog";
-import { DeleteStudentDialog } from "./delete-student-dialog";
-import { EditStudentDialog } from "./edit-student-dialog";
-import { ImportStudentsExcelDialog } from "./import-students-excel-dialog";
-import { StudentIdDialog } from "./student-id-dialog";
 import { StudentStats } from "./student-stats";
+
+const AddStudentDialog = dynamic(() =>
+  import("./add-student-dialog").then((module) => module.AddStudentDialog),
+);
+const ImportStudentsExcelDialog = dynamic(() =>
+  import("./import-students-excel-dialog").then(
+    (module) => module.ImportStudentsExcelDialog,
+  ),
+);
+const BulkCreateStudentAccountsDialog = dynamic(() =>
+  import("./bulk-create-student-accounts-dialog").then(
+    (module) => module.BulkCreateStudentAccountsDialog,
+  ),
+);
+const BulkRepairStudentClassesDialog = dynamic(() =>
+  import("./bulk-repair-student-classes-dialog").then(
+    (module) => module.BulkRepairStudentClassesDialog,
+  ),
+);
+const BulkResetStudentPasswordDialog = dynamic(() =>
+  import("./bulk-reset-student-password-dialog").then(
+    (module) => module.BulkResetStudentPasswordDialog,
+  ),
+);
+const StudentIdDialog = dynamic(() =>
+  import("./student-id-dialog").then((module) => module.StudentIdDialog),
+);
+const EditStudentDialog = dynamic(() =>
+  import("./edit-student-dialog").then((module) => module.EditStudentDialog),
+);
+const DeleteStudentDialog = dynamic(() =>
+  import("./delete-student-dialog").then(
+    (module) => module.DeleteStudentDialog,
+  ),
+);
+const CreateStudentAccountDialog = dynamic(() =>
+  import("./create-student-account-dialog").then(
+    (module) => module.CreateStudentAccountDialog,
+  ),
+);
 
 function formatBirthInfo(
   tempatLahir?: string | null,
@@ -171,7 +204,6 @@ function getStudentRenderKey(student: StudentListItem, index: number) {
 
 export function StudentList() {
   const today = getTodayDateString();
-  const desktopRuntime = isTauri();
   const [selectedStudent, setSelectedStudent] =
     useState<StudentListItem | null>(null);
   const [selectedStudentForCard, setSelectedStudentForCard] =
@@ -345,14 +377,6 @@ export function StudentList() {
         </div>
       ) : null}
 
-      {desktopRuntime && !isStudentView ? (
-        <InlineState
-          title="Desktop students dibuka dalam mode desktop-safe"
-          description="Roster, detail siswa, tambah, edit, hapus, buat akun per siswa, import Excel, bulk account ops, repair kelas legacy, shortcut attendance, export, dan cetak kartu sudah memakai jalur local desktop. Jalur yang dibuka tetap dipagari oleh role admin/super_admin."
-          variant="info"
-        />
-      ) : null}
-
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
         <div className="flex flex-col gap-6">
           {!isStudentView ? (
@@ -379,82 +403,18 @@ export function StudentList() {
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-                    <div className="space-y-4">
-                      <div className="relative w-full xl:max-w-xl">
-                        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(event) => {
-                            setSearchQuery(event.target.value);
-                            setCurrentPage(1);
-                          }}
-                          placeholder="Cari nama, NIS, kelas..."
-                          className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-all shadow-inner focus:ring-2 focus:ring-sky-500/20"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-between">
-                        <Select
-                          value={accountFilter}
-                          onValueChange={(value) =>
-                            setAccountFilter(
-                              value as
-                                | "all"
-                                | "with_account"
-                                | "without_account",
-                            )
-                          }
-                        >
-                          <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                            <SelectItem value="all">Semua Akun</SelectItem>
-                            <SelectItem value="with_account">
-                              Sudah Punya Akun
-                            </SelectItem>
-                            <SelectItem value="without_account">
-                              Belum Punya Akun
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <Select
-                          value={sortBy}
-                          onValueChange={(value) => {
-                            setSortBy(value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:flex-1">
-                            <ArrowDownAZ className="mr-2 h-4 w-4 text-zinc-500" />
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                            <SelectItem value="createdAt">Terbaru</SelectItem>
-                            <SelectItem value="fullName">Nama</SelectItem>
-                            <SelectItem value="nis">NIS</SelectItem>
-                            <SelectItem value="grade">Kelas</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <Select
-                          value={sortDir}
-                          onValueChange={(value) => {
-                            setSortDir(value as "asc" | "desc");
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                            <SelectItem value="desc">Desc</SelectItem>
-                            <SelectItem value="asc">Asc</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="relative w-full xl:max-w-xl">
+                      <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(event) => {
+                          setSearchQuery(event.target.value);
+                          setCurrentPage(1);
+                        }}
+                        placeholder="Cari nama, NIS, kelas..."
+                        className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-all shadow-inner focus:ring-2 focus:ring-sky-500/20"
+                      />
                     </div>
 
                     <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto xl:justify-end">
@@ -500,20 +460,101 @@ export function StudentList() {
                           Export Excel
                         </Button>
                       ) : null}
-                      {canRunStudentBulkActions ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setBulkActionsOpen((open) => !open)}
-                          className={`flex-1 transition-colors sm:flex-none ${studentOutlineButtonClass}`}
-                        >
-                          <Layers3 className="mr-2 h-4 w-4" />
-                          {bulkActionsOpen
-                            ? "Tutup Aksi Massal"
-                            : "Aksi Massal"}
-                        </Button>
-                      ) : null}
                     </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 border-t border-zinc-800/50 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-3">
+                    <Select
+                      value={accountFilter}
+                      onValueChange={(value) =>
+                        setAccountFilter(
+                          value as
+                            | "all"
+                            | "with_account"
+                            | "without_account",
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:w-[180px]">
+                        <div className="flex flex-1 items-center justify-center">
+                          <UserCircle className="mr-2 h-4 w-4 text-zinc-500" />
+                          <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="all">Semua Akun</SelectItem>
+                        <SelectItem value="with_account">
+                          Sudah Punya Akun
+                        </SelectItem>
+                        <SelectItem value="without_account">
+                          Belum Punya Akun
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={sortBy}
+                      onValueChange={(value) => {
+                        setSortBy(value);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:w-[180px]">
+                        <div className="flex flex-1 items-center justify-center">
+                          <ArrowDownAZ className="mr-2 h-4 w-4 text-zinc-500" />
+                          <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="createdAt">Terbaru</SelectItem>
+                        <SelectItem value="fullName">Nama</SelectItem>
+                        <SelectItem value="nis">NIS</SelectItem>
+                        <SelectItem value="grade">Kelas</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={sortDir}
+                      onValueChange={(value) => {
+                        setSortDir(value as "asc" | "desc");
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full rounded-2xl border-zinc-800 bg-zinc-950 text-zinc-200 sm:w-[120px]">
+                        <div className="flex flex-1 items-center justify-center">
+                          <ArrowUpDown className="mr-2 h-4 w-4 text-zinc-500" />
+                          <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                        <SelectItem value="desc">Desc</SelectItem>
+                        <SelectItem value="asc">Asc</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {canRunStudentBulkActions ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setBulkActionsOpen((open) => !open)}
+                        className={`w-full transition-all duration-300 sm:w-auto sm:min-w-[150px] px-6 rounded-2xl ${
+                          bulkActionsOpen
+                            ? "border-sky-500/50 bg-sky-500/10 text-sky-400 shadow-[0_0_20px_-5px_rgba(14,165,233,0.3)] ring-1 ring-sky-500/20"
+                            : studentOutlineButtonClass
+                        }`}
+                      >
+                        <div className="flex items-center justify-center">
+                          <Layers3
+                            className={`mr-2 h-4 w-4 transition-transform duration-300 ${
+                              bulkActionsOpen ? "rotate-180 text-sky-400" : "text-zinc-500"
+                            }`}
+                          />
+                          <span className="font-semibold">
+                            {bulkActionsOpen ? "Tutup Aksi" : "Aksi Massal"}
+                          </span>
+                        </div>
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -842,7 +883,7 @@ export function StudentList() {
                   [
                     "Password Login",
                     selectedStudent.hasAccount
-                      ? "Tersimpan aman (hash), gunakan reset password untuk mengganti."
+                      ? "Tersimpan aman, gunakan reset password untuk mengganti."
                       : "-",
                   ],
                   [

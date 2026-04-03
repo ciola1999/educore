@@ -1,4 +1,3 @@
-import { isTauri } from "@/core/env";
 import { getApiTimeoutMs } from "@/lib/runtime/app-bootstrap";
 import {
   type ApiResponse,
@@ -12,14 +11,17 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 };
 
 const shouldLogApiDebug = process.env.NEXT_PUBLIC_DEBUG_API === "1";
-const shouldUseDesktopLocalApi =
-  process.env.NODE_ENV !== "production" && isTauri();
 
 async function getDesktopLocalApiResponse(
   input: string,
   options: { method: string; body: unknown },
 ) {
-  if (!shouldUseDesktopLocalApi) {
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
+
+  const { isTauri } = await import("@/core/env");
+  if (!isTauri()) {
     return null;
   }
 

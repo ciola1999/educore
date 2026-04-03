@@ -1,4 +1,3 @@
-import { getAttendanceRiskFollowUpHistory } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -38,6 +37,9 @@ export async function GET(request: Request) {
   }
 
   try {
+    const { getAttendanceRiskFollowUpHistory } = await import(
+      "@/core/services/attendance-service"
+    );
     const history = await getAttendanceRiskFollowUpHistory(studentId, {
       assigneeUserId: sessionUser.id,
       allowAnyAssignee,

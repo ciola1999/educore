@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPost, apiPut } from "@/lib/api/request";
-import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { InlineState } from "../common/inline-state";
 import {
   buildAttendanceHistoryFileScope,
@@ -162,6 +161,15 @@ function getDaysAgoDateString(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
+}
+
+async function exportAttendanceRowsToXlsx(input: {
+  fileName: string;
+  sheetName: string;
+  rows: Record<string, unknown>[];
+}) {
+  const { exportRowsToXlsx } = await import("@/lib/export/xlsx");
+  return exportRowsToXlsx(input);
 }
 
 export function DailyLogView({
@@ -719,7 +727,7 @@ export function DailyLogView({
         status: historyStatus,
       });
 
-      await exportRowsToXlsx({
+      await exportAttendanceRowsToXlsx({
         fileName: `attendance-history-${fileScope}.xlsx`,
         sheetName: "Attendance History",
         rows,
@@ -742,7 +750,7 @@ export function DailyLogView({
         return;
       }
 
-      await exportRowsToXlsx({
+      await exportAttendanceRowsToXlsx({
         fileName: `attendance-class-summary-${historyStartDate || "all"}-${historyEndDate || "all"}-${historySource}-${historyStatus}.xlsx`,
         sheetName: "Class Summary",
         rows: historyClassSummary.map((item) => ({
@@ -775,7 +783,7 @@ export function DailyLogView({
         return;
       }
 
-      await exportRowsToXlsx({
+      await exportAttendanceRowsToXlsx({
         fileName: `attendance-student-summary-${historyStartDate || "all"}-${historyEndDate || "all"}-${analyticsClassFilter}-${historySource}-${historyStatus}.xlsx`,
         sheetName: "Student Summary",
         rows: historyStudentSummary.map((item) => ({
@@ -833,7 +841,7 @@ export function DailyLogView({
         return;
       }
 
-      await exportRowsToXlsx({
+      await exportAttendanceRowsToXlsx({
         fileName: `attendance-risk-ranking-${historyStartDate || "all"}-${historyEndDate || "all"}-${analyticsClassFilter}.xlsx`,
         sheetName: "Risk Ranking",
         rows,
@@ -881,7 +889,7 @@ export function DailyLogView({
         return;
       }
 
-      await exportRowsToXlsx({
+      await exportAttendanceRowsToXlsx({
         fileName: `attendance-analytics-${historyStartDate || "all"}-${historyEndDate || "all"}-${analyticsClassFilter}.xlsx`,
         sheetName: "Analytics",
         rows,
@@ -973,7 +981,7 @@ export function DailyLogView({
         return;
       }
 
-      await exportRowsToXlsx({
+      await exportAttendanceRowsToXlsx({
         fileName: `attendance-compare-${compareItemA.className}-vs-${compareItemB.className}-${historyStartDate || "all"}-${historyEndDate || "all"}.xlsx`,
         sheetName: "Compare Classes",
         rows: [compareItemA, compareItemB].map((item) => ({

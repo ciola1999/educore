@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -96,12 +97,10 @@ export function DashboardSidebar() {
   const [signingOut, setSigningOut] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const sidebarIconButtonClass =
-    "h-10 w-10 rounded-xl border border-zinc-700 bg-zinc-950/80 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white";
-  const sidebarMobileButtonClass =
-    "fixed left-4 top-4 z-50 h-11 w-11 rounded-2xl border border-zinc-700 bg-zinc-900/95 text-zinc-100 shadow-lg shadow-black/30 backdrop-blur-sm hover:border-zinc-600 hover:bg-zinc-800 md:hidden";
+
   const currentRole = (user?.role as AuthRole | undefined) ?? null;
   const routeKey = `${pathname ?? ""}?${searchParams?.toString() ?? ""}`;
+  
   const visibleMenuItems = menuItems.filter((item) =>
     currentRole
       ? getRuntimeSupportedDashboardPaths(
@@ -111,7 +110,6 @@ export function DashboardSidebar() {
   );
 
   useEffect(() => {
-    void routeKey;
     setIsMobileOpen(false);
   }, [routeKey]);
 
@@ -137,69 +135,95 @@ export function DashboardSidebar() {
     mobile: boolean;
   }) {
     return (
-      <div className="flex h-full flex-col text-white">
-        <div className="border-b border-zinc-800/50 bg-linear-to-b from-zinc-900 to-zinc-900/70 p-4 md:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className={cn("min-w-0", collapsed && !mobile && "w-full")}>
-              <div
-                className={cn(
-                  "flex items-center gap-2 font-bold tracking-tight",
-                  collapsed && !mobile ? "justify-center text-lg" : "text-xl",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 text-xs text-white shadow-lg shadow-cyan-950/30 ring-1 ring-white/10",
-                    collapsed && !mobile && "mx-auto h-10 w-10",
-                  )}
-                >
-                  EC
-                </div>
-                {collapsed && !mobile ? null : <span>EduCore</span>}
-              </div>
-              {collapsed && !mobile ? null : (
-                <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 shadow-sm shadow-black/10">
-                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-                    Role Aktif
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-100">
-                    {isLoading ? "loading..." : formatRoleLabel(currentRole)}
-                  </p>
-                </div>
-              )}
-            </div>
+      <div className="flex h-full flex-col text-zinc-100">
+        {/* ✨ Logo Section */}
+        <div className="relative border-zinc-800/50 p-6">
+          {/* 🔘 Toggle Button (Expanded State) */}
+          {!collapsed && !mobile && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-4 top-4 h-8 w-8 rounded-lg border border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:text-white transition-all duration-300"
+              onClick={() => setIsCollapsed(true)}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
+          )}
 
-            <div className="flex items-center gap-2">
-              {mobile ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className={sidebarIconButtonClass}
-                  onClick={() => setIsMobileOpen(false)}
-                >
-                  <PanelLeftClose className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className={`hidden md:inline-flex ${sidebarIconButtonClass}`}
-                  onClick={() => setIsCollapsed((value) => !value)}
-                >
-                  {collapsed ? (
-                    <PanelLeftOpen className="h-4 w-4" />
-                  ) : (
-                    <PanelLeftClose className="h-4 w-4" />
-                  )}
-                </Button>
+          <div className="flex items-center gap-4">
+            <div className={cn("flex flex-1 items-center gap-3", collapsed && !mobile && "justify-center")}>
+              <div className="relative group/logo">
+                <div className="absolute -inset-2 bg-indigo-500/20 rounded-2xl blur-lg opacity-0 group-hover/logo:opacity-100 transition-opacity duration-500" />
+                <div className="relative flex h-10 w-10 items-center justify-center rounded-[0.85rem] bg-indigo-600 font-black text-white shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
+                  <span className="text-sm">EC</span>
+                </div>
+              </div>
+              
+              {(!collapsed || mobile) && (
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-lg font-black tracking-tighter text-white uppercase">
+                    EDUCORE
+                  </h1>
+                  <p className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-500">
+                    Academic Hub
+                  </p>
+                </div>
               )}
             </div>
           </div>
+
+          {(!collapsed || mobile) && (
+            <div className="mt-8 relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 ring-1 ring-white/5">
+              <div className="absolute top-0 right-0 -mr-2 -mt-2 h-12 w-12 rounded-full bg-indigo-500/5 blur-xl" />
+              <div className="relative flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-950/50 border border-zinc-800 text-zinc-400">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Active Identity</p>
+                  <p className="truncate text-xs font-bold text-zinc-200">
+                    {isLoading ? "Synchronizing..." : formatRoleLabel(currentRole)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🔘 Sidebar Control Area (Collapsed/Mobile) */}
+          <div className={cn("mt-4 flex", collapsed && !mobile ? "justify-center" : "hidden")}>
+            {mobile ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl border border-zinc-800 bg-zinc-950/50 text-zinc-400 hover:text-white"
+                onClick={() => setIsMobileOpen(false)}
+              >
+                <PanelLeftClose className="h-4.5 w-4.5" />
+              </Button>
+            ) : collapsed && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-xl border border-zinc-800 bg-zinc-950/50 text-zinc-400 hover:text-white hover:border-indigo-500/30"
+                onClick={() => setIsCollapsed(false)}
+              >
+                <PanelLeftOpen className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-1 px-3 py-6">
+        {/* 🧭 Navigation Menu */}
+        <div className="flex-1 space-y-1.5 px-4 py-8 overflow-y-auto scrollbar-hide">
+          {(!collapsed || mobile) && (
+            <p className="px-3 mb-4 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-700">
+              Main Management
+            </p>
+          )}
+
           {visibleMenuItems.map((item) => {
             const currentTab = searchParams.get("tab");
             const itemUrl = new URL(item.href, "http://localhost");
@@ -215,73 +239,70 @@ export function DashboardSidebar() {
                 title={item.label}
                 aria-label={item.label}
                 className={cn(
-                  "group relative flex items-center rounded-2xl text-sm font-medium transition-all",
-                  collapsed && !mobile
-                    ? "justify-center px-2 py-3.5"
-                    : "gap-3 px-3 py-3",
+                  "group relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition-all duration-300",
+                  collapsed && !mobile ? "justify-center" : "justify-start",
                   isActive
-                    ? "bg-linear-to-r from-zinc-800 to-zinc-800/80 text-white shadow-sm shadow-black/20 ring-1 ring-white/5"
-                    : "text-zinc-400 hover:bg-zinc-800/80 hover:text-white",
+                    ? "bg-indigo-600/10 text-indigo-300 ring-1 ring-indigo-500/20 shadow-[0_0_20px_rgba(79,70,229,0.1)]"
+                    : "text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-200"
                 )}
               >
-                <span
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all",
-                    isActive
-                      ? "border-zinc-700 bg-zinc-900/80 shadow-inner shadow-black/20"
-                      : "border-transparent bg-transparent group-hover:border-zinc-800 group-hover:bg-zinc-900/70",
-                  )}
-                >
-                  <item.icon className={cn("h-5 w-5 shrink-0", item.color)} />
-                </span>
-                {collapsed && !mobile ? null : (
-                  <>
-                    <span className="flex-1">{item.label}</span>
-                    <span
-                      className={cn(
-                        "rounded-md border px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
-                        item.phaseTag === "P1"
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                          : "border-amber-500/30 bg-amber-500/10 text-amber-300",
-                      )}
-                    >
-                      {item.phaseTag}
-                    </span>
-                  </>
+                {isActive && (
+                  <div className="absolute inset-y-2 left-0 w-1 rounded-full bg-indigo-500" />
+                )}
+                
+                <item.icon className={cn(
+                  "h-5 w-5 transition-transform duration-300 group-hover:scale-110",
+                  isActive ? "text-indigo-400" : "text-zinc-600 group-hover:text-zinc-400"
+                )} />
+                
+                {(!collapsed || mobile) && (
+                  <span className="flex-1 tracking-tight">{item.label}</span>
+                )}
+                
+                {(!collapsed || mobile) && isActive && (
+                  <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(79,70,229,0.8)]" />
                 )}
               </Link>
             );
           })}
         </div>
 
-        <div className="border-t border-zinc-800/50 p-4">
-          {collapsed && !mobile ? null : (
-            <div className="mb-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2.5">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-                Workspace
-              </p>
-              <p className="mt-1 text-sm font-medium text-zinc-200">
-                {visibleMenuItems.length} menu aktif untuk{" "}
-                {formatRoleLabel(currentRole)}
+        {/* 🚪 Sidebar Footer */}
+        <div className="mt-auto p-4 space-y-3">
+          {(!collapsed || mobile) && (
+            <div className="rounded-2xl bg-zinc-900/40 border border-zinc-800 p-3 ring-1 ring-white/5">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Runtime Guard</span>
+              </div>
+              <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                {visibleMenuItems.length} modules active for this instance.
               </p>
             </div>
           )}
+
           <Button
             variant="ghost"
             disabled={signingOut}
-            className={cn(
-              "w-full rounded-2xl",
-              collapsed && !mobile
-                ? "justify-center border border-zinc-800 bg-zinc-950/60 px-0 text-zinc-400 hover:border-red-500/30 hover:bg-red-900/10 hover:text-red-400"
-                : "justify-start gap-2 border border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:border-red-500/30 hover:bg-red-900/10 hover:text-red-400",
-            )}
             onClick={() => {
               void handleSignOut();
             }}
+            className={cn(
+              "w-full h-12 rounded-2xl transition-all duration-300",
+              collapsed && !mobile
+                ? "justify-center border border-zinc-800 bg-zinc-950/40"
+                : "justify-start gap-4 border border-zinc-800 bg-zinc-950/40 px-4",
+              "text-zinc-500 hover:text-rose-400 hover:border-rose-500/20 hover:bg-rose-500/5 group"
+            )}
           >
-            <LogOut className="h-4 w-4" />
-            {collapsed && !mobile ? null : (
-              <span>{signingOut ? "Signing out..." : "Sign Out"}</span>
+            <LogOut className={cn(
+              "h-4 w-4 transition-transform group-hover:-translate-x-1",
+              signingOut && "animate-pulse"
+            )} />
+            {(!collapsed || mobile) && (
+              <span className="font-bold text-xs uppercase tracking-widest">
+                {signingOut ? "Signing out..." : "Log Out"}
+              </span>
             )}
           </Button>
         </div>
@@ -295,34 +316,35 @@ export function DashboardSidebar() {
         type="button"
         variant="ghost"
         size="icon"
-        className={sidebarMobileButtonClass}
+        className="fixed left-4 top-4 z-50 h-11 w-11 rounded-2xl border border-zinc-800 bg-zinc-900/40 shadow-2xl backdrop-blur-md text-white transition-all hover:bg-zinc-800 md:hidden"
         onClick={() => setIsMobileOpen(true)}
       >
         <Menu className="h-5 w-5" />
       </Button>
 
-      {isMobileOpen ? (
-        <button
-          type="button"
-          aria-label="Close sidebar overlay"
-          className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px] md:hidden"
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-300 md:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
-      ) : null}
+      )}
 
+      {/* Mobile Aside */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-[min(82vw,20rem)] border-r border-zinc-800 bg-zinc-900/98 shadow-2xl shadow-black/40 transition-transform duration-300 md:hidden",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 w-[280px] border-r border-zinc-800 bg-zinc-950/80 backdrop-blur-xl shadow-2xl transition-transform duration-300 md:hidden",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {renderSidebarContent({ collapsed: false, mobile: true })}
       </aside>
 
+      {/* Desktop Aside */}
       <aside
         className={cn(
-          "hidden h-full border-r border-zinc-800 bg-zinc-900 md:flex md:flex-col md:transition-all md:duration-300",
-          isCollapsed ? "md:w-20" : "md:w-64",
+          "hidden h-full border-r border-zinc-800 bg-zinc-950/40 backdrop-blur-md md:flex md:flex-col transition-all duration-500 ease-in-out",
+          isCollapsed ? "md:w-24" : "md:w-72"
         )}
       >
         {renderSidebarContent({ collapsed: isCollapsed, mobile: false })}

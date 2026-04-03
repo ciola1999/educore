@@ -1,8 +1,8 @@
-import { processQRScan } from "@/core/services/attendance-service";
-import { qrScanSchema } from "@/core/validation/schemas";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const { qrScanSchema } = await import("@/core/validation/schemas");
     const parsed = qrScanSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -32,6 +33,9 @@ export async function POST(request: Request) {
     }
 
     const { qrData } = parsed.data;
+    const { processQRScan } = await import(
+      "@/core/services/attendance-service"
+    );
     const result = await processQRScan(qrData);
     return apiOk(result);
   } catch (error) {

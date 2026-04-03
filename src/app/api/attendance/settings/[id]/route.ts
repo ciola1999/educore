@@ -1,4 +1,3 @@
-import { deleteAttendanceSetting } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -24,6 +23,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   try {
+    const { deleteAttendanceSetting } = await import(
+      "@/core/services/attendance-service"
+    );
     await deleteAttendanceSetting(id);
     return apiOk({ success: true });
   } catch (error) {

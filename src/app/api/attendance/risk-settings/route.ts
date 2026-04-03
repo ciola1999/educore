@@ -1,7 +1,3 @@
-import {
-  getAttendanceRiskSettings,
-  upsertAttendanceRiskSettings,
-} from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -16,6 +12,9 @@ export async function GET() {
   }
 
   try {
+    const { getAttendanceRiskSettings } = await import(
+      "@/core/services/attendance-service"
+    );
     const settings = await getAttendanceRiskSettings();
     return apiOk(settings);
   } catch (error) {
@@ -41,6 +40,9 @@ export async function PUT(request: Request) {
       rateThreshold?: number;
     };
 
+    const { upsertAttendanceRiskSettings } = await import(
+      "@/core/services/attendance-service"
+    );
     const settings = await upsertAttendanceRiskSettings({
       alphaThreshold: Number(body.alphaThreshold ?? 0),
       lateThreshold: Number(body.lateThreshold ?? 0),

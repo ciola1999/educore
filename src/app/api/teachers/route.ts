@@ -1,11 +1,6 @@
 import { requirePermission, requireRole } from "@/lib/api/authz";
 import { apiCreated, apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import {
-  addTeacher,
-  getTeacherOptions,
-  getTeachers,
-} from "@/lib/services/teacher";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +15,7 @@ export async function GET(request: Request) {
       return guard;
     }
 
+    const { getTeacherOptions } = await import("@/lib/services/teacher");
     const teachers = await getTeacherOptions();
     return apiOk(teachers);
   }
@@ -34,6 +30,7 @@ export async function GET(request: Request) {
   const sortBy = searchParams.get("sortBy") || undefined;
   const sortOrder = searchParams.get("sortOrder") || undefined;
 
+  const { getTeachers } = await import("@/lib/services/teacher");
   const teachers = await getTeachers({
     search,
     role: roleFilter as
@@ -57,6 +54,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
+  const { addTeacher } = await import("@/lib/services/teacher");
   const result = await addTeacher(body);
 
   if (!result.success) {

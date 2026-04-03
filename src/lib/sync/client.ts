@@ -1,5 +1,6 @@
 import { type Client, createClient } from "@libsql/client/web";
 import { isTauri } from "@/core/env";
+import type { SyncResult, SyncStatus } from "./types";
 
 type SyncConfig = {
   url: string;
@@ -58,11 +59,4 @@ export async function getTursoCloudClient(): Promise<Client> {
   return tursoCloudClientPromise;
 }
 
-export type SyncStatus = "idle" | "syncing" | "success" | "error";
-
-export interface SyncResult {
-  status: SyncStatus;
-  message: string;
-  uploaded?: number;
-  downloaded?: number;
-}
+export type { SyncResult, SyncStatus };

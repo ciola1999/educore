@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -33,9 +34,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiDelete, apiGet } from "@/lib/api/request";
-import { AddScheduleDialog } from "./add-schedule-dialog";
-import { EditScheduleDialog } from "./edit-schedule-dialog";
 import type { JadwalItem, LegacyScheduleAuditReport } from "./schemas";
+
+const AddScheduleDialog = dynamic(
+  () =>
+    import("./add-schedule-dialog").then((module) => module.AddScheduleDialog),
+  { ssr: false },
+);
+
+const EditScheduleDialog = dynamic(
+  () =>
+    import("./edit-schedule-dialog").then(
+      (module) => module.EditScheduleDialog,
+    ),
+  { ssr: false },
+);
 
 const DAY_LABELS = [
   "Minggu",
@@ -195,8 +208,8 @@ export function ScheduleList({ readOnly = false }: { readOnly?: boolean }) {
           title="Masih ada backlog schedule legacy"
           description={
             legacyAuditSummary.actionableRows > 0
-              ? `${legacyAuditSummary.actionableRows} row legacy masih perlu dipromosikan atau diperbaiki sebelum cleanup Phase 2.2 bisa benar-benar tuntas.`
-              : `${legacyAuditSummary.totalLegacyRows} row legacy sudah terdeteksi. Audit tetap perlu dipantau sampai cleanup selesai.`
+              ? `${legacyAuditSummary.actionableRows} row legacy masih perlu dipromosikan atau diperbaiki agar jadwal aktif tetap konsisten.`
+              : `${legacyAuditSummary.totalLegacyRows} row legacy sudah terdeteksi. Audit tetap perlu dipantau sampai seluruh data lama bersih.`
           }
           variant="warning"
           actionLabel="Buka Audit Jadwal"

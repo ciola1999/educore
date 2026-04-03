@@ -5,7 +5,6 @@ import { getSession, signIn, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useAuthSessionRuntime } from "@/components/providers/auth-session-provider";
 import { isTauri } from "@/core/env";
-import { apiPost } from "@/lib/api/request";
 import {
   clearForcedLogoutMarker,
   setForcedLogoutMarker,
@@ -337,6 +336,7 @@ export function useAuth() {
       }
 
       try {
+        const { apiPost } = await import("@/lib/api/request");
         await withTimeout(
           apiPost<{ user: UserSession }>("/api/auth/login", {
             email: identifier,

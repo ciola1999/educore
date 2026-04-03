@@ -1,7 +1,6 @@
 import { requirePermission } from "@/lib/api/authz";
 import { apiCreated, apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { addAcademicYear, getAcademicYears } from "@/lib/services/academic";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +11,7 @@ export async function GET() {
     return guard;
   }
 
+  const { getAcademicYears } = await import("@/lib/services/academic");
   return apiOk(await getAcademicYears());
 }
 
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
     return guard;
   }
 
+  const { addAcademicYear } = await import("@/lib/services/academic");
   const result = await addAcademicYear(await request.json());
   if (!result.success) {
     return apiError(

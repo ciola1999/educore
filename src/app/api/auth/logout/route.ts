@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/web/auth";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Logout API Route
  *

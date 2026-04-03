@@ -1,7 +1,6 @@
 import { requireRole } from "@/lib/api/authz";
 import { apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { getDashboardStats } from "@/lib/services/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +17,7 @@ export async function GET() {
     return guard;
   }
 
+  const { getDashboardStats } = await import("@/lib/services/dashboard");
   const stats = await getDashboardStats();
   return apiOk(stats);
 }

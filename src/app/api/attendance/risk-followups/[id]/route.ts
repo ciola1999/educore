@@ -1,7 +1,3 @@
-import {
-  markAttendanceRiskNotificationRead,
-  updateAttendanceRiskFollowUp,
-} from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -48,6 +44,10 @@ export async function PATCH(
       body &&
       ("note" in body || "deadline" in body || "assigneeUserId" in body)
     ) {
+      const { updateAttendanceRiskFollowUp } = await import(
+        "@/core/services/attendance-service"
+      );
+
       if (typeof body.note === "string" && body.note.trim().length > 300) {
         return apiError(
           "Catatan follow-up maksimal 300 karakter",
@@ -95,6 +95,9 @@ export async function PATCH(
       return apiOk({ success: true });
     }
 
+    const { markAttendanceRiskNotificationRead } = await import(
+      "@/core/services/attendance-service"
+    );
     await markAttendanceRiskNotificationRead(id, sessionUser.id, {
       allowAnyAssignee: canManageAnyAssignee,
     });

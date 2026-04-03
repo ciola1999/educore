@@ -1,7 +1,3 @@
-import {
-  getAttendanceSettings,
-  upsertAttendanceSetting,
-} from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -17,6 +13,9 @@ export async function GET() {
   }
 
   try {
+    const { getAttendanceSettings } = await import(
+      "@/core/services/attendance-service"
+    );
     const data = await getAttendanceSettings();
     return apiOk(data);
   } catch (error) {
@@ -39,6 +38,9 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as NewAttendanceSetting;
+    const { upsertAttendanceSetting } = await import(
+      "@/core/services/attendance-service"
+    );
     await upsertAttendanceSetting(body);
     return apiOk({ success: true });
   } catch (error) {

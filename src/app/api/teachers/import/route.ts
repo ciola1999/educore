@@ -3,7 +3,6 @@ import { z } from "zod";
 import { AUTH_ROLES, type AuthRole } from "@/core/auth/roles";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
-import { hashPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -326,6 +325,7 @@ export async function POST(request: Request) {
     .from(users)
     .where(inArray(users.email, emails));
   const existingByEmail = new Map(existingUsers.map((row) => [row.email, row]));
+  const { hashPassword } = await import("@/lib/auth/hash");
 
   let created = 0;
   let updated = 0;

@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
-import { InlineState } from "@/components/common/inline-state";
 import { isTauri } from "@/core/env";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useAuth } from "@/hooks/use-auth";
@@ -81,22 +80,6 @@ const readOnlyMenuItems: AttendanceMenuItem[] = [
     icon: CalendarCheck,
   },
 ];
-
-const sectionSurfaceClass =
-  "relative overflow-hidden rounded-[2rem] border border-zinc-800/90 bg-linear-to-br from-zinc-950/80 via-zinc-950/68 to-zinc-900/48 p-6 shadow-2xl shadow-black/20 backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-linear-to-r before:from-transparent before:via-white/12 before:to-transparent";
-const overviewCardClass =
-  "rounded-[1.6rem] border p-5 shadow-sm shadow-black/10";
-const sectionTransitionClass =
-  "animate-in fade-in slide-in-from-bottom-4 duration-300";
-const attendanceStackClass = "space-y-6 lg:space-y-7";
-const sectionHeaderShellClass =
-  "rounded-[1.6rem] border border-zinc-800/80 bg-linear-to-r from-zinc-950/88 via-zinc-950/72 to-zinc-900/52 px-5 py-4 shadow-sm shadow-black/10";
-const sectionHeaderIconShellClass =
-  "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-sm shadow-black/10";
-const sectionHeaderEyebrowClass =
-  "text-[11px] font-medium uppercase tracking-[0.22em]";
-const sectionHeaderTitleClass = "mt-1 text-lg font-semibold tracking-tight";
-const sectionHeaderCopyClass = "mt-1 text-sm text-zinc-400";
 
 const sectionThemes: Record<AttendanceSection, AttendanceSectionTheme> = {
   qr: {
@@ -391,601 +374,205 @@ export function AttendancePageClient({
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 lg:space-y-8">
-      <div
-        className={cn(
-          sectionSurfaceClass,
-          "px-5 py-5 sm:px-6 sm:py-6 before:via-emerald-200/15",
-        )}
-      >
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -left-10 top-0 h-32 w-32 rounded-full bg-emerald-500/10 blur-3xl" />
-          <div className="absolute right-0 top-8 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl" />
-          <div className="absolute bottom-0 left-1/3 h-24 w-24 rounded-full bg-teal-400/8 blur-2xl" />
+    <div className="min-h-full space-y-10 p-1 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* 🚀 Hero Section */}
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-zinc-800/80 bg-zinc-950/40 p-6 shadow-2xl backdrop-blur-md md:p-10 lg:p-12">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-y-0 right-0 w-full lg:w-1/2">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.15),transparent_65%)]" />
+          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px]" />
+          <div className="absolute top-1/2 -right-48 h-96 w-96 rounded-full bg-cyan-500/5 blur-[120px]" />
         </div>
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100">
+        
+        <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-300">
               <Sparkles className="h-3.5 w-3.5" />
-              Pusat Kendali Attendance
+              <span>Attendance Hub</span>
             </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-[2.7rem]">
-              <span className="bg-linear-to-r from-emerald-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent">
-                Manajemen Absensi
-              </span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base lg:text-lg">
-              {canWriteAttendance
-                ? desktopRuntime
-                  ? "Absensi manual, scanner QR, history, settings, holidays, dan risk follow-up inti sekarang berjalan lewat local desktop path yang sama untuk retest operasional."
-                  : "Absensi manual, scanner QR, dan insight kehadiran berjalan di atas route backend yang tervalidasi untuk web."
-                : desktopRuntime
-                  ? "Riwayat dan insight attendance tersedia di desktop sesuai permission role aktif tanpa membuka jalur tulis yang tidak diizinkan."
-                  : "Riwayat dan insight attendance tersedia sesuai permission role aktif tanpa membuka jalur tulis yang tidak diizinkan."}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
-                {canWriteAttendance ? "Operasional Penuh" : "Analitik Aman"}
-              </span>
-              <span className="rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-                {desktopRuntime ? "Desktop Retest Safe" : "Siap Web"}
-              </span>
-              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">
-                Sinkron Siswa ke Attendance
-              </span>
+            
+            <div className="space-y-4">
+              <h1 className="bg-linear-to-r from-white via-emerald-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
+                Absensi & Giat
+              </h1>
+              <p className="max-w-2xl text-base leading-relaxed text-zinc-400 md:text-lg">
+                {canWriteAttendance
+                  ? desktopRuntime
+                    ? "Pusat kendali absensi terpadu dengan integrasi QR Scanner, input manual per kelas, dan analisis risiko kehadiran secara real-time melalui jalur runtime lokal."
+                    : "Kelola kehadiran siswa secara cerdas. Scanner QR, input log harian, dan pemantauan absensi terintegrasi penuh dalam satu alur kerja yang intuitif."
+                  : "Pantau riwayat dan perkembangan kehadiran siswa secara komprehensif. Dapatkan informasi detail mengenai log absensi dan tren harian dengan aman."}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-300">
+                <ShieldCheck className="h-4 w-4" />
+                {canWriteAttendance ? "Operasional Penuh" : "Mode Baca Saja"}
+              </div>
+              <div className="flex items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                {desktopRuntime ? "Desktop Active" : "Web Online"}
+              </div>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[220px]">
             {[
-              {
-                label: "Mode Peran",
-                value: canWriteAttendance ? "Operator Penuh" : "Baca Saja",
-              },
-              {
-                label: "Section Aktif",
-                value: activeMenuItem?.label || "-",
-              },
-              {
-                label: "Alur Runtime",
-                value: canWriteAttendance
-                  ? "QR + Manual + Analitik"
-                  : "Analitik Saja",
-              },
+              { label: "Section", value: activeMenuItem?.label || "-", icon: QrCode },
+              { label: "Sinkronisasi", value: attendanceBootstrapState === "ready" ? "Sudah Siap" : "Sedang Proses", icon: ClipboardList },
+              { label: "Scope", value: "Real-time", icon: Sparkles },
             ].map((item) => (
-              <div
+              <div 
                 key={item.label}
-                className="rounded-[1.4rem] border border-zinc-800/80 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-500 shadow-lg shadow-black/10 backdrop-blur-sm"
+                className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
               >
-                <p className="uppercase tracking-[0.16em] text-zinc-500/90">
+                <div className="absolute inset-x-0 bottom-0 h-[2px] w-0 bg-emerald-500 transition-all duration-300 group-hover:w-full" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
                   {item.label}
                 </p>
-                <p className="mt-2 text-sm font-semibold text-zinc-100">
+                <p className="mt-1 text-sm font-semibold text-zinc-200">
                   {item.value}
                 </p>
               </div>
             ))}
           </div>
         </div>
-      </div>
-      {canReadAttendance ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div
-            className={cn(
-              overviewCardClass,
-              "border-emerald-500/20 bg-emerald-500/5",
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="h-5 w-5 text-emerald-300" />
-              <div>
-                <p className="text-sm font-semibold text-emerald-200">
-                  Akses Baca Aktif
-                </p>
-                <p className="text-sm text-emerald-100/80">
-                  Log hari ini dan riwayat absensi tersedia untuk role{" "}
-                  <span className="font-semibold">{user?.role || "-"}</span>.
-                </p>
-              </div>
+      </section>
+
+      {/* 🧭 Section Navigation */}
+      <section className="space-y-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between px-2">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[1.25rem] border border-emerald-500/20 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
+              <ActiveSectionIcon className={cn("h-6 w-6", activeSectionTheme.accentClass)} />
             </div>
-          </div>
-
-          <div
-            className={cn(overviewCardClass, "border-sky-500/20 bg-sky-500/5")}
-          >
-            <div className="flex items-center gap-3">
-              {canWriteAttendance ? (
-                <ShieldCheck className="h-5 w-5 text-sky-300" />
-              ) : (
-                <ShieldMinus className="h-5 w-5 text-sky-300" />
-              )}
-              <div>
-                <p className="text-sm font-semibold text-sky-200">
-                  {canWriteAttendance ? "Akses Tulis Aktif" : "Mode Baca Saja"}
-                </p>
-                <p className="text-sm text-sky-100/80">
-                  {canWriteAttendance
-                    ? "QR scan dan input manual tersedia untuk operasi absensi harian."
-                    : "Aksi scan QR dan simpan absensi manual disembunyikan karena role ini tidak punya permission attendance:write."}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <InlineState
-          title="Akses absensi tidak tersedia"
-          description="Role aktif tidak memiliki permission untuk membuka data absensi."
-          variant="warning"
-        />
-      )}
-
-      {desktopRuntime && canReadAttendance ? (
-        <InlineState
-          title="Desktop attendance dibuka untuk retest operasional"
-          description="Today, history, QR, input manual, settings, holidays, risk insights, dan risk follow-up inti sekarang memakai local desktop path yang sama. Status ini cukup kuat untuk retest dan pre-production audit, tetapi belum saya klaim release artifact final."
-          variant="info"
-          className="text-sm"
-        />
-      ) : null}
-
-      {canReadAttendance ? (
-        <section className={attendanceStackClass}>
-          {attendanceBootstrapState === "failed" && attendanceBootstrapError ? (
-            <InlineState
-              title="Bootstrap attendance perlu perhatian"
-              description={attendanceBootstrapError}
-              actionLabel="Sinkronkan Ulang"
-              onAction={() => {
-                void runAttendanceBootstrap({ force: true });
-              }}
-              variant={
-                attendanceBootstrapError.includes("izin") ||
-                attendanceBootstrapError.includes("login")
-                  ? "warning"
-                  : "error"
-              }
-            />
-          ) : null}
-
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-100">
-                Menu Attendance
-              </h2>
-              <p className="text-sm text-zinc-400">
-                Setiap fitur dipisah ke menu sendiri agar alur lebih ringkas di
-                desktop maupun web.
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-expanded={!isMenuCollapsed}
-              aria-controls="attendance-section-menu"
-              onClick={() => setIsMenuCollapsed((current) => !current)}
-              className="inline-flex items-center gap-3 self-start rounded-[1.2rem] border border-zinc-800 bg-linear-to-r from-zinc-950/90 via-zinc-950/75 to-zinc-900/60 px-3.5 py-2.5 text-left text-zinc-300 shadow-sm shadow-black/10 transition hover:border-zinc-700 hover:bg-zinc-900/80 hover:text-zinc-100 xl:hidden"
-            >
-              <span
-                className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm shadow-black/10",
-                  activeSectionTheme.badgeClass,
-                )}
-              >
-                <ActiveSectionIcon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                  Section Aktif
-                </span>
-                <span className="mt-1 block truncate text-sm font-semibold text-zinc-100">
-                  {activeMenuItem?.label || "Attendance"}
-                </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <span className="rounded-full border border-zinc-800 bg-zinc-950/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-                  {isMenuCollapsed ? "Buka" : "Tutup"}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 transition-transform duration-200",
-                    isMenuCollapsed ? "rotate-0" : "rotate-180",
-                  )}
-                />
-              </span>
-            </button>
-          </div>
-
-          <div className="rounded-[1.6rem] border border-zinc-800/80 bg-linear-to-r from-zinc-950/85 via-zinc-950/70 to-zinc-900/45 px-5 py-4 shadow-sm shadow-black/10">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-3">
-                <span
-                  className={cn(
-                    "mt-0.5 hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-sm shadow-black/10 sm:inline-flex",
-                    activeSectionTheme.badgeClass,
-                  )}
-                >
-                  <ActiveSectionIcon className="h-4.5 w-4.5" />
-                </span>
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">
-                    Section Aktif
-                  </p>
-                  <h3 className="mt-2 text-lg font-semibold tracking-tight text-zinc-100">
-                    {activeMenuItem?.label || "Attendance"}
-                  </h3>
-                  <p className="mt-1 text-sm text-zinc-400">
-                    {activeMenuItem?.description ||
-                      "Pilih section untuk mulai mengelola attendance."}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em]",
-                    activeSectionTheme.badgeClass,
-                  )}
-                >
-                  {activeSectionTheme.eyebrow}
-                </span>
-                <span className="rounded-full border border-zinc-800 bg-zinc-950/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300">
-                  {canWriteAttendance ? "Tulis Aktif" : "Baca Saja"}
-                </span>
-                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
-                  Web + Desktop
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[1.4rem] border border-zinc-800/70 bg-zinc-950/45 px-4 py-3 shadow-sm shadow-black/10 xl:hidden">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500">
-                  Section Aktif
-                </p>
-                <h3 className="mt-1 truncate text-sm font-semibold tracking-tight text-zinc-100">
-                  {activeMenuItem?.label || "Attendance"}
-                </h3>
-              </div>
-              <span
-                className={cn(
-                  "rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                  activeSectionTheme.badgeClass,
-                )}
-              >
+              <p className={cn("text-[10px] font-bold uppercase tracking-[0.2em]", activeSectionTheme.accentClass)}>
                 {activeSectionTheme.eyebrow}
-              </span>
+              </p>
+              <h2 className="text-xl font-bold tracking-tight text-white">
+                {activeMenuItem?.label}
+              </h2>
             </div>
           </div>
 
-          <div
-            id="attendance-section-menu"
-            role="tablist"
-            aria-label="Section attendance"
-            className={cn(
-              "grid grid-cols-1 gap-3 overflow-hidden transition-all duration-300 ease-out sm:grid-cols-2 xl:grid-cols-5",
-              isMenuCollapsed
-                ? "pointer-events-none max-h-0 -translate-y-2 opacity-0 xl:pointer-events-auto xl:max-h-none xl:translate-y-0 xl:opacity-100"
-                : "pointer-events-auto max-h-[120rem] translate-y-0 opacity-100",
-            )}
+          <button
+            type="button"
+            onClick={() => setIsMenuCollapsed(!isMenuCollapsed)}
+            className="inline-flex items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all hover:border-zinc-700 hover:bg-zinc-900 xl:hidden"
           >
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeSection === item.id;
+            <ChevronDown className={cn("h-4 w-4 transition-transform", !isMenuCollapsed && "rotate-180")} />
+            {isMenuCollapsed ? "Pilih Menu" : "Tutup Menu"}
+          </button>
+        </div>
 
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => handleSectionChange(item.id)}
-                  className={cn(
-                    "min-h-28 overflow-hidden rounded-[1.6rem] border px-4 py-4 text-left transition-all duration-300 ease-out",
-                    isActive
-                      ? "border-emerald-500/40 bg-linear-to-br from-emerald-500/12 to-cyan-500/8 text-zinc-50 shadow-lg shadow-emerald-950/15"
-                      : "border-zinc-800 bg-zinc-950/50 text-zinc-300 hover:-translate-y-1 hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-100 hover:shadow-md hover:shadow-black/20",
-                  )}
-                  style={{
-                    transitionDelay: isMenuCollapsed
-                      ? "0ms"
-                      : `${menuItems.indexOf(item) * 35}ms`,
-                  }}
-                >
-                  <div className="flex w-full items-start gap-4">
-                    <div className="flex w-16 shrink-0 flex-col items-start gap-2">
-                      <span
-                        className={cn(
-                          "rounded-xl border p-2 shadow-sm shadow-black/10",
-                          isActive
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                            : "border-zinc-800 bg-zinc-900/80 text-emerald-300",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      {isActive ? (
-                        <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
-                          Aktif
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p
-                        className={cn(
-                          "text-[11px] font-medium uppercase tracking-[0.22em]",
-                          isActive
-                            ? activeSectionTheme.accentClass
-                            : "text-zinc-500",
-                        )}
-                      >
-                        {sectionThemes[item.id].eyebrow}
-                      </p>
-                      <div className="flex items-start">
-                        <p className="min-w-0 flex-1 text-sm font-semibold leading-snug break-words">
-                          {item.label}
-                        </p>
-                      </div>
-                      <p
-                        className={
-                          isActive
-                            ? "text-xs leading-relaxed text-zinc-200"
-                            : "text-xs leading-relaxed text-zinc-400"
-                        }
-                      >
-                        {item.description}
-                      </p>
-                    </div>
+        <div className={cn(
+          "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 transition-all duration-500 ease-in-out",
+          isMenuCollapsed && "hidden xl:grid"
+        )}>
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            const theme = sectionThemes[item.id];
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSectionChange(item.id)}
+                className={cn(
+                  "group relative flex flex-col justify-between overflow-hidden rounded-[2rem] border p-6 transition-all duration-300 hover:-translate-y-1",
+                  isActive 
+                    ? "border-emerald-500/40 bg-emerald-500/10 shadow-emerald-950/20 shadow-2xl" 
+                    : "border-zinc-800/60 bg-zinc-950/40 hover:border-emerald-500/30 hover:bg-zinc-900/40"
+                )}
+              >
+                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-500/5 blur-2xl transition-all group-hover:bg-emerald-500/10" />
+                
+                <div className="space-y-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/80 text-emerald-400 shadow-inner group-hover:border-emerald-500/20 group-hover:bg-emerald-500/5">
+                    <Icon className="h-6 w-6" />
                   </div>
-                </button>
-              );
-            })}
+                  
+                  <div className="text-left">
+                    <p className={cn("text-[10px] font-bold uppercase tracking-[0.2em]", isActive ? theme.accentClass : "text-zinc-500 group-hover:text-zinc-400")}>
+                      {theme.eyebrow}
+                    </p>
+                    <h3 className={cn("mt-1.5 text-base font-bold transition-colors", isActive ? "text-white" : "text-zinc-300 group-hover:text-white")}>
+                      {item.label}
+                    </h3>
+                  </div>
+                </div>
+
+                {isActive && (
+                  <div className="mt-4 flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Aktif</span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 🧩 Active Content Area */}
+      <section className="space-y-8">
+        {attendanceBootstrapState === "failed" && attendanceBootstrapError && (
+          <div className="rounded-[2rem] border border-rose-500/20 bg-rose-500/5 p-6 animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400">
+                  <ShieldMinus className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-rose-200">Koneksi Database Terhambat</h3>
+                  <p className="text-sm text-rose-100/70">{attendanceBootstrapError}</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => runAttendanceBootstrap({ force: true })}
+                className="rounded-xl bg-rose-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-rose-400 hover:bg-rose-500/20"
+              >
+                Coba Sinkronkan Lagi
+              </button>
+            </div>
           </div>
+        )}
 
-          {!attendanceRuntimeReady ? (
-            <section
-              className={cn(attendanceStackClass, sectionTransitionClass)}
-            >
-              <div className={sectionHeaderShellClass}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className={cn(
-                      sectionHeaderIconShellClass,
-                      "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
-                    )}
-                  >
-                    <ActiveSectionIcon className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        sectionHeaderEyebrowClass,
-                        activeSectionTheme.accentClass,
-                      )}
-                    >
-                      Menyiapkan Runtime Attendance
-                    </p>
-                    <h2 className={sectionHeaderTitleClass}>
-                      {activeMenuItem?.label || "Attendance"}
-                    </h2>
-                    <p className={sectionHeaderCopyClass}>
-                      {attendanceBootstrapState === "syncing"
-                        ? "Projection attendance sedang diselaraskan agar QR, log, dan input manual membaca data turunan yang sama."
-                        : "Runtime lokal/web sedang menyelesaikan bootstrap database agar section aktif tidak timeout saat cold start pertama."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={sectionSurfaceClass}>
-                <AttendanceSectionLoading />
-              </div>
-            </section>
-          ) : null}
-
-          {attendanceRuntimeReady && activeSection === "qr" ? (
-            <section
-              className={cn(attendanceStackClass, sectionTransitionClass)}
-            >
-              <div className={sectionHeaderShellClass}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className={cn(
-                      sectionHeaderIconShellClass,
-                      "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
-                    )}
-                  >
-                    <QrCode className="h-5 w-5 text-emerald-300" />
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        sectionHeaderEyebrowClass,
-                        activeSectionTheme.accentClass,
-                      )}
-                    >
-                      {activeSectionTheme.eyebrow}
-                    </p>
-                    <h2 className={sectionHeaderTitleClass}>QR Attendance</h2>
-                    <p className={sectionHeaderCopyClass}>
-                      {activeMenuItem?.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={sectionSurfaceClass}>
-                <QRScannerView />
-              </div>
-            </section>
-          ) : null}
-
-          {attendanceRuntimeReady && activeSection === "manual" ? (
-            <section
-              className={cn(attendanceStackClass, sectionTransitionClass)}
-            >
-              <div className={sectionHeaderShellClass}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className={cn(
-                      sectionHeaderIconShellClass,
-                      "border-sky-500/20 bg-sky-500/10 text-sky-200",
-                    )}
-                  >
-                    <ClipboardList className="h-5 w-5 text-sky-300" />
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        sectionHeaderEyebrowClass,
-                        activeSectionTheme.accentClass,
-                      )}
-                    >
-                      {activeSectionTheme.eyebrow}
-                    </p>
-                    <h2 className={sectionHeaderTitleClass}>Input Manual</h2>
-                    <p className={sectionHeaderCopyClass}>
-                      {activeMenuItem?.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={sectionSurfaceClass}>
-                <AttendanceForm
-                  initialClassId={initialClassId}
-                  initialClassName={initialClassName}
-                  initialDate={initialDate}
-                />
-              </div>
-            </section>
-          ) : null}
-
-          {attendanceRuntimeReady && activeSection === "log" ? (
-            <section
-              className={cn(attendanceStackClass, sectionTransitionClass)}
-            >
-              <div className={sectionHeaderShellClass}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className={cn(
-                      sectionHeaderIconShellClass,
-                      "border-amber-500/20 bg-amber-500/10 text-amber-200",
-                    )}
-                  >
-                    <CalendarCheck className="h-5 w-5 text-amber-300" />
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        sectionHeaderEyebrowClass,
-                        activeSectionTheme.accentClass,
-                      )}
-                    >
-                      {activeSectionTheme.eyebrow}
-                    </p>
-                    <h2 className={sectionHeaderTitleClass}>Log Absensi</h2>
-                    <p className={sectionHeaderCopyClass}>
-                      {activeMenuItem?.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={sectionSurfaceClass}>
-                <DailyLogView
-                  initialTab={initialTab}
-                  initialStudentId={initialStudentId}
-                  initialStartDate={initialStartDate}
-                  initialEndDate={initialEndDate}
-                />
-              </div>
-            </section>
-          ) : null}
-
-          {attendanceRuntimeReady &&
-          canWriteAttendance &&
-          activeSection === "schedule" ? (
-            <section
-              className={cn(attendanceStackClass, sectionTransitionClass)}
-            >
-              <div className={sectionHeaderShellClass}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className={cn(
-                      sectionHeaderIconShellClass,
-                      "border-cyan-500/20 bg-cyan-500/10 text-cyan-200",
-                    )}
-                  >
-                    <Settings2 className="h-5 w-5 text-cyan-300" />
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        sectionHeaderEyebrowClass,
-                        activeSectionTheme.accentClass,
-                      )}
-                    >
-                      {activeSectionTheme.eyebrow}
-                    </p>
-                    <h2 className={sectionHeaderTitleClass}>
-                      Pengaturan Jadwal
-                    </h2>
-                    <p className={sectionHeaderCopyClass}>
-                      {activeMenuItem?.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={sectionSurfaceClass}>
-                <ScheduleSettings initialSettings={initialSettings} />
-              </div>
-            </section>
-          ) : null}
-
-          {attendanceRuntimeReady &&
-          canWriteAttendance &&
-          activeSection === "holiday" ? (
-            <section
-              className={cn(attendanceStackClass, sectionTransitionClass)}
-            >
-              <div className={sectionHeaderShellClass}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className={cn(
-                      sectionHeaderIconShellClass,
-                      "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
-                    )}
-                  >
-                    <SunMoon className="h-5 w-5 text-emerald-300" />
-                  </span>
-                  <div>
-                    <p
-                      className={cn(
-                        sectionHeaderEyebrowClass,
-                        activeSectionTheme.accentClass,
-                      )}
-                    >
-                      {activeSectionTheme.eyebrow}
-                    </p>
-                    <h2 className={sectionHeaderTitleClass}>
-                      Kelola Hari Libur
-                    </h2>
-                    <p className={sectionHeaderCopyClass}>
-                      {activeMenuItem?.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={sectionSurfaceClass}>
-                <HolidayManager initialHolidays={initialHolidays} />
-              </div>
-            </section>
-          ) : null}
-        </section>
-      ) : null}
+        {!attendanceRuntimeReady ? (
+          <div className="space-y-6">
+            <div className="rounded-[2.5rem] border border-zinc-800/80 bg-zinc-950/40 p-1 shadow-2xl backdrop-blur-xl">
+              <AttendanceSectionLoading />
+            </div>
+          </div>
+        ) : (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {activeSection === "qr" && <QRScannerView />}
+            {activeSection === "manual" && (
+              <AttendanceForm
+                initialClassId={initialClassId}
+                initialClassName={initialClassName}
+                initialDate={initialDate}
+              />
+            )}
+            {activeSection === "log" && (
+              <DailyLogView
+                initialTab={initialTab}
+                initialStudentId={initialStudentId}
+                initialStartDate={initialStartDate}
+                initialEndDate={initialEndDate}
+              />
+            )}
+            {activeSection === "schedule" && canWriteAttendance && (
+              <ScheduleSettings initialSettings={initialSettings} />
+            )}
+            {activeSection === "holiday" && canWriteAttendance && (
+              <HolidayManager initialHolidays={initialHolidays} />
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

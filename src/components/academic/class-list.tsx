@@ -97,35 +97,46 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   return (
-    <div className="space-y-4">
-      {readOnly ? (
-        <InlineState
-          title="Mode read only"
-          description="Role aktif hanya memiliki permission academic:read. Aksi tambah, edit, dan hapus kelas disembunyikan."
-          variant="info"
-          className="text-sm"
-        />
-      ) : (
-        <div className="flex justify-end">
-          <AddClassDialog onSuccess={fetchData} />
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-2">
+        <div>
+          <h3 className="text-lg font-bold text-white">Daftar Kelas</h3>
+          <p className="text-xs text-zinc-500">Kelola rombongan belajar dan wali kelas.</p>
+        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <AddClassDialog onSuccess={fetchData} />
+            <button
+              type="button"
+              onClick={() => void fetchData()}
+              className="group flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900 hover:text-white transition-all"
+            >
+              <RefreshCw className={cn("h-4.5 w-4.5 transition-transform group-hover:rotate-180", loading && "animate-spin text-orange-400")} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {readOnly && (
+        <div className="rounded-2xl border border-sky-500/10 bg-sky-500/5 p-4 mx-2">
+          <div className="flex items-center gap-3 text-xs text-sky-400/80 uppercase font-bold tracking-widest">
+            <ShieldCheck className="h-4 w-4" />
+            Mode Lihat Saja Aktif
+          </div>
         </div>
       )}
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
+      <div className="rounded-[2rem] border border-zinc-800/80 bg-zinc-950/40 shadow-2xl overflow-hidden backdrop-blur-md">
         <div className="hidden md:block">
           <Table>
-            <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-zinc-900">
-                <TableHead className="text-zinc-400">Class Name</TableHead>
-                <TableHead className="text-zinc-400">Year</TableHead>
-                <TableHead className="text-zinc-400">
-                  Homeroom Teacher
-                </TableHead>
-                {!readOnly ? (
-                  <TableHead className="text-zinc-400 text-right">
-                    Actions
-                  </TableHead>
-                ) : null}
+            <TableHeader className="bg-zinc-900/50">
+              <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableHead className="font-bold text-zinc-400 py-5 pl-8 text-[11px] uppercase tracking-widest">Nama Kelas</TableHead>
+                <TableHead className="font-bold text-zinc-400 text-[11px] uppercase tracking-widest">Tahun Ajaran</TableHead>
+                <TableHead className="font-bold text-zinc-400 text-[11px] uppercase tracking-widest">Wali Kelas</TableHead>
+                {!readOnly && (
+                  <TableHead className="font-bold text-zinc-400 text-right pr-8 text-[11px] uppercase tracking-widest">Kontrol</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -133,39 +144,61 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                 <TableRow>
                   <TableCell
                     colSpan={readOnly ? 3 : 4}
-                    className="h-24 text-center text-zinc-500"
+                    className="h-48 text-center"
                   >
-                    No classes found.
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="h-16 w-16 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800">
+                        <GraduationCap className="h-8 w-8 text-zinc-700" />
+                      </div>
+                      <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">Data Kelas Kosong</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
-                data.map((item) => (
+                data.map((item, index) => (
                   <TableRow
                     key={item.id}
-                    className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
+                    className="group border-b border-zinc-800/50 hover:bg-white/5 transition-all duration-300"
+                    style={{ animationDelay: `${index * 30}ms` }}
                   >
-                    <TableCell className="font-medium text-white">
-                      {item.name}
+                    <TableCell className="py-5 pl-8">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black">
+                          {item.name.charAt(0)}
+                        </div>
+                        <span className="font-bold text-white tracking-tight">{item.name}</span>
+                      </div>
                     </TableCell>
-                    <TableCell>{item.academicYear}</TableCell>
-                    <TableCell>{item.homeroomTeacherName || "-"}</TableCell>
-                    {!readOnly ? (
-                      <TableCell className="flex justify-end gap-1 text-right">
-                        <EditClassDialog
-                          classData={item}
-                          onSuccess={fetchData}
-                        />
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-zinc-400 hover:text-red-400"
-                          onClick={() => setDeleteTarget(item)}
-                          type="button"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                    <TableCell>
+                      <span className="inline-flex rounded-full bg-zinc-900 px-3 py-1 text-xs font-bold text-zinc-400 border border-zinc-800">
+                        {item.academicYear}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-sm text-zinc-300">{item.homeroomTeacherName || "Belum Ditentukan"}</span>
+                      </div>
+                    </TableCell>
+                    {!readOnly && (
+                      <TableCell className="pr-8">
+                        <div className="flex justify-end gap-1 translate-x-4 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100">
+                          <EditClassDialog
+                            classData={item}
+                            onSuccess={fetchData}
+                          />
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-9 w-9 rounded-lg text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+                            onClick={() => setDeleteTarget(item)}
+                            type="button"
+                          >
+                            <Trash2 className="h-4.5 w-4.5" />
+                          </Button>
+                        </div>
                       </TableCell>
-                    ) : null}
+                    )}
                   </TableRow>
                 ))
               )}
@@ -173,40 +206,48 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
           </Table>
         </div>
 
-        <div className="space-y-3 p-3 md:hidden">
+        <div className="space-y-4 p-4 md:hidden">
           {data.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 text-center text-sm text-zinc-500">
-              No classes found.
+            <div className="rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center">
+              <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">Belum Ada Data Kelas</p>
             </div>
           ) : (
             data.map((item) => (
               <article
                 key={item.id}
-                className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                className="group relative overflow-hidden rounded-[1.5rem] border border-zinc-800 bg-zinc-900/30 p-5 transition-all hover:bg-zinc-900/50"
               >
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-zinc-500">{item.academicYear}</p>
+                <div className="absolute top-0 right-0 p-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-700">{item.academicYear}</span>
                 </div>
-                <p className="text-sm text-zinc-300">
-                  Wali kelas: {item.homeroomTeacherName || "-"}
-                </p>
-                {!readOnly ? (
-                  <div className="flex justify-end gap-1">
+                
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black text-lg">
+                    {item.name.charAt(0)}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-black text-white tracking-tight">{item.name}</p>
+                    <div className="flex items-center gap-2">
+                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                       <p className="text-xs text-zinc-400">{item.homeroomTeacherName || "Belum Ditentukan"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {!readOnly && (
+                  <div className="mt-4 flex items-center justify-end gap-2 border-t border-zinc-800/50 pt-4">
                     <EditClassDialog classData={item} onSuccess={fetchData} />
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                      className="h-10 w-10 rounded-xl text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"
                       onClick={() => setDeleteTarget(item)}
                       type="button"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4.5 w-4.5" />
                     </Button>
                   </div>
-                ) : null}
+                )}
               </article>
             ))
           )}

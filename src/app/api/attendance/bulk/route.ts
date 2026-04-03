@@ -1,7 +1,8 @@
-import { recordBulkAttendance } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -24,6 +25,9 @@ export async function POST(request: Request) {
     return apiError("Sesi user tidak valid", 401);
   }
 
+  const { recordBulkAttendance } = await import(
+    "@/core/services/attendance-service"
+  );
   const result = await recordBulkAttendance({
     ...body,
     recordedBy: userId,

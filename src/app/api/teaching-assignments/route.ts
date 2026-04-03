@@ -1,11 +1,6 @@
 import { requirePermission } from "@/lib/api/authz";
 import { apiCreated, apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import {
-  addTeachingAssignment,
-  getTeachingAssignmentScheduleOptions,
-  getTeachingAssignments,
-} from "@/lib/services/academic";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +13,13 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   if (url.searchParams.get("view") === "schedule-options") {
+    const { getTeachingAssignmentScheduleOptions } = await import(
+      "@/lib/services/academic"
+    );
     return apiOk(await getTeachingAssignmentScheduleOptions());
   }
 
+  const { getTeachingAssignments } = await import("@/lib/services/academic");
   return apiOk(await getTeachingAssignments());
 }
 
@@ -31,6 +30,7 @@ export async function POST(request: Request) {
     return guard;
   }
 
+  const { addTeachingAssignment } = await import("@/lib/services/academic");
   const result = await addTeachingAssignment(await request.json());
   if (!result.success) {
     return apiError(

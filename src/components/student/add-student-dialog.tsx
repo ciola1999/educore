@@ -183,8 +183,8 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
           Tambah Siswa
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[min(50rem,calc(100dvh-4rem))] w-[calc(100vw-2rem)] flex-col overflow-hidden border-zinc-800 bg-zinc-950 p-0 text-zinc-100 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 px-6 pt-6">
           <DialogTitle>Tambah Siswa</DialogTitle>
           <DialogDescription className="text-zinc-400">
             Lengkapi data identitas siswa baru.
@@ -194,252 +194,38 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-4 py-2"
+            className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="nis"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>NIS</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="nisn"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>NISN</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nama Lengkap</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="grade"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Kelas</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="gender"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Jenis Kelamin</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="bg-zinc-950 border-zinc-800">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                        <SelectItem value="L">Laki-laki</SelectItem>
-                        <SelectItem value="P">Perempuan</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="tanggalLahir"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tanggal Lahir</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type="date"
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="tempatLahir"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tempat Lahir</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="parentName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nama Wali</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        className="bg-zinc-950 border-zinc-800"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="parentPhone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>No. HP Wali</FormLabel>
-                  <FormControl>
-                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="alamat"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Alamat</FormLabel>
-                  <FormControl>
-                    <Input {...field} className="bg-zinc-950 border-zinc-800" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="createAccount"
-              render={({ field }) => (
-                <FormItem>
-                  <label className="flex items-center gap-2 text-sm text-zinc-200">
-                    <input
-                      type="checkbox"
-                      checked={field.value}
-                      onChange={(event) => field.onChange(event.target.checked)}
-                    />
-                    Buat akun login untuk siswa ini
-                  </label>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {createAccount ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4 space-y-4">
-                <p className="text-sm font-medium text-zinc-200">
-                  Kredensial Akun Siswa
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email Login</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type="email"
-                            className="bg-zinc-950 border-zinc-800"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password Login</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type="password"
-                            className="bg-zinc-950 border-zinc-800"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="confirmPassword"
+                  name="nis"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Konfirmasi Password</FormLabel>
+                      <FormLabel className="text-zinc-400">NIS</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          type="password"
-                          className="bg-zinc-950 border-zinc-800"
+                          placeholder="Masukkan NIS..."
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="nisn"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">NISN (Opsional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Masukkan 10 digit NISN..."
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
                         />
                       </FormControl>
                       <FormMessage />
@@ -447,14 +233,266 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   )}
                 />
               </div>
-            ) : null}
 
-            <DialogFooter>
-              <Button type="submit" disabled={loading}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">Nama Lengkap</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Nama lengkap siswa..."
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="grade"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">Kelas</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Contoh: X-A, XI-IPA-1..."
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="gender"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">Jenis Kelamin</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                          <SelectItem value="L">Laki-laki</SelectItem>
+                          <SelectItem value="P">Perempuan</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="tanggalLahir"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">Tanggal Lahir</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="date"
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20 [color-scheme:dark]"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="tempatLahir"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">Tempat Lahir</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Kota lahir..."
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="parentName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-zinc-400">Nama Wali</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Nama orang tua/wali..."
+                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="parentPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-zinc-400">No. HP Wali</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        placeholder="Contoh: 0812..."
+                        className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="alamat"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-zinc-400">Alamat</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        placeholder="Alamat lengkap tempat tinggal..."
+                        className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="pt-2">
+                <FormField
+                  control={form.control}
+                  name="createAccount"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 transition-colors hover:bg-zinc-900/50">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-zinc-700 bg-zinc-950 text-sky-600 focus:ring-offset-zinc-950"
+                          checked={field.value}
+                          onChange={(event) => field.onChange(event.target.checked)}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="text-sm font-medium text-zinc-100">
+                          Buat akun login untuk siswa ini
+                        </FormLabel>
+                        <p className="text-[12px] text-zinc-500">
+                          Siswa akan dapat login menggunakan email dan password.
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {createAccount ? (
+                <div className="space-y-5 rounded-2xl border border-sky-500/20 bg-sky-500/5 p-5 transition-all">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.6)]" />
+                    <p className="text-sm font-semibold text-sky-200">
+                      Kredensial Akun Siswa
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sky-200/70">Email Login</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type="email"
+                              placeholder="email@sekolah.com"
+                              className="bg-zinc-900/80 border-zinc-800 focus:ring-sky-500/20"
+                            />
+                          </FormControl>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sky-200/70">Password Login</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type="password"
+                              placeholder="Min. 8 karakter..."
+                              className="bg-zinc-900/80 border-zinc-800 focus:ring-sky-500/20"
+                            />
+                          </FormControl>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sky-200/70">Konfirmasi Password</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="password"
+                            placeholder="Ulangi password..."
+                            className="bg-zinc-900/80 border-zinc-800 focus:ring-sky-500/20"
+                          />
+                        </FormControl>
+                        <FormMessage className="text-red-400" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter className="shrink-0 bg-zinc-900/50 px-6 py-4 border-t border-zinc-800/50">
+              <Button 
+                type="submit" 
+                disabled={loading}
+                className="w-full sm:w-auto bg-sky-600 hover:bg-sky-500 px-8"
+              >
                 {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </div>
                 ) : (
-                  "Simpan"
+                  "Simpan Data Siswa"
                 )}
               </Button>
             </DialogFooter>

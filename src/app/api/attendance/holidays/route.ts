@@ -1,4 +1,3 @@
-import { addHoliday, getHolidays } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
@@ -13,6 +12,7 @@ export async function GET() {
   }
 
   try {
+    const { getHolidays } = await import("@/core/services/attendance-service");
     const data = await getHolidays();
     return apiOk(data);
   } catch (error) {
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       date?: string;
       name?: string;
     };
+    const { addHoliday } = await import("@/core/services/attendance-service");
     await addHoliday(body.date ?? "", body.name ?? "");
     return apiOk({ success: true });
   } catch (error) {

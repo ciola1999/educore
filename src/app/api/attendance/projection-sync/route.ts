@@ -1,7 +1,8 @@
 import { requireAnyPermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
+
+export const dynamic = "force-dynamic";
 
 export async function POST() {
   const session = await auth();
@@ -16,6 +17,9 @@ export async function POST() {
   }
 
   try {
+    const { syncUsersToStudentsProjection } = await import(
+      "@/lib/services/student-projection"
+    );
     const result = await syncUsersToStudentsProjection();
     return apiOk(result);
   } catch (error) {

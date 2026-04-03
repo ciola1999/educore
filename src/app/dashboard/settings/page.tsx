@@ -2,24 +2,23 @@
 
 import {
   AlertTriangle,
-  BellRing,
   CheckCircle,
   ClipboardCopy,
   Cloud,
   CloudDownload,
   CloudUpload,
-  Download,
   Filter,
   Loader2,
+  Lock,
   LogOut,
   RefreshCw,
   ShieldCheck,
-  ShieldMinus,
-  ShieldOff,
   Siren,
+  Sparkles,
   Trash2,
-  XCircle,
+  Users,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -47,7 +46,7 @@ import {
   ensureDesktopRuntimeBootstrapReady,
 } from "@/lib/runtime/desktop-bootstrap-config";
 import { runFullSync, runPullSync, runPushSync } from "@/lib/sync/actions";
-import type { SyncResult } from "@/lib/sync/client";
+import type { SyncResult } from "@/lib/sync/types";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
 type DesktopSyncConfig = {
@@ -119,7 +118,6 @@ function isDesktopSyncConfigMissingMessage(message: string): boolean {
   );
 }
 
-const dashboardOutlineButtonClass = outlineButtonStyles.neutral;
 const TRACE_STORAGE_KEY = "settings-auth-trace-v1";
 const SESSION_REFRESH_STORAGE_KEY = "settings-auth-last-refresh-v1";
 const TRACE_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -512,14 +510,14 @@ export default function SettingsPage() {
 
     try {
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      toast.success("Debug report berhasil disalin.");
+      toast.success("Laporan debug berhasil disalin.");
       appendTrace(
         "session-refresh",
         "info",
         "Debug report copied to clipboard.",
       );
     } catch {
-      toast.error("Gagal menyalin debug report.");
+      toast.error("Gagal menyalin laporan debug.");
       appendTrace("session-refresh", "error", "Failed to copy debug report.");
     }
   }
@@ -560,14 +558,14 @@ export default function SettingsPage() {
       }
 
       await writeTextFile(target, serialized);
-      toast.success("Trace report berhasil diekspor.");
+      toast.success("Laporan jejak berhasil diekspor.");
       appendTrace(
         "session-refresh",
         "success",
         "Trace report exported to local JSON file.",
       );
     } catch (error) {
-      toast.error("Gagal mengekspor trace report.");
+      toast.error("Gagal mengekspor laporan jejak.");
       appendTrace(
         "session-refresh",
         "error",
@@ -583,7 +581,7 @@ export default function SettingsPage() {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(TRACE_STORAGE_KEY);
     }
-    toast.success("Trace event berhasil dibersihkan.");
+    toast.success("Jejak event berhasil dibersihkan.");
   }
 
   function persistLastSessionRefreshAt(nextValue: Date | null) {
@@ -1097,7 +1095,7 @@ export default function SettingsPage() {
         setLastSessionRefreshAt(nextRefreshAt);
         persistLastSessionRefreshAt(nextRefreshAt);
         appendTrace("session-refresh", "success", "Session refreshed.");
-        toast.success("State session berhasil diperbarui.");
+        toast.success("Status sesi berhasil diperbarui.");
       } else {
         appendTrace(
           "session-refresh",
@@ -1136,175 +1134,187 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="bg-linear-to-r from-gray-300 to-gray-500 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
-          <span data-testid="settings-page-title">Pengaturan</span>
-        </h2>
-        <p className="mt-1 text-zinc-400">
-          {canManageSettings
-            ? "Kelola pengaturan akun dan sinkronisasi runtime."
-            : "Mode read-only aktif untuk role ini. Aksi manajemen disembunyikan."}
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-zinc-700 bg-zinc-900/40 p-5">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-5 w-5 text-zinc-300" />
-            <div>
-              <p className="text-sm font-semibold text-white">Runtime Aktif</p>
-              <p className="text-sm text-zinc-400">
-                {runtime === "desktop"
-                  ? "Desktop/Tauri (offline-first)"
-                  : "Web/Next.js (online)"}
+    <div className="min-h-full space-y-10 p-1 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* 🚀 Hero Section */}
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-zinc-800/80 bg-zinc-950/40 p-6 shadow-2xl backdrop-blur-md md:p-10 lg:p-12">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-y-0 right-0 w-full lg:w-1/2">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.15),transparent_65%)]" />
+          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-indigo-500/10 blur-[100px]" />
+          <div className="absolute top-1/2 -right-48 h-96 w-96 rounded-full bg-violet-500/5 blur-[120px]" />
+        </div>
+        
+        <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-indigo-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>System Control</span>
+            </div>
+            
+            <div className="space-y-4">
+              <h1 className="bg-linear-to-r from-white via-indigo-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
+                Pengaturan
+              </h1>
+              <p className="max-w-2xl text-base leading-relaxed text-zinc-400 md:text-lg">
+                Pusat kendali akun dan preferensi sistem. Konfigurasi sinkronisasi data, keunanan sesi, 
+                dan pantau kesehatan runtime EDUCORE Anda dalam satu dasbor terpadu.
               </p>
             </div>
-          </div>
-        </div>
-        <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-5">
-          <div className="flex items-center gap-3">
-            {canManageSettings ? (
-              <ShieldCheck className="h-5 w-5 text-sky-300" />
-            ) : (
-              <ShieldMinus className="h-5 w-5 text-sky-300" />
-            )}
-            <div>
-              <p className="text-sm font-semibold text-sky-200">
-                {canManageSettings ? "Akses Manajemen Aktif" : "Mode Read Only"}
-              </p>
-              <p className="text-sm text-sky-100/80">
-                {canManageSettings
-                  ? "Aksi sinkronisasi dan pengelolaan credential desktop tersedia."
-                  : "Role aktif tidak memiliki permission settings:manage."}
-              </p>
+
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2.5 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
+                <ShieldCheck className="h-4 w-4" />
+                {canManageSettings ? "Otoritas Pengelola" : "Mode Read Only"}
+              </div>
+              <div className="flex items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                <Lock className="h-4 w-4" />
+                {desktopRuntime ? "Desktop Local" : "Cloud Native"}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[240px]">
+            {[
+              { label: "Runtime", value: desktopRuntime ? "Tauri Active" : "Web Online", icon: RefreshCw },
+              { label: "Sync Status", value: lastSyncAt ? "Synced" : "Initial", icon: RefreshCw },
+              { label: "Session", value: sessionStatus === "authenticated" ? "Verified" : "Pending", icon: Users },
+            ].map((item) => (
+              <div 
+                key={item.label}
+                className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
+              >
+                <div className="absolute inset-x-0 bottom-0 h-[2px] w-0 bg-indigo-500 transition-all duration-300 group-hover:w-full" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                  {item.label}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-zinc-200">
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 📊 Settings Content */}
+      <div className="grid gap-8 md:grid-cols-2">
         <Card
-          className="col-span-2 border-zinc-800 bg-zinc-900 text-white"
+          className="col-span-2 rounded-[2rem] border-zinc-800/80 bg-zinc-950/40 shadow-2xl backdrop-blur-md text-white"
           data-testid="settings-incident-playbook"
         >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {incidentLevel === "critical" ? (
-                <Siren className="h-5 w-5 text-red-400" />
-              ) : (
-                <AlertTriangle className="h-5 w-5 text-amber-400" />
-              )}
-              Incident Playbook (Auth/Sync)
-            </CardTitle>
-            <CardDescription className="text-zinc-400">
-              Prosedur pemulihan cepat ketika auth/session/sync mulai tidak
-              stabil pada runtime aktif.
-            </CardDescription>
+          <CardHeader className="p-8">
+            <div className="flex items-center gap-4">
+               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                  {incidentLevel === "critical" ? (
+                    <Siren className="h-6 w-6" />
+                  ) : (
+                    <AlertTriangle className="h-6 w-6 text-amber-400" />
+                  )}
+               </div>
+               <div>
+                  <CardTitle className="text-xl font-bold tracking-tight">Incident Playbook (Auth/Sync)</CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    Prosedur pemulihan cepat untuk stabilitas runtime.
+                  </CardDescription>
+               </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-8 p-8 pt-0">
             {incidentLevel === "critical" ? (
               <InlineState
-                title="Status: Critical"
-                description={`Error burst terdeteksi (${recentErrorCount} error/10 menit). Jalankan recovery sekarang dan kirim incident report.`}
+                title="Status: Kritis"
+                description={`Lonjakan error terdeteksi (${recentErrorCount} error/10 menit). Jalankan pemulihan sekarang.`}
                 variant="error"
               />
             ) : incidentLevel === "warning" ? (
               <InlineState
-                title="Status: Warning"
-                description={`Recovery risk terdeteksi (${recentRecoveryErrorCount} error session-refresh/logout). Disarankan jalankan langkah pemulihan.`}
+                title="Status: Peringatan"
+                description={`Risiko pemulihan terdeteksi (${recentRecoveryErrorCount} error sesi).`}
                 variant="warning"
               />
             ) : (
               <InlineState
                 title="Status: Normal"
-                description="Belum ada sinyal anomali signifikan. Playbook tetap siap jika dibutuhkan."
+                description="Kesehatan sistem terpantau stabil."
                 variant="info"
               />
             )}
 
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-sm text-zinc-200">
-              <p className="mb-2 font-medium text-zinc-100">
-                Langkah Recovery Disarankan:
-              </p>
-              <ol className="list-inside list-decimal space-y-1 text-zinc-300">
-                <li>Jalankan session recovery.</li>
-                <li>Jalankan full sync health check.</li>
-                <li>Jika gagal berulang, logout lalu login ulang.</li>
-                <li>Kirim incident report untuk investigasi lanjutan.</li>
-              </ol>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-[1.5rem] border border-zinc-800 bg-zinc-900/30 p-6">
+                <p className="mb-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Recovery Steps</p>
+                <ol className="list-inside list-decimal space-y-2 text-sm text-zinc-300">
+                  <li>Jalankan session recovery primer.</li>
+                  <li>Inisiasi full sync health check.</li>
+                  <li>Bila persisten, lakukan re-login.</li>
+                </ol>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-zinc-800 bg-zinc-900/30 p-6">
+                <p className="mb-4 text-xs font-bold uppercase tracking-widest text-zinc-500">Post-Mortem Logs</p>
+                <div className="space-y-1.5 text-xs text-zinc-400">
+                  <p>Runtime: {webRuntime ? "Next.js Boundary" : "Tauri Path"}</p>
+                  <p>Last escalation: {formattedLastIncidentEscalationAt}</p>
+                </div>
+              </div>
             </div>
 
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs text-zinc-400">
-              Runtime guide:
-              {webRuntime
-                ? " Web menggunakan boundary /api/sync/*, jadi fokus cek session + API response."
-                : " Desktop menggunakan local sync path + keyring, jadi cek credential desktop dan status keyring."}
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs text-zinc-400">
-              Last escalation ping: {formattedLastIncidentEscalationAt}
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs text-zinc-300">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-medium text-zinc-100">
-                  Incident Summary (24h)
-                </span>
+            <div className="rounded-[1.5rem] border border-zinc-800 bg-zinc-900/20 p-6">
+              <div className="mb-6 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Telemetry (24h)</span>
+                </div>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className={dashboardOutlineButtonClass}
+                  variant="ghost"
+                  className="h-8 rounded-xl border border-zinc-800 bg-zinc-900/50 text-xs font-bold text-zinc-400"
                   disabled={telemetrySummaryLoading}
                   onClick={() => {
                     void loadTelemetrySummary();
                   }}
                 >
-                  {telemetrySummaryLoading ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  )}
-                  Refresh
+                  <RefreshCw className={cn("mr-2 h-3 w-3", telemetrySummaryLoading && "animate-spin")} />
+                  Refresh Stats
                 </Button>
               </div>
+              
               {telemetrySummaryError ? (
-                <p className="text-red-300">{telemetrySummaryError}</p>
+                <p className="text-sm text-red-300">{telemetrySummaryError}</p>
               ) : telemetrySummary ? (
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  <p>Total events: {telemetrySummary.totalEvents}</p>
-                  <p>Total errors: {telemetrySummary.totalErrors}</p>
-                  <p>Total warnings: {telemetrySummary.totalWarnings}</p>
-                  <p>Total escalations: {telemetrySummary.totalEscalations}</p>
-                  <p>Web events: {telemetrySummary.runtimeBreakdown.web}</p>
-                  <p>
-                    Desktop events: {telemetrySummary.runtimeBreakdown.desktop}
-                  </p>
+                <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { label: "Events", value: telemetrySummary.totalEvents },
+                    { label: "Errors", value: telemetrySummary.totalErrors },
+                    { label: "Escalations", value: telemetrySummary.totalEscalations },
+                    { label: "Web/Desktop", value: `${telemetrySummary.runtimeBreakdown.web}/${telemetrySummary.runtimeBreakdown.desktop}` },
+                  ].map(stat => (
+                    <div key={stat.label}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">{stat.label}</p>
+                      <p className="text-lg font-black text-white">{stat.value}</p>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <p className="text-zinc-400">
-                  Belum ada data incident summary.
-                </p>
+                <p className="text-sm text-zinc-500">Belum ada rangkuman telemetry.</p>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3">
               <Button
                 variant="outline"
-                className={dashboardOutlineButtonClass}
+                className="h-12 rounded-2xl border-zinc-800 bg-zinc-900/50 px-6 font-bold text-zinc-300 hover:bg-zinc-800"
                 disabled={runningIncidentAction !== null}
                 onClick={() => {
                   void runIncidentRecovery();
                 }}
               >
-                {runningIncidentAction === "recovery" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Run Recovery
+                <RefreshCw className={cn("mr-2 h-4 w-4", runningIncidentAction === "recovery" && "animate-spin")} />
+                Session Recovery
               </Button>
               <Button
                 variant="outline"
-                className={dashboardOutlineButtonClass}
+                className="h-12 rounded-2xl border-zinc-800 bg-zinc-900/50 px-6 font-bold text-zinc-300 hover:bg-zinc-800"
                 disabled={runningIncidentAction !== null}
                 onClick={() => {
                   setRunningIncidentAction("sync");
@@ -1313,53 +1323,22 @@ export default function SettingsPage() {
                   });
                 }}
               >
-                {runningIncidentAction === "sync" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Cloud className="mr-2 h-4 w-4" />
-                )}
-                Full Sync Check
+                <Cloud className={cn("mr-2 h-4 w-4", runningIncidentAction === "sync" && "animate-spin")} />
+                Sync Health Check
               </Button>
               <Button
-                variant="outline"
-                className={dashboardOutlineButtonClass}
+                variant="ghost"
+                className="h-12 rounded-2xl border border-zinc-800 bg-zinc-900/30 px-6 font-bold text-zinc-400 hover:bg-zinc-800 hover:text-white"
                 onClick={() => {
                   void copyTraceReport();
                 }}
                 disabled={traceEvents.length === 0}
               >
                 <ClipboardCopy className="mr-2 h-4 w-4" />
-                Copy Incident Report
+                Copy Report
               </Button>
               <Button
-                variant="outline"
-                className={dashboardOutlineButtonClass}
-                onClick={() => {
-                  const level = hasRecentErrorBurst ? "critical" : "warning";
-                  const escalated = emitIncidentEscalation({
-                    source: "manual",
-                    level,
-                  });
-                  if (escalated) {
-                    appendTrace(
-                      "session-refresh",
-                      level === "critical" ? "error" : "warning",
-                      `Incident escalation emitted (${level}, manual).`,
-                    );
-                    toast.success("Incident escalation ping terkirim.");
-                  } else {
-                    toast.warning(
-                      "Escalation cooldown aktif. Coba lagi beberapa menit.",
-                    );
-                  }
-                }}
-                disabled={incidentLevel === "normal"}
-              >
-                <BellRing className="mr-2 h-4 w-4" />
-                Trigger Escalation
-              </Button>
-              <Button
-                className="bg-red-600 hover:bg-red-500"
+                className="h-12 rounded-2xl bg-rose-600 px-6 font-bold text-white hover:bg-rose-500 shadow-[0_0_15px_rgba(225,29,72,0.2)] ml-auto"
                 onClick={() => {
                   void handleLogout();
                 }}
@@ -1372,156 +1351,106 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-2 border-zinc-800 bg-zinc-900 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-blue-400" />
-              Status Session & Akun Aktif
-            </CardTitle>
-            <CardDescription className="text-zinc-400">
-              Menampilkan source of truth auth/session untuk runtime saat ini.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Session Status
-                </p>
-                <p className="mt-1 font-medium text-zinc-100">
-                  {isLoading ? "loading" : sessionStatus}
-                </p>
-              </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Auth Source
-                </p>
-                <p
-                  className="mt-1 font-medium text-zinc-100"
-                  data-testid="settings-auth-source"
-                >
-                  {authSource}
-                </p>
-              </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Role Aktif
-                </p>
-                <p
-                  className="mt-1 font-medium text-zinc-100"
-                  data-testid="settings-active-role"
-                >
-                  {userRole || "-"}
-                </p>
-              </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Email Aktif
-                </p>
-                <p
-                  className="mt-1 truncate font-mono text-xs text-zinc-100"
-                  data-testid="settings-active-email"
-                >
-                  {userEmail || "-"}
-                </p>
-              </div>
+        <Card className="col-span-2 rounded-[2rem] border-zinc-800/80 bg-zinc-950/40 shadow-2xl backdrop-blur-md text-white">
+          <CardHeader className="p-8">
+            <div className="flex items-center gap-4">
+               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                  <ShieldCheck className="h-6 w-6" />
+               </div>
+               <div>
+                  <CardTitle className="text-xl font-bold tracking-tight">Status Session & Akun Aktif</CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    Source of truth auth/session runtime saat ini.
+                  </CardDescription>
+               </div>
             </div>
-            <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Last Session Refresh
-                </p>
-                <p
-                  className="mt-1 text-zinc-100"
-                  data-testid="settings-last-session-refresh"
-                >
-                  {formattedLastSessionRefreshAt}
-                </p>
-              </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Last Sync Success
-                </p>
-                <p className="mt-1 text-zinc-100">{formattedLastSyncAt}</p>
-              </div>
+          </CardHeader>
+          <CardContent className="p-8 pt-0 space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: "Session Status", value: isLoading ? "loading" : sessionStatus, color: "text-emerald-400" },
+                { label: "Auth Source", value: authSource.replace("-", " "), color: "text-sky-400" },
+                { label: "Active Role", value: userRole || "-", color: "text-violet-400" },
+                { label: "Active User", value: maskEmail(userEmail) || "-", color: "text-zinc-300" },
+              ].map(stat => (
+                <div key={stat.label} className="rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:bg-zinc-900/50">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600 mb-1">{stat.label}</p>
+                  <p className={cn("text-sm font-bold truncate", stat.color)}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+               <div className="flex flex-col gap-1 rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Last Session Refresh</p>
+                  <p className="text-sm font-medium text-zinc-200">{formattedLastSessionRefreshAt}</p>
+               </div>
+               <div className="flex flex-col gap-1 rounded-2xl border border-zinc-800 bg-zinc-900/10 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Last Sync Success</p>
+                  <p className="text-sm font-medium text-zinc-200">{formattedLastSyncAt}</p>
+               </div>
             </div>
 
             {hasSessionMismatch ? (
               <InlineState
-                title="State session dan state client tidak sinkron"
-                description="Deteksi mismatch pada runtime web. Muat ulang sesi untuk revalidasi source of truth dari NextAuth."
+                title="Status sesi dan state client tidak sinkron"
+                description="Terdeteksi perbedaan pada runtime web. Muat ulang sesi untuk memvalidasi ulang."
                 variant="warning"
-                actionLabel="Muat Ulang Session"
+                actionLabel="Muat Ulang Sesi"
                 onAction={() => {
                   void handleSessionRefresh();
                 }}
               />
             ) : (
               <InlineState
-                title="State auth sinkron"
-                description="Tidak ada mismatch role/email antara session dan state client."
+                title="Status autentikasi sinkron"
+                description="Tidak ada perbedaan antara sesi dan state client."
                 variant="info"
-                className="text-sm"
               />
             )}
-            {hasRecoveryRisk ? (
-              <InlineState
-                title="Risiko kegagalan pemulihan sesi terdeteksi"
-                description={`Terdapat ${recentRecoveryErrorCount} kegagalan session-refresh/logout dalam 10 menit terakhir. Rekomendasi: logout ulang, login kembali, lalu jalankan refresh session.`}
-                variant="warning"
-                className="text-sm"
-              />
-            ) : null}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3 pt-4 border-t border-zinc-800/50">
               <Button
                 variant="outline"
+                className="h-11 rounded-xl border-zinc-800 bg-zinc-900/50 px-6 font-bold text-zinc-300 hover:bg-zinc-800"
                 disabled={refreshingSession}
-                data-testid="settings-refresh-session"
                 onClick={() => {
                   void handleSessionRefresh();
                 }}
-                className={dashboardOutlineButtonClass}
               >
-                {refreshingSession ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
+                <RefreshCw className={cn("mr-2 h-4 w-4", refreshingSession && "animate-spin")} />
                 Refresh Session
               </Button>
               <Button
+                className="h-11 rounded-xl bg-rose-600 px-6 font-bold text-white hover:bg-rose-500"
                 disabled={loggingOut}
-                data-testid="settings-logout-button"
                 onClick={() => {
                   void handleLogout();
                 }}
-                className="bg-red-600 hover:bg-red-500"
               >
-                {loggingOut ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <LogOut className="mr-2 h-4 w-4" />
-                )}
-                Logout
+                <LogOut className="mr-2 h-4 w-4" />
+                Dikonfigurasi Logout
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="col-span-2 border-zinc-800 bg-zinc-900 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Cloud className="h-5 w-5 text-blue-400" />
-              Sinkronisasi Cloud (Turso)
-            </CardTitle>
-            <CardDescription className="text-zinc-400">
-              Boundary runtime: web melalui `/api/sync/*`, desktop via local
-              sync path.
-            </CardDescription>
+        <Card className="col-span-2 rounded-[2rem] border-zinc-800/80 bg-zinc-950/40 shadow-2xl backdrop-blur-md text-white">
+          <CardHeader className="p-8">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <Cloud className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold tracking-tight">Sinkronisasi Cloud (Turso)</CardTitle>
+                <CardDescription className="text-zinc-400">
+                  Data bridging EDUCORE via /api/sync atau local sync line.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent className="p-8 pt-0 space-y-8">
             {canManageSettings ? (
               <div className="flex flex-wrap gap-3">
                 <Button
@@ -1529,13 +1458,9 @@ export default function SettingsPage() {
                     void runSync("full");
                   }}
                   disabled={isSyncing}
-                  className="gap-2 bg-blue-600 hover:bg-blue-500"
+                  className="h-12 rounded-2xl bg-blue-600 px-6 font-bold hover:bg-blue-500"
                 >
-                  {syncAction === "full" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
+                  <RefreshCw className={cn("mr-2 h-4 w-4", syncAction === "full" && "animate-spin")} />
                   Sinkron Penuh
                 </Button>
 
@@ -1545,13 +1470,9 @@ export default function SettingsPage() {
                   }}
                   disabled={isSyncing || webRuntime}
                   variant="outline"
-                  className={`gap-2 ${dashboardOutlineButtonClass}`}
+                  className="h-12 rounded-2xl border-zinc-800 bg-zinc-900/50 px-6 font-bold text-zinc-300 hover:bg-zinc-800"
                 >
-                  {syncAction === "push" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CloudUpload className="h-4 w-4" />
-                  )}
+                  <CloudUpload className={cn("mr-2 h-4 w-4", syncAction === "push" && "animate-spin")} />
                   Push Sync
                 </Button>
 
@@ -1561,139 +1482,91 @@ export default function SettingsPage() {
                   }}
                   disabled={isSyncing || webRuntime}
                   variant="outline"
-                  className={`gap-2 ${dashboardOutlineButtonClass}`}
+                  className="h-12 rounded-2xl border-zinc-800 bg-zinc-900/50 px-6 font-bold text-zinc-300 hover:bg-zinc-800"
                 >
-                  {syncAction === "pull" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CloudDownload className="h-4 w-4" />
-                  )}
+                  <CloudDownload className={cn("mr-2 h-4 w-4", syncAction === "pull" && "animate-spin")} />
                   Pull Sync
                 </Button>
               </div>
             ) : (
               <InlineState
                 title="Sinkronisasi terkunci"
-                description="Role aktif tidak memiliki permission settings:manage. Status sinkronisasi tetap dapat dipantau."
+                description="Role aktif tidak memiliki izin manajemen."
                 variant="info"
-                className="text-sm"
               />
             )}
 
-            {webRuntime ? (
-              <InlineState
-                title="Runtime web: push/pull direct dinonaktifkan"
-                description="Web menjalankan sinkronisasi aman via route `/api/sync/*`, tanpa credential Turso di browser."
-                variant="info"
-                className="text-xs"
-              />
-            ) : (
-              <InlineState
-                title="Runtime desktop: local sync path aktif"
-                description="Desktop menggunakan konfigurasi sync lokal + keyring untuk akses cloud."
-                variant="info"
-                className="text-xs"
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-blue-500/10 bg-blue-500/5 p-4 text-xs text-blue-300/80">
+                <p className="font-bold uppercase tracking-widest mb-1 opacity-50">Runtime Focus</p>
+                {webRuntime ? "Web Safe Boundary Active" : "Desktop Local Line Active"}
+              </div>
+              <div className="rounded-2xl border border-blue-500/10 bg-blue-500/5 p-4 text-xs text-blue-300/80">
+                <p className="font-bold uppercase tracking-widest mb-1 opacity-50">Sync Protocol</p>
+                {webRuntime ? "REST over HTTPS" : "Direct SQLite Sync"}
+              </div>
+            </div>
+
+            {desktopRuntime && (
+              <div className="rounded-[1.5rem] border border-zinc-800 bg-zinc-900/30 p-6 space-y-4">
+                 <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-zinc-200">Bootstrap Manager Status</p>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 rounded-xl border border-zinc-800 bg-zinc-900/50 text-xs font-bold text-zinc-400"
+                      disabled={desktopBootstrapLoading}
+                      onClick={() => {
+                        setDesktopBootstrapLoading(true);
+                        setDesktopBootstrapError(null);
+                        void ensureDesktopRuntimeBootstrapReady()
+                          .then((result) => {
+                            setDesktopBootstrapEnsureResult(result);
+                            setDesktopBootstrapConfig(result?.config ?? null);
+                            setDesktopBootstrapHealth(result?.health ?? null);
+                          })
+                          .catch((error) => {
+                            const message = extractUnknownErrorMessage(error, "Gagal bootstrap desktop");
+                            setDesktopBootstrapEnsureResult(null);
+                            setDesktopBootstrapConfig(null);
+                            setDesktopBootstrapHealth(null);
+                            setDesktopBootstrapError(message);
+                          })
+                          .finally(() => setDesktopBootstrapLoading(false));
+                      }}
+                    >
+                      <RefreshCw className={cn("mr-2 h-3.5 w-3.5", desktopBootstrapLoading && "animate-spin")} />
+                      Re-Bootstrap
+                    </Button>
+                 </div>
+                 <InlineState
+                    title={desktopBootstrapHealth?.ok ? "Runtime Siap" : "Pemeriksaan Bootstrap"}
+                    description={desktopBootstrapError || desktopBootstrapHealth?.message || "Cek status bootstrap layanan lokal."}
+                    variant={desktopBootstrapHealth?.ok ? "info" : "warning"}
+                    className="text-xs"
+                 />
+              </div>
             )}
 
-            {desktopRuntime ? (
+            {syncError && (
               <InlineState
-                title={
-                  desktopBootstrapHealth?.ok
-                    ? "Bootstrap desktop runtime tervalidasi"
-                    : "Bootstrap desktop runtime masih tahap fondasi"
-                }
-                description={
-                  desktopBootstrapError
-                    ? desktopBootstrapError
-                    : desktopBootstrapEnsureResult
-                      ? `${desktopBootstrapEnsureResult.message} Target: ${desktopBootstrapEnsureResult.health.url}`
-                      : desktopBootstrapHealth
-                        ? `${desktopBootstrapHealth.message} Target: ${desktopBootstrapHealth.url}`
-                        : desktopBootstrapLoading
-                          ? "Memeriksa loopback runtime desktop production..."
-                          : "Kontrak bootstrap desktop sudah tersedia, tetapi embedded local server production belum diaktifkan."
-                }
-                actionLabel={
-                  desktopBootstrapLoading ? undefined : "Cek Bootstrap Runtime"
-                }
-                onAction={() => {
-                  setDesktopBootstrapLoading(true);
-                  setDesktopBootstrapError(null);
-                  void ensureDesktopRuntimeBootstrapReady()
-                    .then((result) => {
-                      setDesktopBootstrapEnsureResult(result);
-                      setDesktopBootstrapConfig(result?.config ?? null);
-                      setDesktopBootstrapHealth(result?.health ?? null);
-                    })
-                    .catch((error) => {
-                      const message = extractUnknownErrorMessage(
-                        error,
-                        "Gagal membaca status bootstrap desktop runtime",
-                      );
-                      setDesktopBootstrapEnsureResult(null);
-                      setDesktopBootstrapConfig(null);
-                      setDesktopBootstrapHealth(null);
-                      setDesktopBootstrapError(message);
-                    })
-                    .finally(() => {
-                      setDesktopBootstrapLoading(false);
-                    });
-                }}
-                variant={
-                  desktopBootstrapHealth?.ok
-                    ? "info"
-                    : desktopBootstrapError
-                      ? "warning"
-                      : "info"
-                }
-                className="text-xs"
-              />
-            ) : null}
-
-            {desktopRuntime && desktopBootstrapEnsureResult ? (
-              <InlineState
-                title="Startup manager scaffold aktif"
-                description={`phase=${desktopBootstrapEnsureResult.phase}; action=${desktopBootstrapEnsureResult.action}`}
-                variant={desktopBootstrapEnsureResult.ok ? "info" : "warning"}
-                className="text-xs"
-              />
-            ) : null}
-
-            {syncError ? (
-              <InlineState
-                title="Aksi sinkronisasi gagal"
+                title="Kegagalan Sinkronisasi"
                 description={syncError}
-                actionLabel="Coba lagi"
-                onAction={() => {
-                  void runSync("full");
-                }}
-                variant={
-                  syncError.includes("izin") || syncError.includes("login")
-                    ? "warning"
-                    : "error"
-                }
+                variant="error"
               />
-            ) : null}
+            )}
 
-            {lastResult ? (
-              <div
-                className={`rounded-lg border p-4 ${
-                  lastResult.status === "success"
-                    ? "border-emerald-800 bg-emerald-950/50 text-emerald-300"
-                    : "border-red-800 bg-red-950/50 text-red-300"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {lastResult.status === "success" ? (
-                    <CheckCircle className="h-5 w-5" />
-                  ) : (
-                    <XCircle className="h-5 w-5" />
-                  )}
-                  <span className="font-medium">{lastResult.message}</span>
+            {lastResult && (
+              <div className={cn(
+                "rounded-2xl border p-4 transition-all animate-in zoom-in-95",
+                lastResult.status === "success" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400" : "border-rose-500/20 bg-rose-500/5 text-rose-400"
+              )}>
+                <div className="flex items-center gap-3">
+                  {lastResult.status === "success" ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+                  <span className="text-sm font-bold tracking-tight">{lastResult.message}</span>
                 </div>
               </div>
-            ) : null}
+            )}
           </CardContent>
         </Card>
 
@@ -1713,9 +1586,9 @@ export default function SettingsPage() {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-400">Boundary Sync</span>
+              <span className="text-zinc-400">Jalur Sync</span>
               <span className="font-mono text-blue-400">
-                {desktopRuntime ? "Desktop Path" : "/api/sync/*"}
+                {desktopRuntime ? "Jalur Desktop" : "/api/sync/*"}
               </span>
             </div>
             {desktopRuntime ? (
@@ -1772,306 +1645,243 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-2 border-zinc-800 bg-zinc-900 text-white">
-          <CardHeader>
-            <CardTitle>Ganti Password</CardTitle>
-            <CardDescription className="text-zinc-400">
-              Perbarui password akun login aktif dengan validasi client-side +
-              server-side.
-            </CardDescription>
+        <Card className="col-span-2 rounded-[2rem] border-zinc-800/80 bg-zinc-950/40 shadow-2xl backdrop-blur-md text-white">
+          <CardHeader className="p-8">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <Lock className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold tracking-tight">Data Diri & Keamanan Akun</CardTitle>
+                <CardDescription className="text-zinc-400">
+                  Detail kredensial dan pembaruan akses login.
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="current-password">Password Saat Ini</Label>
-              <Input
-                id="current-password"
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                className="border-zinc-800 bg-zinc-950"
-                autoComplete="current-password"
-              />
+          <CardContent className="p-8 pt-0 space-y-10">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-4">
+                 <p className="text-xs font-bold uppercase tracking-widest text-zinc-600">Active Profile</p>
+                 <div className="space-y-2">
+                    <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                       <span className="text-xs text-zinc-400">Role</span>
+                       <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 font-bold uppercase text-[10px]">
+                          {user?.role || "-"}
+                       </Badge>
+                    </div>
+                    <div className="flex flex-col gap-1 px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden text-ellipsis">
+                       <span className="text-xs text-zinc-400">Email</span>
+                       <span className="text-xs font-mono text-white truncate">{userEmail || "-"}</span>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="space-y-4">
+                 <p className="text-xs font-bold uppercase tracking-widest text-zinc-600">Runtime Info</p>
+                 <div className="space-y-2">
+                    <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                       <span className="text-xs text-zinc-400">Environment</span>
+                       <span className="text-xs font-bold text-zinc-200">{desktopRuntime ? "Tauri Native" : "Web Engine"}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                       <span className="text-xs text-zinc-400">DB Layer</span>
+                       <span className="text-xs font-mono text-sky-400">{desktopRuntime ? "SQLite" : "Turso Cloud"}</span>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5 flex flex-col justify-center items-center text-center gap-3">
+                 <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                    <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                 </div>
+                 <p className="text-[10px] text-zinc-500 leading-relaxed italic">"Kredensial Anda dienkripsi secara aman sebelum dikirim ke server."</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-password">Password Baru</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                className="border-zinc-800 bg-zinc-950"
-                autoComplete="new-password"
-              />
+
+            <div className="pt-8 border-t border-zinc-800/50">
+               <div className="mb-6">
+                  <h3 className="text-lg font-bold text-white tracking-tight">Ganti Password</h3>
+                  <p className="text-sm text-zinc-500">Perbarui kata sandi untuk keamanan akun berkala.</p>
+               </div>
+               
+               <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-xs font-bold uppercase tracking-widest text-zinc-600 ml-1">Password Saat Ini</Label>
+                    <Input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="h-12 rounded-xl border-zinc-800 bg-zinc-900/50 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-widest text-zinc-600 ml-1">Password Baru</Label>
+                    <Input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="h-12 rounded-xl border-zinc-800 bg-zinc-900/50 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-widest text-zinc-600 ml-1">Konfirmasi Password</Label>
+                    <Input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="h-12 rounded-xl border-zinc-800 bg-zinc-900/50 focus:border-indigo-500"
+                    />
+                  </div>
+                  
+                  {(isPasswordTooShort || isPasswordMismatch || isPasswordReuse) && (
+                    <div className="md:col-span-2 space-y-2">
+                      {isPasswordTooShort && <InlineState title="Password Terlalu Pendek" description="Minimal 8 karakter." variant="warning" />}
+                      {isPasswordMismatch && <InlineState title="Password Tidak Cocok" description="Konfirmasi harus sama." variant="warning" />}
+                      {isPasswordReuse && <InlineState title="Password Sama" description="Gunakan password yang berbeda." variant="warning" />}
+                    </div>
+                  )}
+
+                  <div className="md:col-span-2 pt-4">
+                     <Button
+                        className="h-12 rounded-2xl bg-indigo-600 px-8 font-bold text-white hover:bg-indigo-500 shadow-[0_0_20px_rgba(79,70,229,0.2)]"
+                        onClick={() => void handleChangePassword()}
+                        disabled={changingPassword || isPasswordMismatch || isPasswordTooShort || !currentPassword}
+                      >
+                        {changingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                        Perbarui Kredensial
+                      </Button>
+                  </div>
+               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Konfirmasi Password Baru</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className="border-zinc-800 bg-zinc-950"
-                autoComplete="new-password"
-              />
-            </div>
-            {isPasswordTooShort ? (
-              <InlineState
-                title="Password baru terlalu pendek"
-                description="Minimal 8 karakter."
-                variant="warning"
-                className="md:col-span-2"
-              />
-            ) : null}
-            {isPasswordMismatch ? (
-              <InlineState
-                title="Konfirmasi password tidak cocok"
-                description="Pastikan password baru dan konfirmasi sama."
-                variant="warning"
-                className="md:col-span-2"
-              />
-            ) : null}
-            {isPasswordReuse ? (
-              <InlineState
-                title="Password baru sama dengan password lama"
-                description="Gunakan password baru yang berbeda."
-                variant="warning"
-                className="md:col-span-2"
-              />
-            ) : null}
-            <div className="md:col-span-2">
-              <Button
-                onClick={() => {
-                  void handleChangePassword();
-                }}
-                disabled={
-                  changingPassword ||
-                  !currentPassword ||
-                  !newPassword ||
-                  !confirmPassword ||
-                  isPasswordMismatch ||
-                  isPasswordReuse ||
-                  isPasswordTooShort
-                }
-                className="bg-blue-600 hover:bg-blue-500"
-              >
-                {changingPassword ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Simpan Password Baru
-              </Button>
-            </div>
+
+            {!webRuntime && canManageSettings && (
+               <div className="pt-10 border-t border-zinc-800/50">
+                  <div className="flex items-center gap-3 mb-6">
+                    <Cloud className="h-5 w-5 text-sky-400" />
+                    <h3 className="text-lg font-bold text-white tracking-tight">Kredensial Sinkronisasi Desktop</h3>
+                  </div>
+                  <div className="grid gap-6 max-w-4xl">
+                     <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                           <Label className="text-xs font-bold uppercase tracking-widest text-zinc-600 ml-1">Sync URL</Label>
+                           <Input
+                             value={syncConfig.url}
+                             onChange={(e) => setSyncConfig(p => ({ ...p, url: e.target.value }))}
+                             placeholder="https://xxxx.turso.io"
+                             className="h-11 rounded-xl border-zinc-800 bg-zinc-900/50"
+                           />
+                        </div>
+                        <div className="space-y-2">
+                           <Label className="text-xs font-bold uppercase tracking-widest text-zinc-600 ml-1">Auth Token</Label>
+                           <Input
+                             type="password"
+                             value={syncConfig.authToken}
+                             onChange={(e) => setSyncConfig(p => ({ ...p, authToken: e.target.value }))}
+                             placeholder="eyJ..."
+                             className="h-11 rounded-xl border-zinc-800 bg-zinc-900/50"
+                           />
+                        </div>
+                     </div>
+                     <div className="flex gap-2">
+                        <Button variant="ghost" className="h-10 rounded-xl border border-zinc-800 bg-zinc-900/30 px-6 font-bold text-zinc-400 hover:text-white" onClick={() => void loadSyncConfig()}>
+                           Muat Ulang
+                        </Button>
+                        <Button className="h-10 rounded-xl bg-sky-600 px-6 font-bold text-white hover:bg-sky-500" onClick={() => void saveSyncConfig()} disabled={configSaving}>
+                           {configSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Simpan Keyring"}
+                        </Button>
+                     </div>
+                  </div>
+               </div>
+            )}
           </CardContent>
         </Card>
 
-        {!webRuntime && canManageSettings ? (
-          <Card className="col-span-2 border-zinc-800 bg-zinc-900 text-white">
-            <CardHeader>
-              <CardTitle>Desktop Sync Credentials</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Kredensial hanya untuk runtime desktop dan tidak tersedia pada
-                browser/web runtime.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {configError ? (
-                <InlineState
-                  title="Konfigurasi sync desktop belum siap"
-                  description={configError}
-                  variant="warning"
-                  className="text-xs"
-                />
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="sync-url">Sync URL</Label>
-                <Input
-                  id="sync-url"
-                  value={syncConfig.url}
-                  onChange={(event) =>
-                    setSyncConfig((prev) => ({
-                      ...prev,
-                      url: event.target.value,
-                    }))
-                  }
-                  placeholder="https://xxxx.turso.io"
-                  className="border-zinc-800 bg-zinc-950"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sync-token">Sync Auth Token</Label>
-                <Input
-                  id="sync-token"
-                  type="password"
-                  value={syncConfig.authToken}
-                  onChange={(event) =>
-                    setSyncConfig((prev) => ({
-                      ...prev,
-                      authToken: event.target.value,
-                    }))
-                  }
-                  placeholder="eyJ..."
-                  className="border-zinc-800 bg-zinc-950"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  disabled={configLoading || configSaving}
-                  onClick={() => {
-                    void loadSyncConfig();
-                  }}
-                  className={dashboardOutlineButtonClass}
-                >
-                  {configLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  Muat Ulang
-                </Button>
-                <Button
-                  disabled={configSaving}
-                  onClick={() => {
-                    void saveSyncConfig();
-                  }}
-                  className="bg-blue-600 hover:bg-blue-500"
-                >
-                  {configSaving ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Simpan ke Keyring
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="col-span-2 border-zinc-800 bg-zinc-900 text-white">
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle>Auth/Sync Event Trace</CardTitle>
-              <CardDescription className="text-zinc-400">
-                Jejak event frontend untuk debug cepat lintas runtime.
-              </CardDescription>
+        <Card className="col-span-2 rounded-[2rem] border-zinc-800/80 bg-zinc-950/40 shadow-2xl backdrop-blur-md text-white">
+          <CardHeader className="p-8 flex flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800/50 text-zinc-400 border border-zinc-800">
+                  <Filter className="h-6 w-6" />
+               </div>
+               <div>
+                  <CardTitle className="text-xl font-bold tracking-tight">Jejak Event Auth/Sync</CardTitle>
+                  <CardDescription className="text-zinc-400">
+                    Investigasi audit lintas runtime EDUCORE.
+                  </CardDescription>
+               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300">
-                <ShieldOff className="h-3.5 w-3.5 text-zinc-400" />
-                <span>Redact Email</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={dashboardOutlineButtonClass}
-                  onClick={() => {
-                    setRedactSensitiveTraceData((prev) => !prev);
-                  }}
-                >
-                  {redactSensitiveTraceData ? "On" : "Off"}
-                </Button>
-              </div>
-              <Button
+            <div className="hidden lg:flex items-center gap-2">
+               <Button
                 variant="outline"
-                className={dashboardOutlineButtonClass}
+                className="h-10 rounded-xl border-zinc-800 bg-zinc-900/50 text-xs font-bold text-zinc-400 hover:bg-zinc-800"
                 onClick={() => {
                   setShowErrorTraceOnly((prev) => !prev);
                 }}
                 disabled={traceEvents.length === 0}
               >
-                <Filter className="mr-2 h-4 w-4" />
-                {showErrorTraceOnly ? "All Events" : "Error Only"}
+                <Filter className="mr-2 h-3.5 w-3.5" />
+                {showErrorTraceOnly ? "Lihat Semua" : "Hanya Error"}
               </Button>
               <Button
                 variant="outline"
-                className={dashboardOutlineButtonClass}
+                className="h-10 rounded-xl border-zinc-800 bg-zinc-900/50 text-xs font-bold text-zinc-400 hover:border-rose-500/20 hover:text-rose-400"
                 onClick={() => {
                   clearTraceEvents();
                 }}
                 disabled={traceEvents.length === 0}
               >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Clear
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Clear Logs
               </Button>
               <Button
-                variant="outline"
-                className={dashboardOutlineButtonClass}
+                variant="ghost"
+                className="h-10 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
                 onClick={() => {
                   void copyTraceReport();
                 }}
                 disabled={traceEvents.length === 0}
               >
-                <ClipboardCopy className="mr-2 h-4 w-4" />
-                Copy Report
+                <ClipboardCopy className="mr-2 h-3.5 w-3.5" />
+                Copy JSON
               </Button>
-              {desktopRuntime ? (
-                <Button
-                  variant="outline"
-                  className={dashboardOutlineButtonClass}
-                  onClick={() => {
-                    void exportTraceReportAsJson();
-                  }}
-                  disabled={traceEvents.length === 0}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Export JSON
-                </Button>
-              ) : null}
             </div>
           </CardHeader>
-          <CardContent>
-            {hasRecentErrorBurst ? (
-              <InlineState
-                title="Anomali auth/sync terdeteksi"
-                description={`Terdapat ${recentErrorCount} error dalam 10 menit terakhir. Tinjau trace dan kirim report untuk investigasi.`}
+          <CardContent className="p-8 pt-0">
+            {hasRecentErrorBurst && (
+               <InlineState
+                title="Peringatan Lonjakan Error"
+                description={`Terdeteksi ${recentErrorCount} kegagalan dalam jendela 10 menit.`}
                 variant="warning"
-                actionLabel="Copy Report"
-                onAction={() => {
-                  void copyTraceReport();
-                }}
-                className="mb-4"
+                className="mb-8"
               />
-            ) : null}
+            )}
+            
             {visibleTraceEvents.length === 0 ? (
-              <p className="text-sm text-zinc-400">
-                {showErrorTraceOnly
-                  ? "Tidak ada trace dengan status error."
-                  : "Belum ada event. Jalankan aksi auth/sync untuk menghasilkan trace."}
-              </p>
+              <div className="py-20 text-center rounded-[1.5rem] border border-dashed border-zinc-800 bg-zinc-950/20">
+                 <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">
+                  {showErrorTraceOnly ? "No Error Entries Found" : "Historical Log is Empty"}
+                 </p>
+              </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                 {visibleTraceEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3"
+                    className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/20 p-4 transition-all hover:bg-zinc-900/40"
                   >
-                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
-                      <Badge
-                        variant="secondary"
-                        className="bg-zinc-800 text-zinc-100"
-                      >
-                        {event.action}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        className={
-                          event.status === "success"
-                            ? "bg-emerald-900 text-emerald-200"
-                            : event.status === "error"
-                              ? "bg-red-900 text-red-200"
-                              : event.status === "warning"
-                                ? "bg-amber-900 text-amber-200"
-                                : "bg-zinc-800 text-zinc-100"
-                        }
-                      >
-                        {event.status}
-                      </Badge>
-                      <span className="font-mono text-zinc-500">
-                        {event.runtime}
-                      </span>
-                      <span className="font-mono text-zinc-500">
-                        {new Date(event.at).toLocaleString()}
-                      </span>
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                       <span className={cn(
+                          "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                          event.status === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : 
+                          event.status === "error" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : 
+                          "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                       )}>
+                          {event.action}
+                       </span>
+                       <span className="text-[10px] font-mono text-zinc-500">{new Date(event.at).toLocaleTimeString()}</span>
+                       <span className="text-[10px] font-bold text-zinc-600 ml-auto uppercase tracking-tighter">{event.runtime}</span>
                     </div>
-                    <p className="text-sm text-zinc-200">{event.detail}</p>
+                    <p className="text-sm text-zinc-300 leading-relaxed font-medium">{event.detail}</p>
                   </div>
                 ))}
               </div>

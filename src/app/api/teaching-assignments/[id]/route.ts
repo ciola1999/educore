@@ -1,10 +1,6 @@
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
-import {
-  deleteTeachingAssignment,
-  updateTeachingAssignment,
-} from "@/lib/services/academic";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +15,7 @@ export async function PATCH(
   }
 
   const { id } = await context.params;
+  const { updateTeachingAssignment } = await import("@/lib/services/academic");
   const result = await updateTeachingAssignment(id, await request.json());
   if (!result.success) {
     return apiError(
@@ -52,6 +49,7 @@ export async function DELETE(
   }
 
   const { id } = await context.params;
+  const { deleteTeachingAssignment } = await import("@/lib/services/academic");
   const result = await deleteTeachingAssignment(id);
   if (!result.success) {
     return apiError(
