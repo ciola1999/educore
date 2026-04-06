@@ -2,6 +2,7 @@
 
 import { AlertTriangle, BellRing } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { InlineState } from "@/components/common/inline-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1025,6 +1026,9 @@ export function AttendanceRiskInsights() {
             }
           : current,
       );
+      setNotificationFilter((current) =>
+        current === "all" ? "pending" : current,
+      );
     } finally {
       setMarkingId(null);
     }
@@ -1119,6 +1123,9 @@ export function AttendanceRiskInsights() {
               ),
             }
           : current,
+      );
+      setNotificationFilter((current) =>
+        current === "all" ? "pending" : current,
       );
     } finally {
       setBulkMarkingDone(false);
@@ -1800,9 +1807,16 @@ export function AttendanceRiskInsights() {
     setAuditLoadingId(notificationId);
     try {
       const rows = await apiGet<FollowUpAuditItem[]>(
-        `/api/attendance/risk-followups/${notificationId}/history`,
+        `/api/attendance/risk-followups/${encodeURIComponent(notificationId)}/history`,
       );
       setAuditTrail((current) => ({ ...current, [notificationId]: rows }));
+    } catch (error) {
+      setAuditOpenId(null);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Riwayat audit follow-up belum berhasil dimuat.",
+      );
     } finally {
       setAuditLoadingId(null);
     }

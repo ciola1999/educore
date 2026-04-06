@@ -75,3 +75,50 @@ export function buildClassNameLookupKeys(
 
   return [...keys];
 }
+
+export type ClassOptionLike = {
+  id: string;
+  name: string | null | undefined;
+};
+
+export function dedupeCanonicalClassOptions<T extends ClassOptionLike>(
+  rows: T[],
+): Array<{ id: string; name: string }> {
+  const canonicalRows = new Map<
+    string,
+    { id: string; name: string; sourceName: string }
+  >();
+
+  for (const row of rows) {
+    const sourceName = sanitizeClassDisplayName(row.name);
+    const canonicalName = canonicalizeClassDisplayName(row.name);
+    if (canonicalName === "UNASSIGNED") {
+      continue;
+    }
+
+    const existing = canonicalRows.get(canonicalName);
+    if (!existing) {
+      canonicalRows.set(canonicalName, {
+        id: row.id,
+        name: canonicalName,
+        sourceName,
+      });
+      continue;
+    }
+
+    const rowIsCanonical = sourceName === canonicalName;
+    const existingIsCanonical = existing.sourceName === canonicalName;
+
+    if (rowIsCanonical && !existingIsCanonical) {
+      canonicalRows.set(canonicalName, {
+        id: row.id,
+        name: canonicalName,
+        sourceName,
+      });
+    }
+  }
+
+  return [...canonicalRows.values()]
+    .map(({ id, name }) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

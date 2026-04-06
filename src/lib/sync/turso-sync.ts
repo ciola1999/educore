@@ -10,6 +10,7 @@ import {
   guruMapel,
   holidays,
   jadwal,
+  notifikasi,
   permissions,
   rolePermissions,
   roles,
@@ -312,12 +313,26 @@ const SYNC_TABLES: SyncTableConfig[] = [
       studentId: "students",
     },
   },
+  {
+    name: "notifikasi",
+    table: notifikasi,
+    conflictKey: "id",
+    foreignKeyRemaps: {
+      userId: "users",
+    },
+  },
 ];
 
 const SYNC_TABLE_CONFIG_MAP = new Map(
   SYNC_TABLES.map((tableConfig) => [tableConfig.name, tableConfig]),
 );
-const AUTHORITATIVE_PULL_PRUNE_TABLES = new Set(["users", "students"]);
+const AUTHORITATIVE_PULL_PRUNE_TABLES = new Set([
+  "users",
+  "students",
+  "attendance",
+  "student_daily_attendance",
+  "notifikasi",
+]);
 
 export const SYNC_TABLE_NAMES = SYNC_TABLES.map((table) => table.name);
 

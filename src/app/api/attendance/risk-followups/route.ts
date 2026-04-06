@@ -8,6 +8,17 @@ type SessionUserLike = {
   id?: string;
 };
 
+function isAttendanceRiskFollowUpConflict(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("masih aktif") ||
+    error.message.includes("sudah pernah dibuat")
+  );
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   const guard = requirePermission(session, "attendance:write");
@@ -82,6 +93,10 @@ export async function POST(request: Request) {
 
     return apiOk({ success: true });
   } catch (error) {
+    if (error instanceof Error && isAttendanceRiskFollowUpConflict(error)) {
+      return apiError(error.message, 409, "FOLLOW_UP_ALREADY_EXISTS");
+    }
+
     return apiError(
       error instanceof Error ? error.message : "Gagal membuat follow-up",
       400,

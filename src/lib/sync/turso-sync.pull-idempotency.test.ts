@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  attendance,
+  notifikasi,
+  studentDailyAttendance,
+} from "@/lib/db/schema";
 import { fullSync, pullFromCloud, pushToCloud } from "./turso-sync";
 
 vi.mock("@/core/env", () => ({
@@ -1068,5 +1073,143 @@ describe("turso full sync idempotency", () => {
 
     expect(result.status).toBe("success");
     expect(syncedUpdates).toHaveLength(1);
+  });
+
+  it("pushes pending attendance follow-up notifications to the cloud", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let pendingSelectServed = false;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => {
+            if (!pendingSelectServed) {
+              pendingSelectServed = true;
+              return Promise.resolve([
+                {
+                  id: "notif-1",
+                  userId: "remote-user-1",
+                  judul: "Follow-up Attendance: Budi",
+                  pesan: "Budi membutuhkan tindak lanjut.",
+                  tipe: "attendance-risk",
+                  link: "/dashboard/attendance?tab=history&studentId=student-1",
+                  isRead: false,
+                  createdAt: new Date("2026-04-06T00:00:00.000Z"),
+                  updatedAt: new Date("2026-04-06T00:00:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => []),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (sql.includes('INSERT INTO "notifikasi"')) {
+        expect(statement.args).toContain("notif-1");
+        expect(statement.args).toContain("attendance-risk");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["notifikasi"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(executeMock).toHaveBeenCalled();
+    expect(syncedUpdates).toHaveLength(1);
+  });
+
+  it("prunes synced attendance and notification rows absent from the cloud during authoritative pull", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) =>
+          createAwaitableQuery(
+            table === attendance
+              ? [
+                  {
+                    id: "manual-attendance-1",
+                    deletedAt: null,
+                    syncStatus: "synced",
+                  },
+                ]
+              : table === studentDailyAttendance
+                ? [
+                    {
+                      id: "qr-attendance-1",
+                      deletedAt: null,
+                      syncStatus: "synced",
+                    },
+                  ]
+                : table === notifikasi
+                  ? [
+                      {
+                        id: "notif-1",
+                        deletedAt: null,
+                        syncStatus: "synced",
+                      },
+                    ]
+                  : [],
+            async () => [],
+          ),
+        ),
+      })),
+      insert: vi.fn(() => ({
+        values: vi.fn(async () => {}),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            updates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async () => ({ rows: [] }));
+
+    const result = await pullFromCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      syncUsersProjection: vi.fn(async () => {}),
+      pruneAuthoritativeTables: true,
+    });
+
+    expect(result.status).toBe("success");
+    expect(
+      updates.filter((payload) => payload.deletedAt instanceof Date),
+    ).toHaveLength(3);
   });
 });

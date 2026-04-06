@@ -112,6 +112,7 @@ import { pullFromCloud, pushToCloud } from "@/lib/sync/turso-sync";
 import {
   buildClassNameLookupKeys,
   canonicalizeClassDisplayName,
+  dedupeCanonicalClassOptions,
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
@@ -2091,7 +2092,7 @@ async function handleDesktopAttendanceClasses() {
     .select({ id: classes.id, name: classes.name })
     .from(classes)
     .where(isNull(classes.deletedAt));
-  return apiOk(data);
+  return apiOk(dedupeCanonicalClassOptions(data));
 }
 
 async function handleDesktopAttendanceStudentOptions(url: URL) {
@@ -2700,6 +2701,14 @@ async function handleDesktopCreateAttendanceRiskFollowUp(
     });
     return apiOk({ success: true });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("masih aktif") ||
+        error.message.includes("sudah pernah dibuat"))
+    ) {
+      return apiError(error.message, 409, "FOLLOW_UP_ALREADY_EXISTS");
+    }
+
     return apiError(
       error instanceof Error ? error.message : "Gagal membuat follow-up",
       400,

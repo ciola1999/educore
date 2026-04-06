@@ -7,6 +7,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import {
+  createAttendanceRiskFollowUp,
   getAttendanceHistory,
   processQRScan,
   recordBulkAttendance,
@@ -558,5 +559,85 @@ describe("recordBulkAttendance", () => {
       status: "EXCUSED",
       statusLabel: "Izin",
     });
+  });
+
+  it("blocks creating a duplicate follow-up when the latest one is still active", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 6, 9, 0, 0));
+
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [
+            {
+              id: "student-1",
+              fullName: "Budi Santoso",
+              nis: "2324.10.001",
+              grade: "KELAS 7",
+              accountClassName: "KELAS 7",
+            },
+          ],
+          [{ homeroomTeacherId: "teacher-1" }],
+          [
+            {
+              id: "followup-1",
+              isRead: false,
+              pesan:
+                "Budi Santoso (2324.10.001) kelas KELAS 7 membutuhkan tindak lanjut. Indikator: Alpha >= 3. Deadline: 2026-04-08",
+              createdAt: new Date("2026-04-05T10:00:00.000Z"),
+            },
+          ],
+        ],
+      }),
+    );
+
+    await expect(
+      createAttendanceRiskFollowUp({
+        actorUserId: "teacher-1",
+        studentId: "student-1",
+        riskFlags: ["Alpha >= 3"],
+        deadline: "2026-04-10",
+      }),
+    ).rejects.toThrow("masih aktif");
+  });
+
+  it("allows creating a new follow-up when the latest one is overdue", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 6, 9, 0, 0));
+
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [
+            {
+              id: "student-1",
+              fullName: "Budi Santoso",
+              nis: "2324.10.001",
+              grade: "KELAS 7",
+              accountClassName: "KELAS 7",
+            },
+          ],
+          [{ homeroomTeacherId: "teacher-1" }],
+          [
+            {
+              id: "followup-1",
+              isRead: false,
+              pesan:
+                "Budi Santoso (2324.10.001) kelas KELAS 7 membutuhkan tindak lanjut. Indikator: Alpha >= 3. Deadline: 2026-04-02",
+              createdAt: new Date("2026-04-01T10:00:00.000Z"),
+            },
+          ],
+        ],
+      }),
+    );
+
+    await expect(
+      createAttendanceRiskFollowUp({
+        actorUserId: "teacher-1",
+        studentId: "student-1",
+        riskFlags: ["Alpha >= 3"],
+        deadline: "2026-04-10",
+      }),
+    ).resolves.toBeUndefined();
   });
 });

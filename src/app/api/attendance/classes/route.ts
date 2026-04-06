@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/api/authz";
 import { apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
+import { dedupeCanonicalClassOptions } from "@/lib/utils/class-name";
 
 export const dynamic = "force-dynamic";
 
@@ -22,5 +23,5 @@ export async function GET() {
     .from(classes)
     .where(isNull(classes.deletedAt));
 
-  return apiOk(data);
+  return apiOk(dedupeCanonicalClassOptions(data));
 }

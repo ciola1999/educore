@@ -137,4 +137,36 @@ describe("POST /api/attendance/risk-followups", () => {
       deadline: "2026-03-31",
     });
   });
+
+  it("returns 409 when an open or completed follow-up already exists", async () => {
+    authMock.mockResolvedValue({ user: { id: "teacher-1" } });
+    createAttendanceRiskFollowUpMock.mockRejectedValue(
+      new Error(
+        "Tindak lanjut untuk siswa ini masih aktif. Selesaikan dulu atau tunggu deadline terlewati sebelum membuat yang baru.",
+      ),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/risk-followups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          studentId: "student-1",
+          riskFlags: ["Alpha >= 3"],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    const payload = (await response.json()) as {
+      success: boolean;
+      code?: string;
+      error?: string;
+    };
+    expect(payload.success).toBe(false);
+    expect(payload.code).toBe("FOLLOW_UP_ALREADY_EXISTS");
+    expect(payload.error).toContain("masih aktif");
+  });
 });

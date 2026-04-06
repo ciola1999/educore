@@ -2291,6 +2291,23 @@ function extractAttendanceRiskClassName(
   return messageMatch?.[1]?.trim() || null;
 }
 
+function isAttendanceRiskFollowUpStillOpen(notification: {
+  isRead: boolean;
+  pesan: string;
+}) {
+  if (notification.isRead) {
+    return false;
+  }
+
+  const parsed = parseAttendanceRiskFollowUpMessage(notification.pesan);
+  if (!parsed.deadline) {
+    return true;
+  }
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  return parsed.deadline >= today;
+}
+
 export async function createAttendanceRiskFollowUp(input: {
   actorUserId: string;
   studentId: string;
@@ -2363,6 +2380,44 @@ export async function createAttendanceRiskFollowUp(input: {
     .limit(1);
   const assigneeUserId =
     classRow[0]?.homeroomTeacherId?.trim() || input.actorUserId;
+
+  const normalizedStudentId = input.studentId.trim();
+  const encodedStudentId = encodeURIComponent(normalizedStudentId);
+  const latestExistingFollowUp = await db
+    .select({
+      id: notifikasi.id,
+      isRead: notifikasi.isRead,
+      pesan: notifikasi.pesan,
+      createdAt: notifikasi.createdAt,
+    })
+    .from(notifikasi)
+    .where(
+      and(
+        eq(notifikasi.tipe, "attendance-risk"),
+        or(
+          like(notifikasi.link, `%studentId=${normalizedStudentId}%`),
+          like(notifikasi.link, `%studentId=${encodedStudentId}%`),
+        ),
+        isNull(notifikasi.deletedAt),
+      ),
+    )
+    .orderBy(desc(notifikasi.createdAt))
+    .limit(1);
+
+  const currentFollowUp = latestExistingFollowUp[0];
+  if (currentFollowUp) {
+    if (currentFollowUp.isRead) {
+      throw new Error(
+        "Tindak lanjut untuk siswa ini sudah pernah dibuat. Gunakan riwayat yang ada kecuali follow-up terbaru melewati deadline tanpa diselesaikan.",
+      );
+    }
+
+    if (isAttendanceRiskFollowUpStillOpen(currentFollowUp)) {
+      throw new Error(
+        "Tindak lanjut untuk siswa ini masih aktif. Selesaikan dulu atau tunggu deadline terlewati sebelum membuat yang baru.",
+      );
+    }
+  }
 
   const followUpId = crypto.randomUUID();
 

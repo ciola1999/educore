@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildClassNameLookupKeys,
   canonicalizeClassDisplayName,
+  dedupeCanonicalClassOptions,
   sanitizeClassDisplayName,
 } from "./class-name";
 
@@ -23,6 +24,20 @@ describe("class-name utils", () => {
     expect(buildClassNameLookupKeys("KELAS XII TSM")).toEqual([
       "KELAS XII TSM",
       "KELAS 12 TSM",
+    ]);
+  });
+
+  it("deduplicates class options into canonical display names", () => {
+    expect(
+      dedupeCanonicalClassOptions([
+        { id: "legacy-1", name: "KELAS XII TSM" },
+        { id: "canonical-1", name: "KELAS 12 TSM" },
+        { id: "kelas-7", name: "kelas vii" },
+        { id: "uuid-like", name: "2361c8a3-0355-4836-99a1-136f78fe299d" },
+      ]),
+    ).toEqual([
+      { id: "canonical-1", name: "KELAS 12 TSM" },
+      { id: "kelas-7", name: "KELAS 7" },
     ]);
   });
 });
