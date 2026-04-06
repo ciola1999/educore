@@ -10,6 +10,7 @@ const getAttendanceHistoryClassSummaryMock = vi.hoisted(() => vi.fn());
 const getAttendanceHistoryStudentSummaryMock = vi.hoisted(() => vi.fn());
 const getAttendanceHistoryTrendMock = vi.hoisted(() => vi.fn());
 const getAttendanceHistoryHeatmapMock = vi.hoisted(() => vi.fn());
+const getAttendanceHistoryAnalyticsBundleMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth/web/auth", () => ({
   auth: authMock,
@@ -28,6 +29,7 @@ vi.mock("@/core/services/attendance-service", () => ({
   getAttendanceHistoryStudentSummary: getAttendanceHistoryStudentSummaryMock,
   getAttendanceHistoryTrend: getAttendanceHistoryTrendMock,
   getAttendanceHistoryHeatmap: getAttendanceHistoryHeatmapMock,
+  getAttendanceHistoryAnalyticsBundle: getAttendanceHistoryAnalyticsBundleMock,
 }));
 
 import { GET } from "./route";
@@ -332,6 +334,49 @@ describe("GET /api/attendance/history", () => {
         className: "XII TSM 1",
       }),
     );
+  });
+
+  it("uses analytics bundle path and forwards status/source/class filters", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    getAttendanceHistoryAnalyticsBundleMock.mockResolvedValue({
+      summary: {
+        total: 12,
+        present: 7,
+        late: 2,
+        excused: 2,
+        sick: 1,
+        permission: 1,
+        absent: 1,
+        qr: 8,
+        manual: 4,
+      },
+      classSummary: [],
+      studentSummary: [],
+      trend: [],
+      heatmap: [],
+    });
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/attendance/history?analyticsBundle=true&status=permission&source=all&className=X-A&startDate=2026-03-01&endDate=2026-03-31",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getAttendanceHistoryAnalyticsBundleMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "permission",
+        source: "all",
+        className: "X-A",
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+      }),
+    );
+    expect(getAttendanceHistoryMock).not.toHaveBeenCalled();
+    expect(getAttendanceHistoryCountMock).not.toHaveBeenCalled();
   });
 
   it("returns paginated data from service without re-slicing in the route", async () => {
