@@ -432,4 +432,131 @@ describe("recordBulkAttendance", () => {
       status: "ABSENT",
     });
   });
+
+  it("returns only QR late rows when the history status filter is late", async () => {
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [
+            {
+              id: "qr-late-1",
+              studentId: "student-1",
+              snapshotStudentName: "Budi Santoso",
+              snapshotStudentNis: "2324.10.001",
+              className: "X-A",
+              studentGrade: "X-A",
+              date: "2026-03-27",
+              checkInTime: new Date("2026-03-27T07:30:00.000Z"),
+              checkOutTime: null,
+              status: "LATE",
+              lateDuration: 15,
+              syncStatus: "synced",
+              version: 1,
+              hlc: null,
+              createdAt: new Date("2026-03-27T07:30:00.000Z"),
+              updatedAt: new Date("2026-03-27T07:30:00.000Z"),
+              deletedAt: null,
+            },
+          ],
+        ],
+      }),
+    );
+
+    const result = await getAttendanceHistory({
+      className: "X-A",
+      limit: 50,
+      offset: 0,
+      source: "all",
+      status: "late",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "qr-late-1",
+      source: "qr",
+      status: "LATE",
+      className: "X-A",
+    });
+  });
+
+  it("keeps sick and permission history filters distinct for manual attendance rows", async () => {
+    getDbMock
+      .mockResolvedValueOnce(
+        createFakeDb({
+          selectResults: [
+            [],
+            [
+              {
+                id: "manual-sick-1",
+                studentId: "student-1",
+                date: "2026-03-27",
+                status: "sick",
+                fullName: "Budi Santoso",
+                nis: "2324.10.001",
+                nisn: "9988776655",
+                className: "X-A",
+                studentGrade: "X-A",
+                notes: "demam",
+                createdAt: new Date("2026-03-27T08:00:00.000Z"),
+              },
+            ],
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createFakeDb({
+          selectResults: [
+            [],
+            [],
+            [
+              {
+                id: "manual-permission-1",
+                studentId: "student-2",
+                date: "2026-03-27",
+                status: "permission",
+                fullName: "Siti Aminah",
+                nis: "2324.10.002",
+                nisn: "1122334455",
+                className: "X-A",
+                studentGrade: "X-A",
+                notes: "izin keluarga",
+                createdAt: new Date("2026-03-27T08:05:00.000Z"),
+              },
+            ],
+          ],
+        }),
+      );
+
+    const sickResult = await getAttendanceHistory({
+      className: "X-A",
+      limit: 50,
+      offset: 0,
+      source: "all",
+      status: "sick",
+    });
+
+    const permissionResult = await getAttendanceHistory({
+      className: "X-A",
+      limit: 50,
+      offset: 0,
+      source: "all",
+      status: "permission",
+    });
+
+    expect(sickResult).toHaveLength(1);
+    expect(sickResult[0]).toMatchObject({
+      id: "manual-sick-1",
+      source: "manual",
+      status: "EXCUSED",
+      statusLabel: "Sakit",
+    });
+
+    expect(permissionResult).toHaveLength(1);
+    expect(permissionResult[0]).toMatchObject({
+      id: "manual-permission-1",
+      source: "manual",
+      status: "EXCUSED",
+      statusLabel: "Izin",
+    });
+  });
 });
