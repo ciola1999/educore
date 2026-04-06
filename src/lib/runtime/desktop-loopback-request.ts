@@ -1,4 +1,5 @@
 export const DESKTOP_LOOPBACK_SESSION_COOKIE = "educore.desktop.loopback";
+export const DESKTOP_LOOPBACK_RUNTIME_COOKIE = "educore.desktop.runtime";
 export const DESKTOP_LOOPBACK_QUERY_TOKEN = "educore_desktop_token";
 export const DESKTOP_LOOPBACK_ENV_TOKEN = "EDUCORE_DESKTOP_LOOPBACK_TOKEN";
 

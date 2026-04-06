@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESKTOP_LOOPBACK_ENV_TOKEN,
   DESKTOP_LOOPBACK_QUERY_TOKEN,
+  DESKTOP_LOOPBACK_RUNTIME_COOKIE,
   DESKTOP_LOOPBACK_SESSION_COOKIE,
   hasDesktopLoopbackSessionToken,
   isDesktopLoopbackRequest,
@@ -54,6 +55,7 @@ describe("isDesktopLoopbackRequest", () => {
 describe("desktop loopback session token contract", () => {
   it("keeps token names stable", () => {
     expect(DESKTOP_LOOPBACK_SESSION_COOKIE).toBe("educore.desktop.loopback");
+    expect(DESKTOP_LOOPBACK_RUNTIME_COOKIE).toBe("educore.desktop.runtime");
     expect(DESKTOP_LOOPBACK_QUERY_TOKEN).toBe("educore_desktop_token");
     expect(DESKTOP_LOOPBACK_ENV_TOKEN).toBe("EDUCORE_DESKTOP_LOOPBACK_TOKEN");
   });

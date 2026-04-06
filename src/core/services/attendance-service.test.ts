@@ -372,4 +372,64 @@ describe("recordBulkAttendance", () => {
       source: "qr",
     });
   });
+
+  it("keeps manual rows deduplicated against unfiltered QR presence even when status filter is narrowed", async () => {
+    getDbMock.mockResolvedValue(
+      createFakeDb({
+        selectResults: [
+          [],
+          [
+            {
+              studentId: "student-1",
+              date: "2026-03-27",
+              className: "X-A",
+              studentGrade: "X-A",
+            },
+          ],
+          [
+            {
+              id: "manual-duplicate-alpha",
+              studentId: "student-1",
+              date: "2026-03-27",
+              status: "alpha",
+              fullName: "Budi Santoso",
+              nis: "2324.10.001",
+              className: "X-A",
+              studentGrade: "X-A",
+              notes: "manual duplicate",
+              createdAt: new Date("2026-03-27T08:00:00.000Z"),
+            },
+            {
+              id: "manual-real-alpha",
+              studentId: "student-2",
+              date: "2026-03-27",
+              status: "alpha",
+              fullName: "Siti",
+              nis: "2324.10.002",
+              className: "X-A",
+              studentGrade: "X-A",
+              notes: "tanpa keterangan",
+              createdAt: new Date("2026-03-27T08:05:00.000Z"),
+            },
+          ],
+        ],
+      }),
+    );
+
+    const result = await getAttendanceHistory({
+      className: "X-A",
+      limit: 50,
+      offset: 0,
+      source: "all",
+      status: "alpha",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "manual-real-alpha",
+      studentId: "student-2",
+      source: "manual",
+      status: "ABSENT",
+    });
+  });
 });

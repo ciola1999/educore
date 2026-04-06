@@ -200,6 +200,7 @@ export function QRScannerView() {
   const isDesktopRuntime = isTauri();
   const scannerElementId = useId().replace(/:/g, "-");
   const manualInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const isMountedRef = useRef(true);
   const scannerRef = useRef<{
     stop: () => Promise<void>;
     clear: () => void | Promise<void>;
@@ -289,16 +290,19 @@ export function QRScannerView() {
     }
 
     try {
-      if (scannerRef.current.isScanning) {
-        await scannerRef.current.stop();
-      }
+      await scannerRef.current.stop().catch(() => {
+        // html5-qrcode may reject while the video element is still attaching.
+        // Best-effort stop is still safer than clearing the DOM immediately.
+      });
       await scannerRef.current.clear();
     } catch {
       // Scanner cleanup should not block UI recovery.
     } finally {
       scannerRef.current = null;
-      setCameraActive(false);
-      setStartingCamera(false);
+      if (isMountedRef.current) {
+        setCameraActive(false);
+        setStartingCamera(false);
+      }
     }
   }, []);
 
@@ -435,7 +439,10 @@ export function QRScannerView() {
   }
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
+      isMountedRef.current = false;
       if (unlockTimerRef.current) {
         clearTimeout(unlockTimerRef.current);
         unlockTimerRef.current = null;

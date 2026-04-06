@@ -2,6 +2,7 @@
 
 import { AlertTriangle, BellRing } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { InlineState } from "@/components/common/inline-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPatch } from "@/lib/api/request";
-import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { ensureAppWarmup, scheduleIdleTask } from "@/lib/runtime/app-bootstrap";
 import { outlineButtonStyles } from "@/lib/ui/outline-button-styles";
 
@@ -185,6 +185,13 @@ function getPeriodLabel(period: "7d" | "30d" | "month") {
   return "Bulan Ini";
 }
 
+async function exportAttendanceRiskRowsToXlsx(
+  options: Parameters<typeof import("@/lib/export/xlsx").exportRowsToXlsx>[0],
+) {
+  const { exportRowsToXlsx } = await import("@/lib/export/xlsx");
+  await exportRowsToXlsx(options);
+}
+
 const dashboardPanelClass =
   "overflow-hidden border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]";
 const dashboardInsetCardClass =
@@ -256,6 +263,7 @@ export function AttendanceRiskInsights() {
   const [hideReminderCards, setHideReminderCards] = useState(false);
   const [compareAssigneeA, setCompareAssigneeA] = useState("none");
   const [compareAssigneeB, setCompareAssigneeB] = useState("none");
+  const [error, setError] = useState<string | null>(null);
 
   const buildRiskInsightsQueryString = useCallback(
     (options?: {
@@ -296,9 +304,15 @@ export function AttendanceRiskInsights() {
           { timeoutMs: RISK_INSIGHTS_TIMEOUT_MS },
         );
         setData(nextData);
+        setError(null);
         return nextData;
-      } catch {
+      } catch (error) {
         setData(null);
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Insight attendance belum berhasil dimuat.",
+        );
         return null;
       }
     },
@@ -572,7 +586,15 @@ export function AttendanceRiskInsights() {
   }
 
   if (!data) {
-    return null;
+    return (
+      <InlineState
+        title="Insight Attendance Belum Tersedia"
+        description={
+          error || "Data insight attendance belum berhasil dimuat saat ini."
+        }
+        variant="warning"
+      />
+    );
   }
 
   const stagedDetailsPending =
@@ -957,7 +979,7 @@ export function AttendanceRiskInsights() {
       ? `Reminder overdue: ${overdueNotifications[0].judul} perlu ditindaklanjuti segera.`
       : null,
     topOverdueAssignee
-      ? `Assignee prioritas: ${topOverdueAssignee.assigneeName} memiliki follow-up overdue.`
+      ? `Penanggung jawab prioritas: ${topOverdueAssignee.assigneeName} memiliki tindak lanjut yang terlambat.`
       : null,
     visibleNotificationSummary.pending >= 5
       ? `Ada ${visibleNotificationSummary.pending} follow-up pending pada filter aktif.`
@@ -1117,7 +1139,7 @@ export function AttendanceRiskInsights() {
         Kelas: notification.className || "-",
         Status: notification.isRead ? "Selesai" : "Pending",
         Deadline: notification.deadline || "-",
-        Overdue:
+        Terlambat:
           !notification.isRead &&
           Boolean(notification.deadline ?? "") &&
           (notification.deadline ?? "") < today
@@ -1136,7 +1158,7 @@ export function AttendanceRiskInsights() {
         return;
       }
 
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-follow-up-report-${exportScopeSuffix}.xlsx`,
         sheetName: "Follow Up",
         rows,
@@ -1230,14 +1252,14 @@ export function AttendanceRiskInsights() {
         classFilter,
         assigneeFilter,
       });
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-follow-up-assignment-summary-${exportScopeSuffix}.xlsx`,
         sheetName: "Assignment Summary",
         rows: data.assignmentSummary.map((item) => ({
           Assignee: item.assigneeName,
           Total: item.total,
           Pending: item.pending,
-          Overdue: item.overdue,
+          Terlambat: item.overdue,
           Selesai: item.done,
         })),
       });
@@ -1254,7 +1276,7 @@ export function AttendanceRiskInsights() {
         classFilter,
         assigneeFilter,
       });
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-follow-up-kpi-dashboard-${exportScopeSuffix}.xlsx`,
         sheetName: "Attendance KPI",
         rows: [
@@ -1341,7 +1363,7 @@ export function AttendanceRiskInsights() {
         },
       ];
 
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-follow-up-analytics-${exportScopeSuffix}.xlsx`,
         sheetName: "Attendance Analytics",
         rows,
@@ -1363,7 +1385,7 @@ export function AttendanceRiskInsights() {
         classFilter,
         assigneeFilter,
       });
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-compare-assignee-${toFileNameSegment(compareAssigneeItemA.assigneeName) || compareAssigneeItemA.userId}-vs-${toFileNameSegment(compareAssigneeItemB.assigneeName) || compareAssigneeItemB.userId}-${exportScopeSuffix}.xlsx`,
         sheetName: "Compare Assignee",
         rows: [compareAssigneeItemA, compareAssigneeItemB].map((item) => ({
@@ -1371,7 +1393,7 @@ export function AttendanceRiskInsights() {
           Total: item.total,
           Done: item.done,
           Pending: item.pending,
-          Overdue: item.overdue,
+          Terlambat: item.overdue,
           "Completion Rate (%)": item.completionRate,
         })),
       });
@@ -1392,7 +1414,7 @@ export function AttendanceRiskInsights() {
         classFilter,
         assigneeFilter,
       });
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-follow-up-class-summary-${exportScopeSuffix}.xlsx`,
         sheetName: "Class Summary",
         rows: classSummaryRows.map((item) => ({
@@ -1400,7 +1422,7 @@ export function AttendanceRiskInsights() {
           Total: item.total,
           Done: item.done,
           Pending: item.pending,
-          Overdue: item.overdue,
+          Terlambat: item.overdue,
           "Recovery Rate (%)":
             item.total === 0 ? 0 : Math.round((item.done / item.total) * 100),
         })),
@@ -1528,7 +1550,7 @@ export function AttendanceRiskInsights() {
               <div class="card"><strong>Completion Rate</strong><br/>${executiveSnapshot.completionRate}%</div>
               <div class="card"><strong>Top Class</strong><br/>${escapeHtml(executiveSnapshot.topClass)}</div>
               <div class="card"><strong>Top Assignee</strong><br/>${escapeHtml(executiveSnapshot.topAssignee)}</div>
-              <div class="card"><strong>Overdue</strong><br/>${executiveSnapshot.overdue}</div>
+              <div class="card"><strong>Terlambat</strong><br/>${executiveSnapshot.overdue}</div>
               <div class="card"><strong>Due Today</strong><br/>${executiveSnapshot.dueToday}</div>
             </div>
             <h2>Trend 7 Hari</h2>
@@ -1541,28 +1563,28 @@ export function AttendanceRiskInsights() {
             <h2>Summary per Kelas</h2>
             <table>
               <thead>
-                <tr><th>Kelas</th><th>Total</th><th>Done</th><th>Pending</th><th>Overdue</th></tr>
+                <tr><th>Kelas</th><th>Total</th><th>Selesai</th><th>Pending</th><th>Terlambat</th></tr>
               </thead>
               <tbody>${classRows}</tbody>
             </table>
             <h2>Summary per Assignee</h2>
             <table>
               <thead>
-                <tr><th>Assignee</th><th>Total</th><th>Pending</th><th>Overdue</th><th>Selesai</th><th>Completion</th></tr>
+                <tr><th>Penanggung Jawab</th><th>Total</th><th>Pending</th><th>Terlambat</th><th>Selesai</th><th>Tingkat Selesai</th></tr>
               </thead>
               <tbody>${assignmentRows}</tbody>
             </table>
             <h2>Leaderboard Recovery per Kelas</h2>
             <table>
               <thead>
-                <tr><th>Kelas</th><th>Selesai</th><th>Pending</th><th>Overdue</th><th>Recovery Rate</th></tr>
+                <tr><th>Kelas</th><th>Selesai</th><th>Pending</th><th>Terlambat</th><th>Tingkat Pemulihan</th></tr>
               </thead>
               <tbody>${leaderboardRows}</tbody>
             </table>
             <h2>Scheduled Reminder Summary</h2>
             <table>
               <thead>
-                <tr><th>Due Today</th><th>Due Tomorrow</th><th>Overdue</th></tr>
+                <tr><th>Jatuh Tempo Hari Ini</th><th>Jatuh Tempo Besok</th><th>Terlambat</th></tr>
               </thead>
               <tbody>
                 <tr>
@@ -1653,14 +1675,14 @@ export function AttendanceRiskInsights() {
         classFilter,
         assigneeFilter,
       });
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-class-recovery-leaderboard-${exportScopeSuffix}.xlsx`,
         sheetName: "Class Recovery",
         rows: classRecoveryLeaderboard.map((item) => ({
           Kelas: item.className,
           Done: item.done,
           Pending: item.pending,
-          Overdue: item.overdue,
+          Terlambat: item.overdue,
           "Recovery Rate (%)": item.recoveryRate,
         })),
       });
@@ -1729,7 +1751,7 @@ export function AttendanceRiskInsights() {
         })),
       ];
 
-      await exportRowsToXlsx({
+      await exportAttendanceRiskRowsToXlsx({
         fileName: `attendance-dashboard-pack-${exportScopeSuffix}.xlsx`,
         sheetName: "Dashboard Pack",
         rows,
@@ -1752,7 +1774,7 @@ export function AttendanceRiskInsights() {
       classFilter,
       assigneeFilter,
     });
-    await exportRowsToXlsx({
+    await exportAttendanceRiskRowsToXlsx({
       fileName: `attendance-follow-up-audit-${toFileNameSegment(notification.className || "unassigned") || "unassigned"}-${notification.id}-${exportScopeSuffix}.xlsx`,
       sheetName: "Follow Up Audit",
       rows: rows.map((item) => ({
@@ -2043,7 +2065,7 @@ export function AttendanceRiskInsights() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-sky-100/70">Overdue</p>
+                  <p className="text-xs text-sky-100/70">Terlambat</p>
                   <p className="text-lg font-semibold text-red-100">
                     {executiveSnapshot.overdue}
                   </p>
@@ -2125,7 +2147,7 @@ export function AttendanceRiskInsights() {
                 >
                   {exportingDashboardPack
                     ? "Memproses..."
-                    : "Export Dashboard Pack"}
+                    : "Ekspor Paket Dashboard"}
                 </Button>
                 <Button
                   type="button"
@@ -2137,7 +2159,7 @@ export function AttendanceRiskInsights() {
                   }}
                   className={dashboardVioletOutlineButtonClass}
                 >
-                  {exportingAnalytics ? "Memproses..." : "Export Analytics"}
+                  {exportingAnalytics ? "Memproses..." : "Ekspor Analitik"}
                 </Button>
                 <Button
                   type="button"
@@ -2149,7 +2171,7 @@ export function AttendanceRiskInsights() {
                   }}
                   className={dashboardSkyOutlineButtonClass}
                 >
-                  {exportingKpi ? "Memproses..." : "Export KPI"}
+                  {exportingKpi ? "Memproses..." : "Ekspor KPI"}
                 </Button>
                 <div className="hidden min-w-[11rem] items-center rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[11px] leading-5 text-zinc-500 lg:ml-auto lg:flex">
                   Toolbar tetap terlihat saat scroll supaya filter dan export
@@ -2277,7 +2299,7 @@ export function AttendanceRiskInsights() {
             <div className="grid gap-4 xl:grid-cols-3">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
                 <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                  Heatmap Overdue
+                  Peta Panas Terlambat Tindak Lanjut
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
                   Snapshot overdue pending per hari dalam 21 hari terakhir
@@ -2335,7 +2357,7 @@ export function AttendanceRiskInsights() {
                     </p>
                   </div>
                   <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3">
-                    <p className="text-sm text-zinc-100">Overdue</p>
+                    <p className="text-sm text-zinc-100">Terlambat</p>
                     <p className="mt-1 text-lg font-semibold text-red-300">
                       {scheduledReminderSummary.overdue}
                     </p>
@@ -2409,7 +2431,7 @@ export function AttendanceRiskInsights() {
                       </div>
                       <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                          Overdue
+                          Terlambat
                         </p>
                         <p className="mt-1 font-semibold text-red-100">
                           {item.overdue}
@@ -2481,7 +2503,7 @@ export function AttendanceRiskInsights() {
                 >
                   {exportingClassSummary
                     ? "Memproses..."
-                    : "Export Summary Kelas"}
+                    : "Ekspor Ringkasan Kelas"}
                 </Button>
               </div>
               <div className="mt-4 grid gap-3 md:hidden">
@@ -2522,7 +2544,7 @@ export function AttendanceRiskInsights() {
                       </div>
                       <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                          Overdue
+                          Terlambat
                         </p>
                         <p className="mt-1 font-semibold text-red-100">
                           {item.overdue}
@@ -2543,7 +2565,7 @@ export function AttendanceRiskInsights() {
                       <th className="pb-2 pr-4 font-medium">Total</th>
                       <th className="pb-2 pr-4 font-medium">Done</th>
                       <th className="pb-2 pr-4 font-medium">Pending</th>
-                      <th className="pb-2 font-medium">Overdue</th>
+                      <th className="pb-2 font-medium">Terlambat</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2601,7 +2623,7 @@ export function AttendanceRiskInsights() {
                 >
                   {exportingClassLeaderboard
                     ? "Memproses..."
-                    : "Export Leaderboard"}
+                    : "Ekspor Papan Peringkat"}
                 </Button>
               </div>
               <p className="mt-4 text-xs text-zinc-500 md:hidden">
@@ -2670,7 +2692,7 @@ export function AttendanceRiskInsights() {
                       <th className="pb-2 pr-4 font-medium">Kelas</th>
                       <th className="pb-2 pr-4 font-medium">Done</th>
                       <th className="pb-2 pr-4 font-medium">Pending</th>
-                      <th className="pb-2 pr-4 font-medium">Overdue</th>
+                      <th className="pb-2 pr-4 font-medium">Terlambat</th>
                       <th className="pb-2 font-medium">Recovery Rate</th>
                     </tr>
                   </thead>
@@ -2751,7 +2773,7 @@ export function AttendanceRiskInsights() {
                       </div>
                       <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                          Overdue
+                          Terlambat
                         </p>
                         <p className="mt-1 font-semibold text-red-100">
                           {item.overdue}
@@ -2770,7 +2792,7 @@ export function AttendanceRiskInsights() {
                     <tr className="border-b border-zinc-800">
                       <th className="pb-2 pr-4 font-medium">Assignee</th>
                       <th className="pb-2 pr-4 font-medium">Done</th>
-                      <th className="pb-2 pr-4 font-medium">Overdue</th>
+                      <th className="pb-2 pr-4 font-medium">Terlambat</th>
                       <th className="pb-2 font-medium">Recovery Rate</th>
                     </tr>
                   </thead>
@@ -2874,7 +2896,9 @@ export function AttendanceRiskInsights() {
                       }}
                       className={`min-h-9 w-full sm:w-auto ${dashboardSkyOutlineButtonClass}`}
                     >
-                      {exportingCompare ? "Memproses..." : "Export Compare"}
+                      {exportingCompare
+                        ? "Memproses..."
+                        : "Ekspor Perbandingan"}
                     </Button>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
@@ -2975,7 +2999,7 @@ export function AttendanceRiskInsights() {
                 ["all", "Semua"],
                 ["pending", "Pending"],
                 ["done", "Selesai"],
-                ["overdue", "Overdue"],
+                ["overdue", "Terlambat"],
                 ["dueToday", "Due Today"],
               ].map(([value, label]) => (
                 <Button
@@ -3021,7 +3045,7 @@ export function AttendanceRiskInsights() {
                 <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
                   <SelectItem value="latest">Terbaru</SelectItem>
                   <SelectItem value="deadline">Deadline Terdekat</SelectItem>
-                  <SelectItem value="overdue">Overdue Dulu</SelectItem>
+                  <SelectItem value="overdue">Terlambat Dulu</SelectItem>
                 </SelectContent>
               </Select>
               <Input
@@ -3060,7 +3084,7 @@ export function AttendanceRiskInsights() {
                 }}
                 className={`min-h-9 ${dashboardAmberOutlineButtonClass}`}
               >
-                {bulkSavingDeadline ? "Memproses..." : "Bulk Set Deadline"}
+                {bulkSavingDeadline ? "Memproses..." : "Set Tenggat Massal"}
               </Button>
               {canManageAssignees ? (
                 <>
@@ -3069,7 +3093,7 @@ export function AttendanceRiskInsights() {
                     onValueChange={setBulkAssigneeId}
                   >
                     <SelectTrigger className="w-full min-w-0 border-zinc-800 bg-zinc-950 text-zinc-200 md:max-w-xs">
-                      <SelectValue placeholder="Bulk reassign assignee" />
+                      <SelectValue placeholder="Pilih penanggung jawab massal" />
                     </SelectTrigger>
                     <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
                       <SelectItem value="none">Pilih assignee baru</SelectItem>
@@ -3096,7 +3120,7 @@ export function AttendanceRiskInsights() {
                     }}
                     className={`min-h-9 ${dashboardVioletOutlineButtonClass}`}
                   >
-                    {bulkReassigning ? "Memproses..." : "Bulk Reassign"}
+                    {bulkReassigning ? "Memproses..." : "Alihkan Massal"}
                   </Button>
                 </>
               ) : null}
@@ -3127,7 +3151,7 @@ export function AttendanceRiskInsights() {
                 }}
                 className={`min-h-9 ${dashboardSkyOutlineButtonClass}`}
               >
-                {exportingReport ? "Memproses..." : "Export Follow-up"}
+                {exportingReport ? "Memproses..." : "Ekspor Tindak Lanjut"}
               </Button>
             </div>
 
@@ -3152,7 +3176,7 @@ export function AttendanceRiskInsights() {
                       notification.deadline &&
                       notification.deadline < today ? (
                         <p className="mt-1 inline-flex rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-red-300">
-                          Overdue
+                          Terlambat
                         </p>
                       ) : null}
                       <p className="mt-2 text-sm leading-6 text-zinc-400">
@@ -3306,7 +3330,7 @@ export function AttendanceRiskInsights() {
                               }}
                               className={dashboardSkyOutlineButtonClass}
                             >
-                              Export Audit Trail
+                              Ekspor Riwayat Audit
                             </Button>
                           </div>
                           {auditTrail[notification.id].map((item) => (
@@ -3354,7 +3378,7 @@ export function AttendanceRiskInsights() {
                   onClick={() => setVisibleCount((current) => current + 10)}
                   className={dashboardOutlineButtonClass}
                 >
-                  Load More Follow-up
+                  Muat Tindak Lanjut Lainnya
                 </Button>
               </div>
             ) : null}
@@ -3387,7 +3411,7 @@ export function AttendanceRiskInsights() {
               >
                 {exportingAssignmentSummary
                   ? "Memproses..."
-                  : "Export Assignment Summary"}
+                  : "Ekspor Ringkasan Penugasan"}
               </Button>
             </div>
             {data.assignmentSummary.length > 0 ? (
@@ -3427,7 +3451,7 @@ export function AttendanceRiskInsights() {
                         </div>
                         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
                           <p className="text-[11px] uppercase tracking-[0.14em] text-red-200">
-                            Overdue
+                            Terlambat
                           </p>
                           <p className="mt-1 font-semibold text-red-100">
                             {item.overdue}
@@ -3455,7 +3479,7 @@ export function AttendanceRiskInsights() {
                         <th className="pb-2 pr-4 font-medium">Assignee</th>
                         <th className="pb-2 pr-4 font-medium">Total</th>
                         <th className="pb-2 pr-4 font-medium">Pending</th>
-                        <th className="pb-2 pr-4 font-medium">Overdue</th>
+                        <th className="pb-2 pr-4 font-medium">Terlambat</th>
                         <th className="pb-2 font-medium">Selesai</th>
                       </tr>
                     </thead>

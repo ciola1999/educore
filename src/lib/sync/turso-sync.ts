@@ -30,11 +30,13 @@ type PullFromCloudDeps = {
   db?: Awaited<ReturnType<typeof getDb>>;
   tursoCloud?: Awaited<ReturnType<typeof getTursoCloudClient>>;
   syncUsersProjection?: () => Promise<void>;
+  pruneAuthoritativeTables?: boolean;
 };
 type PushToCloudDeps = {
   db?: Awaited<ReturnType<typeof getDb>>;
   tursoCloud?: Awaited<ReturnType<typeof getTursoCloudClient>>;
   tables?: string[];
+  syncUsersProjection?: () => Promise<unknown>;
 };
 type FullSyncDeps = PushToCloudDeps &
   PullFromCloudDeps & {
@@ -314,6 +316,7 @@ const SYNC_TABLES: SyncTableConfig[] = [
 const SYNC_TABLE_CONFIG_MAP = new Map(
   SYNC_TABLES.map((tableConfig) => [tableConfig.name, tableConfig]),
 );
+const AUTHORITATIVE_PULL_PRUNE_TABLES = new Set(["users", "students"]);
 
 export const SYNC_TABLE_NAMES = SYNC_TABLES.map((table) => table.name);
 
@@ -370,7 +373,7 @@ export async function pushToCloud(
       );
 
     if (shouldRunStudentProjection) {
-      await syncUsersToStudentsProjection();
+      await (deps.syncUsersProjection ?? syncUsersToStudentsProjection)();
     }
     const remoteIdRemaps = new Map<string, Map<string, string>>();
     let uploadedCount = 0;
@@ -395,6 +398,38 @@ export async function pushToCloud(
       remoteIdRemaps.set(tableName, tableRemaps);
     };
 
+    const pushRecordToCloud = async (
+      tableConfig: SyncTableConfig,
+      record: SnakeRecord,
+      originalRecordId?: unknown,
+    ): Promise<void> => {
+      const snakeItem = camelToSnake(record);
+      const columns = sortColumns(snakeItem);
+      const sql = generateUpsertSql(
+        tableConfig.name,
+        columns,
+        tableConfig.conflictKey,
+      );
+      const args = toLibsqlArgs(columns, snakeItem);
+
+      if (!sql) {
+        return;
+      }
+
+      try {
+        await tursoCloud.execute({
+          sql,
+          args,
+        });
+      } catch (error) {
+        throw new Error(
+          `[SYNC_PUSH:${tableConfig.name}] Failed to push record ${String(
+            originalRecordId ?? record.id ?? "unknown",
+          )}: ${getErrorMessage(error)}`,
+        );
+      }
+    };
+
     const getLocalRowById = async (
       tableConfig: SyncTableConfig,
       localId: string,
@@ -413,6 +448,7 @@ export async function pushToCloud(
     const findRemoteRecordIdByLogicalKey = async (
       tableConfig: SyncTableConfig,
       record: SnakeRecord,
+      options: { includeDeleted?: boolean } = {},
     ): Promise<string | null> => {
       if (!tableConfig.logicalKey) {
         return null;
@@ -437,8 +473,11 @@ export async function pushToCloud(
       const whereClause = logicalKeys
         .map((key) => `"${toSnakeKey(key)}" = ?`)
         .join(" AND ");
+      const deletedFilter = options.includeDeleted
+        ? ""
+        : ' AND "deleted_at" IS NULL';
       const result = await tursoCloud.execute({
-        sql: `SELECT id FROM "${tableConfig.name}" WHERE ${whereClause} LIMIT 1`,
+        sql: `SELECT id FROM "${tableConfig.name}" WHERE ${whereClause}${deletedFilter} LIMIT 1`,
         args: logicalValues as InValue[],
       });
       const remoteId = result.rows?.[0]?.id;
@@ -449,7 +488,96 @@ export async function pushToCloud(
     const findRemoteRecordIdByFallbackIdentity = async (
       tableConfig: SyncTableConfig,
       record: SnakeRecord,
+      options: { includeDeleted?: boolean } = {},
     ): Promise<string | null> => {
+      const deletedFilter = options.includeDeleted
+        ? ""
+        : ' AND "deleted_at" IS NULL';
+
+      if (tableConfig.name === "users") {
+        const email = record.email;
+        if (typeof email !== "string" || !email.trim()) {
+          return null;
+        }
+
+        const result = await tursoCloud.execute({
+          sql: `SELECT id FROM "users" WHERE "email" = ?${deletedFilter} LIMIT 2`,
+          args: [email],
+        });
+
+        const candidateIds = (result.rows ?? [])
+          .map((row) => row.id)
+          .filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          );
+
+        return candidateIds.length === 1 ? candidateIds[0] : null;
+      }
+
+      if (tableConfig.name === "tahun_ajaran") {
+        const nama = record.nama;
+        if (typeof nama !== "string" || !nama.trim()) {
+          return null;
+        }
+
+        const result = await tursoCloud.execute({
+          sql: `SELECT id FROM "tahun_ajaran" WHERE "nama" = ?${deletedFilter} LIMIT 2`,
+          args: [nama],
+        });
+
+        const candidateIds = (result.rows ?? [])
+          .map((row) => row.id)
+          .filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          );
+
+        return candidateIds.length === 1 ? candidateIds[0] : null;
+      }
+
+      if (tableConfig.name === "semester") {
+        const nama = record.nama;
+        if (typeof nama !== "string" || !nama.trim()) {
+          return null;
+        }
+
+        const result = await tursoCloud.execute({
+          sql: `SELECT id FROM "semester" WHERE "nama" = ?${deletedFilter} LIMIT 2`,
+          args: [nama],
+        });
+
+        const candidateIds = (result.rows ?? [])
+          .map((row) => row.id)
+          .filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          );
+
+        return candidateIds.length === 1 ? candidateIds[0] : null;
+      }
+
+      if (tableConfig.name === "classes") {
+        const name = record.name;
+        if (typeof name !== "string" || !name.trim()) {
+          return null;
+        }
+
+        const result = await tursoCloud.execute({
+          sql: `SELECT id FROM "classes" WHERE "name" = ?${deletedFilter} LIMIT 2`,
+          args: [name],
+        });
+
+        const candidateIds = (result.rows ?? [])
+          .map((row) => row.id)
+          .filter(
+            (value): value is string =>
+              typeof value === "string" && value.trim().length > 0,
+          );
+
+        return candidateIds.length === 1 ? candidateIds[0] : null;
+      }
+
       if (tableConfig.name !== "guru_mapel") {
         return null;
       }
@@ -470,7 +598,7 @@ export async function pushToCloud(
       }
 
       const result = await tursoCloud.execute({
-        sql: 'SELECT id FROM "guru_mapel" WHERE "guru_id" = ? AND "mata_pelajaran_id" = ? AND "semester_id" = ? AND "deleted_at" IS NULL LIMIT 2',
+        sql: `SELECT id FROM "guru_mapel" WHERE "guru_id" = ? AND "mata_pelajaran_id" = ? AND "semester_id" = ?${deletedFilter} LIMIT 2`,
         args: [guruId, mataPelajaranId, semesterId],
       });
 
@@ -531,10 +659,74 @@ export async function pushToCloud(
           parentConfig,
           remappedParentRow,
         );
+        const fallbackRemoteParentId =
+          remoteParentId ||
+          (await findRemoteRecordIdByFallbackIdentity(
+            parentConfig,
+            remappedParentRow,
+          ));
 
-        if (remoteParentId) {
-          rememberRemoteIdRemap(parentTableName, currentValue, remoteParentId);
-          nextRecord[field] = remoteParentId;
+        if (fallbackRemoteParentId) {
+          rememberRemoteIdRemap(
+            parentTableName,
+            currentValue,
+            fallbackRemoteParentId,
+          );
+          nextRecord[field] = fallbackRemoteParentId;
+          continue;
+        }
+
+        const deletedRemoteParentId =
+          (await findRemoteRecordIdByLogicalKey(
+            parentConfig,
+            remappedParentRow,
+            {
+              includeDeleted: true,
+            },
+          )) ||
+          (await findRemoteRecordIdByFallbackIdentity(
+            parentConfig,
+            remappedParentRow,
+            { includeDeleted: true },
+          ));
+
+        const parentRecordToPush =
+          deletedRemoteParentId &&
+          deletedRemoteParentId !== remappedParentRow.id
+            ? {
+                ...remappedParentRow,
+                id: deletedRemoteParentId,
+                deletedAt: null,
+              }
+            : remappedParentRow;
+
+        await pushRecordToCloud(
+          parentConfig,
+          parentRecordToPush,
+          localParentRow.id ?? currentValue,
+        );
+
+        const postPushRemoteParentId =
+          (typeof parentRecordToPush.id === "string" &&
+          parentRecordToPush.id.trim()
+            ? parentRecordToPush.id
+            : null) ||
+          (await findRemoteRecordIdByLogicalKey(
+            parentConfig,
+            parentRecordToPush,
+          )) ||
+          (await findRemoteRecordIdByFallbackIdentity(
+            parentConfig,
+            parentRecordToPush,
+          ));
+
+        if (postPushRemoteParentId) {
+          rememberRemoteIdRemap(
+            parentTableName,
+            currentValue,
+            postPushRemoteParentId,
+          );
+          nextRecord[field] = postPushRemoteParentId;
         }
       }
 
@@ -584,20 +776,9 @@ export async function pushToCloud(
             columns,
             tableConfig.conflictKey,
           );
-          const args = toLibsqlArgs(columns, snakeItem);
 
           if (sql) {
-            try {
-              await tursoCloud.execute({
-                sql,
-                args,
-              });
-            } catch (error) {
-              throw new Error(
-                `[SYNC_PUSH:${tableConfig.name}] Failed to push record ${String(item.id ?? "unknown")}: ${getErrorMessage(error)}`,
-              );
-            }
-
+            await pushRecordToCloud(tableConfig, remappedItem, item.id);
             await db
               .update(table as never)
               .set({ syncStatus: "synced", updatedAt: new Date() })
@@ -651,7 +832,10 @@ export async function pullFromCloud(
     const tursoCloud = deps.tursoCloud ?? (await getTursoCloudClient());
     const runProjection =
       deps.syncUsersProjection ?? syncUsersToStudentsProjection;
+    const shouldPruneAuthoritativeTables =
+      deps.pruneAuthoritativeTables === true;
     const idRemaps = new Map<string, Map<string, string>>();
+    const localIdsBackedByCloud = new Map<string, Set<string>>();
     let downloadedCount = 0;
     const parseEpoch = (value: unknown): number => {
       if (typeof value === "number" && Number.isFinite(value)) {
@@ -713,6 +897,100 @@ export async function pullFromCloud(
       return nextRecord;
     };
 
+    const repairPulledForeignKeys = async () => {
+      for (const tableConfig of SYNC_TABLES) {
+        if (!tableConfig.foreignKeyRemaps) {
+          continue;
+        }
+
+        const table = asSyncTableRef(tableConfig.table);
+        const rows = (await db.select().from(table as never)) as SyncRow[];
+
+        for (const row of rows) {
+          if (!row.id) {
+            continue;
+          }
+
+          const repairedFields: Record<string, string> = {};
+
+          for (const [field, parentTable] of Object.entries(
+            tableConfig.foreignKeyRemaps,
+          )) {
+            const currentValue = row[field];
+            if (typeof currentValue !== "string" || !currentValue.trim()) {
+              continue;
+            }
+
+            const remappedValue = idRemaps.get(parentTable)?.get(currentValue);
+            if (remappedValue && remappedValue !== currentValue) {
+              repairedFields[field] = remappedValue;
+            }
+          }
+
+          if (Object.keys(repairedFields).length === 0) {
+            continue;
+          }
+
+          await db
+            .update(table as never)
+            .set(repairedFields as never)
+            .where(eq(table.id as never, row.id as never));
+        }
+      }
+    };
+
+    const rememberLocalIdBackedByCloud = (
+      tableName: string,
+      localId: unknown,
+    ) => {
+      if (typeof localId !== "string" || !localId.trim()) {
+        return;
+      }
+
+      const tableLocalIds = localIdsBackedByCloud.get(tableName) ?? new Set();
+      tableLocalIds.add(localId);
+      localIdsBackedByCloud.set(tableName, tableLocalIds);
+    };
+
+    const pruneAuthoritativeLocalRows = async () => {
+      const now = new Date();
+
+      for (const tableConfig of SYNC_TABLES) {
+        if (!AUTHORITATIVE_PULL_PRUNE_TABLES.has(tableConfig.name)) {
+          continue;
+        }
+
+        const table = asSyncTableRef(tableConfig.table);
+        const localRows = (await db.select().from(table as never)) as SyncRow[];
+        const protectedIds =
+          localIdsBackedByCloud.get(tableConfig.name) ?? new Set<string>();
+
+        for (const row of localRows) {
+          if (!row.id || row.deletedAt) {
+            continue;
+          }
+
+          if (protectedIds.has(row.id)) {
+            continue;
+          }
+
+          if (row.syncStatus === "pending") {
+            continue;
+          }
+
+          await db
+            .update(table as never)
+            .set({
+              deletedAt: now,
+              updatedAt: now,
+              syncStatus: "pending",
+            } as never)
+            .where(eq(table.id as never, row.id as never));
+          downloadedCount++;
+        }
+      }
+    };
+
     const pullTable = async (
       tableName: string,
       drizzleTable: unknown,
@@ -740,6 +1018,7 @@ export async function pullFromCloud(
 
           if (existingById.length > 0) {
             const localItem = existingById[0] as SyncRow;
+            rememberLocalIdBackedByCloud(tableName, localItem.id);
             const remoteTime = parseEpoch(
               (remote as Record<string, unknown>).updated_at,
             );
@@ -787,6 +1066,7 @@ export async function pullFromCloud(
 
             if (existingByKey.length > 0) {
               const localRecord = existingByKey[0];
+              rememberLocalIdBackedByCloud(tableName, localRecord.id);
               registerIdRemap(tableName, mappedData.id, localRecord.id);
               const remoteTime = parseEpoch(
                 (remote as Record<string, unknown>).updated_at,
@@ -818,6 +1098,10 @@ export async function pullFromCloud(
 
           // 3. Truly new record
           await db.insert(table as never).values(mappedData as never);
+          rememberLocalIdBackedByCloud(
+            tableName,
+            typeof mappedData.id === "string" ? mappedData.id : null,
+          );
           downloadedCount++;
         }
       }
@@ -832,6 +1116,10 @@ export async function pullFromCloud(
       );
     }
 
+    await repairPulledForeignKeys();
+    if (shouldPruneAuthoritativeTables) {
+      await pruneAuthoritativeLocalRows();
+    }
     await runProjection();
 
     return {
@@ -887,5 +1175,14 @@ export async function fullSync(deps: FullSyncDeps = {}): Promise<SyncResult> {
     };
   }
   const pull = await pullRunner(deps);
-  return pull;
+  if (pull.status === "error") {
+    return pull;
+  }
+
+  return {
+    status: "success",
+    message: `${push.message} ${pull.message}`.trim(),
+    uploaded: push.uploaded,
+    downloaded: pull.downloaded,
+  };
 }

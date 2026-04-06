@@ -15,9 +15,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { AuthRole } from "@/core/auth/roles";
 import { useAuth } from "@/hooks/use-auth";
-import {
-  DASHBOARD_ROLE_ALLOWED_PATHS,
-} from "@/lib/auth/dashboard-access";
+import { DASHBOARD_ROLE_ALLOWED_PATHS } from "@/lib/auth/dashboard-access";
 import { ensureAppWarmup } from "@/lib/runtime/app-bootstrap";
 import {
   getRuntimeSupportedDashboardPaths,
@@ -158,14 +156,14 @@ export function DashboardHomeClient() {
           <div className="absolute top-0 right-0 h-64 w-64 rounded-full bg-sky-500/10 blur-[100px]" />
           <div className="absolute bottom-0 right-1/4 h-64 w-64 rounded-full bg-indigo-500/5 blur-[120px]" />
         </div>
-        
+
         <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-sky-300">
               <ShieldCheck className="h-3.5 w-3.5" />
               <span>Dashboard Overview</span>
             </div>
-            
+
             <div className="space-y-4">
               <h1 className="bg-linear-to-r from-white via-sky-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
                 Halo, {toRoleLabel(currentRole)}
@@ -193,11 +191,15 @@ export function DashboardHomeClient() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[240px]">
             {[
-              { label: "Role Aktif", value: toRoleLabel(currentRole), icon: ShieldCheck },
+              {
+                label: "Role Aktif",
+                value: toRoleLabel(currentRole),
+                icon: ShieldCheck,
+              },
               { label: "App Runtime", value: "Web + Tauri", icon: Settings },
               { label: "Security", value: "Verified", icon: ShieldCheck },
             ].map((item) => (
-              <div 
+              <div
                 key={item.label}
                 className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
               >
@@ -240,7 +242,7 @@ export function DashboardHomeClient() {
               className="group relative flex flex-col justify-between overflow-hidden rounded-[2rem] border border-zinc-800/60 bg-zinc-950/40 p-6 transition-all hover:border-sky-500/30 hover:bg-zinc-900/40 hover:shadow-2xl"
             >
               <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-sky-500/5 blur-2xl transition-all group-hover:bg-sky-500/10" />
-              
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/80 text-sky-400 shadow-inner group-hover:border-sky-500/20 group-hover:bg-sky-500/5">
@@ -250,7 +252,7 @@ export function DashboardHomeClient() {
                     <ArrowRight className="h-4 w-4 text-sky-400" />
                   </div>
                 </div>
-                
+
                 <div>
                   <h3 className="text-lg font-bold text-white group-hover:text-sky-300 transition-colors">
                     {item.label}
@@ -319,11 +321,20 @@ export function DashboardHomeClient() {
               Informasi Workspace
             </h3>
             <p className="text-base text-zinc-400">
-              Dashboard Anda telah disesuaikan untuk peran <span className="font-semibold text-sky-400">{toRoleLabel(currentRole)}</span>. Kami menyederhanakan antarmuka dengan menyembunyikan data analitik yang tidak relevan agar Anda tetap fokus pada tugas utama.
+              Dashboard Anda telah disesuaikan untuk peran{" "}
+              <span className="font-semibold text-sky-400">
+                {toRoleLabel(currentRole)}
+              </span>
+              . Kami menyederhanakan antarmuka dengan menyembunyikan data
+              analitik yang tidak relevan agar Anda tetap fokus pada tugas
+              utama.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
               {focusPoints.map((point) => (
-                <div key={point} className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs text-zinc-500">
+                <div
+                  key={point}
+                  className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs text-zinc-500"
+                >
                   <div className="h-1 w-1 rounded-full bg-sky-500" />
                   {point}
                 </div>

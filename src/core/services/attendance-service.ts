@@ -1122,6 +1122,7 @@ export type AttendanceHistoryRecord = {
   checkInTime: Date | null;
   checkOutTime: Date | null;
   status: "PRESENT" | "LATE" | "EXCUSED" | "ABSENT";
+  statusLabel?: string | null;
   lateDuration: number | null;
   notes: string | null;
   syncStatus: "synced" | "pending" | "error";
@@ -1138,6 +1139,8 @@ export type AttendanceHistorySummary = {
   present: number;
   late: number;
   excused: number;
+  sick: number;
+  permission: number;
   absent: number;
   qr: number;
   manual: number;
@@ -1265,6 +1268,26 @@ function resolveAttendanceHistoryStatus(
   }
 }
 
+function resolveManualAttendanceStatusLabel(status: string) {
+  switch (status) {
+    case "sick":
+      return "Sakit";
+    case "permission":
+      return "Izin";
+    case "alpha":
+      return "Alpha";
+    default:
+      return "Hadir";
+  }
+}
+
+function buildAttendanceHistoryRecordKey(input: {
+  studentId: string;
+  date: string;
+}) {
+  return `${input.studentId}_${input.date}`;
+}
+
 /**
  * Get attendance history with flexible filtering
  * Supports filtering by date range and sorting by check-in time
@@ -1293,23 +1316,36 @@ export async function getAttendanceHistory(
   const offset = Math.max(filter.offset ?? 0, 0);
   const className = filter.className?.trim();
   const normalizedStatus = resolveAttendanceHistoryStatus(status);
+  const shouldQueryQrRecords =
+    source !== "manual" &&
+    (!normalizedStatus || normalizedStatus.qrStatuses.length > 0);
+  const shouldQueryManualRecords =
+    source !== "qr" &&
+    (!normalizedStatus || normalizedStatus.manualStatuses.length > 0);
+  const shouldLoadUnfilteredQrPresenceKeys =
+    shouldQueryManualRecords &&
+    Boolean(normalizedStatus) &&
+    source !== "manual";
 
   // Build conditions for QR records
-  const qrConditions = [isNull(studentDailyAttendance.deletedAt)];
-  if (startDate) qrConditions.push(gte(studentDailyAttendance.date, startDate));
-  if (endDate) qrConditions.push(lte(studentDailyAttendance.date, endDate));
+  const baseQrConditions = [isNull(studentDailyAttendance.deletedAt)];
+  if (startDate)
+    baseQrConditions.push(gte(studentDailyAttendance.date, startDate));
+  if (endDate) baseQrConditions.push(lte(studentDailyAttendance.date, endDate));
   if (studentId)
-    qrConditions.push(eq(studentDailyAttendance.studentId, studentId));
+    baseQrConditions.push(eq(studentDailyAttendance.studentId, studentId));
 
   if (parsed.data.searchQuery) {
     const q = `%${parsed.data.searchQuery}%`;
-    qrConditions.push(
+    baseQrConditions.push(
       or(
         like(studentDailyAttendance.snapshotStudentName, q),
         like(studentDailyAttendance.snapshotStudentNis, q),
       ) as SQL,
     );
   }
+
+  const qrConditions = [...baseQrConditions];
 
   if (normalizedStatus?.qrStatuses.length === 1) {
     qrConditions.push(
@@ -1322,35 +1358,49 @@ export async function getAttendanceHistory(
   }
 
   // Fetch QR records
-  const qrResults =
-    source === "manual"
-      ? []
-      : await db
-          .select({
-            id: studentDailyAttendance.id,
-            studentId: studentDailyAttendance.studentId,
-            snapshotStudentName: studentDailyAttendance.snapshotStudentName,
-            snapshotStudentNis: studentDailyAttendance.snapshotStudentNis,
-            snapshotStudentNisn: students.nisn,
-            className: classes.name,
-            studentGrade: students.grade,
-            date: studentDailyAttendance.date,
-            checkInTime: studentDailyAttendance.checkInTime,
-            checkOutTime: studentDailyAttendance.checkOutTime,
-            status: studentDailyAttendance.status,
-            lateDuration: studentDailyAttendance.lateDuration,
-            syncStatus: studentDailyAttendance.syncStatus,
-            version: studentDailyAttendance.version,
-            hlc: studentDailyAttendance.hlc,
-            createdAt: studentDailyAttendance.createdAt,
-            updatedAt: studentDailyAttendance.updatedAt,
-            deletedAt: studentDailyAttendance.deletedAt,
-          })
-          .from(studentDailyAttendance)
-          .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
-          .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
-          .leftJoin(classes, eq(users.kelasId, classes.id))
-          .where(and(...qrConditions));
+  const qrResults = !shouldQueryQrRecords
+    ? []
+    : await db
+        .select({
+          id: studentDailyAttendance.id,
+          studentId: studentDailyAttendance.studentId,
+          snapshotStudentName: studentDailyAttendance.snapshotStudentName,
+          snapshotStudentNis: studentDailyAttendance.snapshotStudentNis,
+          snapshotStudentNisn: students.nisn,
+          className: classes.name,
+          studentGrade: students.grade,
+          date: studentDailyAttendance.date,
+          checkInTime: studentDailyAttendance.checkInTime,
+          checkOutTime: studentDailyAttendance.checkOutTime,
+          status: studentDailyAttendance.status,
+          lateDuration: studentDailyAttendance.lateDuration,
+          syncStatus: studentDailyAttendance.syncStatus,
+          version: studentDailyAttendance.version,
+          hlc: studentDailyAttendance.hlc,
+          createdAt: studentDailyAttendance.createdAt,
+          updatedAt: studentDailyAttendance.updatedAt,
+          deletedAt: studentDailyAttendance.deletedAt,
+        })
+        .from(studentDailyAttendance)
+        .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
+        .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
+        .leftJoin(classes, eq(users.kelasId, classes.id))
+        .where(and(...qrConditions));
+
+  const qrPresenceResults = !shouldLoadUnfilteredQrPresenceKeys
+    ? qrResults
+    : await db
+        .select({
+          studentId: studentDailyAttendance.studentId,
+          date: studentDailyAttendance.date,
+          className: classes.name,
+          studentGrade: students.grade,
+        })
+        .from(studentDailyAttendance)
+        .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
+        .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
+        .leftJoin(classes, eq(users.kelasId, classes.id))
+        .where(and(...baseQrConditions));
 
   // Build conditions for Manual records
   const manualConditions = [isNull(attendance.deletedAt)];
@@ -1376,32 +1426,36 @@ export async function getAttendanceHistory(
   }
 
   // Fetch Manual records with student details
-  const manualResults =
-    source === "qr"
-      ? []
-      : await db
-          .select({
-            id: attendance.id,
-            studentId: attendance.studentId,
-            date: attendance.date,
-            status: attendance.status,
-            fullName: students.fullName,
-            nis: students.nis,
-            nisn: students.nisn,
-            className: classes.name,
-            studentGrade: students.grade,
-            notes: attendance.notes,
-            createdAt: attendance.createdAt,
-          })
-          .from(attendance)
-          .innerJoin(students, eq(attendance.studentId, students.id))
-          .leftJoin(users, eq(attendance.studentId, users.id))
-          .leftJoin(classes, eq(users.kelasId, classes.id))
-          .where(and(...manualConditions));
+  const manualResults = !shouldQueryManualRecords
+    ? []
+    : await db
+        .select({
+          id: attendance.id,
+          studentId: attendance.studentId,
+          date: attendance.date,
+          status: attendance.status,
+          fullName: students.fullName,
+          nis: students.nis,
+          nisn: students.nisn,
+          className: classes.name,
+          studentGrade: students.grade,
+          notes: attendance.notes,
+          createdAt: attendance.createdAt,
+        })
+        .from(attendance)
+        .innerJoin(students, eq(attendance.studentId, students.id))
+        .leftJoin(users, eq(attendance.studentId, users.id))
+        .leftJoin(classes, eq(users.kelasId, classes.id))
+        .where(and(...manualConditions));
 
-  const [normalizedQrResults, normalizedManualResults] = await Promise.all([
+  const [
+    normalizedQrResults,
+    normalizedManualResults,
+    normalizedQrPresenceResults,
+  ] = await Promise.all([
     resolveAttendanceHistoryClassNames(db, qrResults),
     resolveAttendanceHistoryClassNames(db, manualResults),
+    resolveAttendanceHistoryClassNames(db, qrPresenceResults),
   ]);
 
   // Map to unified structure
@@ -1409,16 +1463,23 @@ export async function getAttendanceHistory(
     ...r,
     className: r.className,
     status: r.status as "PRESENT" | "LATE" | "EXCUSED" | "ABSENT",
+    statusLabel: null,
     notes: null,
     source: "qr",
   }));
 
-  const qrKeys = new Set(
-    normalizedQrResults.map((r) => `${r.studentId}_${r.date}`),
+  const qrPresenceKeys = new Set(
+    normalizedQrPresenceResults
+      .filter((row) =>
+        className && className !== "all"
+          ? (row.className?.trim() || "UNASSIGNED") === className
+          : true,
+      )
+      .map((row) => buildAttendanceHistoryRecordKey(row)),
   );
 
   for (const m of normalizedManualResults) {
-    if (!qrKeys.has(`${m.studentId}_${m.date}`)) {
+    if (!qrPresenceKeys.has(buildAttendanceHistoryRecordKey(m))) {
       unified.push({
         id: m.id,
         studentId: m.studentId,
@@ -1437,6 +1498,7 @@ export async function getAttendanceHistory(
               : m.status === "sick"
                 ? "EXCUSED"
                 : "PRESENT",
+        statusLabel: resolveManualAttendanceStatusLabel(m.status),
         lateDuration: 0,
         syncStatus: "synced",
         version: 1,
@@ -1503,22 +1565,34 @@ export async function getAttendanceHistoryCount(
   } = parsed.data;
   const className = filter.className?.trim();
   const normalizedStatus = resolveAttendanceHistoryStatus(status);
+  const shouldQueryQrRecords =
+    source !== "manual" &&
+    (!normalizedStatus || normalizedStatus.qrStatuses.length > 0);
+  const shouldQueryManualRecords =
+    source !== "qr" &&
+    (!normalizedStatus || normalizedStatus.manualStatuses.length > 0);
+  const shouldLoadUnfilteredQrPresenceKeys =
+    shouldQueryManualRecords &&
+    Boolean(normalizedStatus) &&
+    source !== "manual";
 
   // Build conditions for QR records
-  const qrConditions = [isNull(studentDailyAttendance.deletedAt)];
-  if (startDate) qrConditions.push(gte(studentDailyAttendance.date, startDate));
-  if (endDate) qrConditions.push(lte(studentDailyAttendance.date, endDate));
+  const baseQrConditions = [isNull(studentDailyAttendance.deletedAt)];
+  if (startDate)
+    baseQrConditions.push(gte(studentDailyAttendance.date, startDate));
+  if (endDate) baseQrConditions.push(lte(studentDailyAttendance.date, endDate));
   if (studentId)
-    qrConditions.push(eq(studentDailyAttendance.studentId, studentId));
+    baseQrConditions.push(eq(studentDailyAttendance.studentId, studentId));
   if (searchQuery) {
     const q = `%${searchQuery}%`;
-    qrConditions.push(
+    baseQrConditions.push(
       or(
         like(studentDailyAttendance.snapshotStudentName, q),
         like(studentDailyAttendance.snapshotStudentNis, q),
       ) as SQL,
     );
   }
+  const qrConditions = [...baseQrConditions];
   if (normalizedStatus?.qrStatuses.length === 1) {
     qrConditions.push(
       eq(studentDailyAttendance.status, normalizedStatus.qrStatuses[0]),
@@ -1529,20 +1603,36 @@ export async function getAttendanceHistoryCount(
     );
   }
 
-  const qrCountRows =
-    source === "manual"
-      ? []
-      : await db
-          .select({
-            id: studentDailyAttendance.id,
-            className: classes.name,
-            studentGrade: students.grade,
-          })
-          .from(studentDailyAttendance)
-          .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
-          .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
-          .leftJoin(classes, eq(users.kelasId, classes.id))
-          .where(and(...qrConditions));
+  const qrCountRows = !shouldQueryQrRecords
+    ? []
+    : await db
+        .select({
+          id: studentDailyAttendance.id,
+          studentId: studentDailyAttendance.studentId,
+          date: studentDailyAttendance.date,
+          className: classes.name,
+          studentGrade: students.grade,
+        })
+        .from(studentDailyAttendance)
+        .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
+        .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
+        .leftJoin(classes, eq(users.kelasId, classes.id))
+        .where(and(...baseQrConditions));
+
+  const qrPresenceCountRows = !shouldLoadUnfilteredQrPresenceKeys
+    ? qrCountRows
+    : await db
+        .select({
+          studentId: studentDailyAttendance.studentId,
+          date: studentDailyAttendance.date,
+          className: classes.name,
+          studentGrade: students.grade,
+        })
+        .from(studentDailyAttendance)
+        .leftJoin(students, eq(studentDailyAttendance.studentId, students.id))
+        .leftJoin(users, eq(studentDailyAttendance.studentId, users.id))
+        .leftJoin(classes, eq(users.kelasId, classes.id))
+        .where(and(...qrConditions));
 
   // Build conditions for Manual records count
   const manualConditions = [isNull(attendance.deletedAt)];
@@ -1565,28 +1655,42 @@ export async function getAttendanceHistoryCount(
     );
   }
 
-  const manualCountRows =
-    source === "qr"
-      ? []
-      : await db
-          .select({
-            id: attendance.id,
-            className: classes.name,
-            studentGrade: students.grade,
-          })
-          .from(attendance)
-          .innerJoin(students, eq(attendance.studentId, students.id))
-          .leftJoin(users, eq(attendance.studentId, users.id))
-          .leftJoin(classes, eq(users.kelasId, classes.id))
-          .where(and(...manualConditions));
+  const manualCountRows = !shouldQueryManualRecords
+    ? []
+    : await db
+        .select({
+          id: attendance.id,
+          studentId: attendance.studentId,
+          date: attendance.date,
+          className: classes.name,
+          studentGrade: students.grade,
+        })
+        .from(attendance)
+        .innerJoin(students, eq(attendance.studentId, students.id))
+        .leftJoin(users, eq(attendance.studentId, users.id))
+        .leftJoin(classes, eq(users.kelasId, classes.id))
+        .where(and(...manualConditions));
 
   const resolvedQrRows = await resolveAttendanceHistoryClassNames(
     db,
     qrCountRows,
   );
+  const resolvedQrPresenceRows = await resolveAttendanceHistoryClassNames(
+    db,
+    qrPresenceCountRows,
+  );
   const resolvedManualRows = await resolveAttendanceHistoryClassNames(
     db,
     manualCountRows,
+  );
+  const qrPresenceKeys = new Set(
+    resolvedQrPresenceRows
+      .filter((row) =>
+        className && className !== "all"
+          ? (row.className?.trim() || "UNASSIGNED") === className
+          : true,
+      )
+      .map((row) => buildAttendanceHistoryRecordKey(row)),
   );
 
   const totalQrRows =
@@ -1598,9 +1702,13 @@ export async function getAttendanceHistoryCount(
   const totalManualRows =
     className && className !== "all"
       ? resolvedManualRows.filter(
-          (row) => (row.className?.trim() || "UNASSIGNED") === className,
+          (row) =>
+            (row.className?.trim() || "UNASSIGNED") === className &&
+            !qrPresenceKeys.has(buildAttendanceHistoryRecordKey(row)),
         ).length
-      : resolvedManualRows.length;
+      : resolvedManualRows.filter(
+          (row) => !qrPresenceKeys.has(buildAttendanceHistoryRecordKey(row)),
+        ).length;
 
   return totalQrRows + totalManualRows;
 }
@@ -1666,7 +1774,14 @@ function buildAttendanceHistorySummary(
 
       if (row.status === "PRESENT") summary.present += 1;
       if (row.status === "LATE") summary.late += 1;
-      if (row.status === "EXCUSED") summary.excused += 1;
+      if (row.status === "EXCUSED") {
+        summary.excused += 1;
+        if (row.statusLabel === "Sakit") {
+          summary.sick += 1;
+        } else {
+          summary.permission += 1;
+        }
+      }
       if (row.status === "ABSENT") summary.absent += 1;
 
       if (row.source === "qr") summary.qr += 1;
@@ -1679,6 +1794,8 @@ function buildAttendanceHistorySummary(
       present: 0,
       late: 0,
       excused: 0,
+      sick: 0,
+      permission: 0,
       absent: 0,
       qr: 0,
       manual: 0,

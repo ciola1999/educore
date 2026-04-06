@@ -110,6 +110,8 @@ import { useStore } from "@/lib/store/use-store";
 import { getTursoCloudClient } from "@/lib/sync/client";
 import { pullFromCloud, pushToCloud } from "@/lib/sync/turso-sync";
 import {
+  buildClassNameLookupKeys,
+  canonicalizeClassDisplayName,
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
@@ -733,7 +735,9 @@ async function runDesktopAuthRepairSync(reason: string) {
   }
 
   try {
-    const syncResult = await pullFromCloud();
+    const syncResult = await pullFromCloud({
+      pruneAuthoritativeTables: false,
+    });
     if (syncResult.status === "error") {
       console.warn(
         `[DESKTOP_AUTH] Cloud pull skipped during ${reason}: ${syncResult.message}`,
@@ -772,13 +776,17 @@ async function runDesktopAuthRepairSync(reason: string) {
 async function repairDesktopOperationalState(userId: string) {
   const repairResult = await runDesktopAuthRepairSync("login repair");
   if (!repairResult.repaired) {
-    return;
+    return null;
   }
 
   const refreshedUser = await getDesktopAuthUserById(userId);
   if (refreshedUser) {
-    useStore.getState().login(buildDesktopSession(refreshedUser));
+    const refreshedSessionUser = buildDesktopSession(refreshedUser);
+    useStore.getState().login(refreshedSessionUser);
+    return refreshedSessionUser;
   }
+
+  return null;
 }
 
 async function handleDesktopLogin(body: unknown) {
@@ -896,8 +904,8 @@ async function handleDesktopLogin(body: unknown) {
   });
 
   useStore.getState().login(sessionUser);
-  void repairDesktopOperationalState(userRow.id);
-  return apiOk({ user: sessionUser });
+  const repairedSessionUser = await repairDesktopOperationalState(userRow.id);
+  return apiOk({ user: repairedSessionUser ?? sessionUser });
 }
 
 async function handleDesktopChangePassword(body: unknown) {
@@ -1333,22 +1341,24 @@ async function ensureDesktopClassReference(
   now: Date,
 ) {
   const normalizedGrade = sanitizeClassDisplayName(grade);
-  if (normalizedGrade === "UNASSIGNED") {
+  const canonicalGrade = canonicalizeClassDisplayName(normalizedGrade);
+  if (canonicalGrade === "UNASSIGNED") {
     return {
-      normalizedGrade,
+      normalizedGrade: canonicalGrade,
       kelasId: null as string | null,
     };
   }
 
+  const lookupKeys = buildClassNameLookupKeys(canonicalGrade);
   const existingClass = await db
     .select({ id: classes.id })
     .from(classes)
-    .where(and(eq(classes.name, normalizedGrade), isNull(classes.deletedAt)))
+    .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
     .limit(1);
 
   if (existingClass[0]?.id) {
     return {
-      normalizedGrade,
+      normalizedGrade: canonicalGrade,
       kelasId: existingClass[0].id,
     };
   }
@@ -1356,7 +1366,7 @@ async function ensureDesktopClassReference(
   const kelasId = crypto.randomUUID();
   await db.insert(classes).values({
     id: kelasId,
-    name: normalizedGrade,
+    name: canonicalGrade,
     academicYear: getStudentAcademicYearLabel(),
     isActive: true,
     syncStatus: "pending",
@@ -1365,7 +1375,7 @@ async function ensureDesktopClassReference(
   });
 
   return {
-    normalizedGrade,
+    normalizedGrade: canonicalGrade,
     kelasId,
   };
 }
@@ -3353,21 +3363,31 @@ async function handleDesktopBulkCreateStudentAccounts(body: unknown) {
     new Set(
       candidates
         .map((student) =>
-          sanitizeClassDisplayName(
-            student.grade,
-            student.grade ? classNameById.get(student.grade.trim()) : null,
+          canonicalizeClassDisplayName(
+            sanitizeClassDisplayName(
+              student.grade,
+              student.grade ? classNameById.get(student.grade.trim()) : null,
+            ),
           ),
         )
         .filter((grade) => grade !== "UNASSIGNED"),
     ),
   );
+  const classLookupKeys = Array.from(
+    new Set(
+      classNames.flatMap((className) => buildClassNameLookupKeys(className)),
+    ),
+  );
   const classRows =
-    classNames.length > 0
+    classLookupKeys.length > 0
       ? await db
           .select({ id: classes.id, name: classes.name })
           .from(classes)
           .where(
-            and(inArray(classes.name, classNames), isNull(classes.deletedAt)),
+            and(
+              inArray(classes.name, classLookupKeys),
+              isNull(classes.deletedAt),
+            ),
           )
       : [];
   const classIdByName = new Map(
@@ -3620,6 +3640,7 @@ async function handleDesktopCreateStudentAccount(
       .limit(1);
     gradeName = sanitizeClassDisplayName(classById[0]?.name, rawGrade);
   }
+  gradeName = canonicalizeClassDisplayName(gradeName);
 
   let kelasId: string | null = null;
   if (
@@ -3627,10 +3648,11 @@ async function handleDesktopCreateStudentAccount(
     gradeName !== "UNASSIGNED" &&
     !isUuidLikeClassValue(gradeName)
   ) {
+    const lookupKeys = buildClassNameLookupKeys(gradeName);
     const classRows = await db
       .select({ id: classes.id })
       .from(classes)
-      .where(and(eq(classes.name, gradeName), isNull(classes.deletedAt)))
+      .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
       .limit(1);
 
     if (classRows.length > 0) {

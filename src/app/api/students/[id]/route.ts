@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
@@ -6,7 +6,11 @@ import { hashPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
-import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
+import {
+  buildClassNameLookupKeys,
+  canonicalizeClassDisplayName,
+  sanitizeClassDisplayName,
+} from "@/lib/utils/class-name";
 import { studentUpdateSchema } from "@/lib/validations/schemas";
 
 export const dynamic = "force-dynamic";
@@ -53,22 +57,24 @@ async function ensureClassReference(
   now: Date,
 ) {
   const normalizedGrade = sanitizeClassDisplayName(grade);
-  if (normalizedGrade === "UNASSIGNED") {
+  const canonicalGrade = canonicalizeClassDisplayName(normalizedGrade);
+  if (canonicalGrade === "UNASSIGNED") {
     return {
-      normalizedGrade,
+      normalizedGrade: canonicalGrade,
       kelasId: null as string | null,
     };
   }
 
+  const lookupKeys = buildClassNameLookupKeys(canonicalGrade);
   const existingClass = await db
     .select({ id: classes.id })
     .from(classes)
-    .where(and(eq(classes.name, normalizedGrade), isNull(classes.deletedAt)))
+    .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
     .limit(1);
 
   if (existingClass[0]?.id) {
     return {
-      normalizedGrade,
+      normalizedGrade: canonicalGrade,
       kelasId: existingClass[0].id,
     };
   }
@@ -76,7 +82,7 @@ async function ensureClassReference(
   const kelasId = crypto.randomUUID();
   await db.insert(classes).values({
     id: kelasId,
-    name: normalizedGrade,
+    name: canonicalGrade,
     academicYear: getAcademicYearLabel(),
     isActive: true,
     syncStatus: "pending",
@@ -85,7 +91,7 @@ async function ensureClassReference(
   });
 
   return {
-    normalizedGrade,
+    normalizedGrade: canonicalGrade,
     kelasId,
   };
 }

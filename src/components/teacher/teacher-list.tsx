@@ -210,7 +210,11 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
                   setRoleFilter(
                     value === "all"
                       ? null
-                      : (value as "super_admin" | "admin" | "teacher" | "staff"),
+                      : (value as
+                          | "super_admin"
+                          | "admin"
+                          | "teacher"
+                          | "staff"),
                   );
                   setCurrentPage(1);
                 }}
@@ -240,7 +244,12 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
                     void fetchTeachers();
                   }}
                 >
-                  <RefreshCw className={cn("h-4.5 w-4.5", loading && "animate-spin text-emerald-400")} />
+                  <RefreshCw
+                    className={cn(
+                      "h-4.5 w-4.5",
+                      loading && "animate-spin text-emerald-400",
+                    )}
+                  />
                 </Button>
 
                 {hasActiveFilter && (
@@ -272,7 +281,10 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
                   Database Stats
                 </p>
                 <p className="text-sm font-medium text-zinc-300">
-                  <span className="text-white font-bold">{pagedTeachers.length}</span> Entitas Ditampilkan
+                  <span className="text-white font-bold">
+                    {pagedTeachers.length}
+                  </span>{" "}
+                  Entitas Ditampilkan
                 </p>
               </div>
             </div>
@@ -280,7 +292,9 @@ export function TeacherList({ refreshToken = 0 }: { refreshToken?: number }) {
             <div className="flex items-center gap-4">
               <div className="hidden h-8 w-px bg-zinc-800 sm:block" />
               <div className="flex items-center gap-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-600">Baris</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-600">
+                  Baris
+                </span>
                 <select
                   id="page-size"
                   value={String(pageSize)}

@@ -24,6 +24,12 @@ Setelah itu, pilih bootstrap yang sesuai dari:
 - Jaga schema safety dan sync safety
 - Jangan buka jalur desktop release palsu
 - Ingat bahwa signoff desktop saat ini adalah `MSI`, bukan otomatis semua bundler Windows
+- Anggap `web`, `bun run dev`, `bun tauri dev`, dan packaged `MSI` sebagai runtime yang berbeda
+- Jika bug hanya muncul di deploy atau `MSI`, audit dulu artifact/runtime stale sebelum menyentuh business logic
+- Jangan samakan build sukses dengan runtime target sehat
+- Jangan biarkan `tsc` merah palsu karena `.next/types` stale/parsial
+- Untuk Windows desktop, source of truth release saat ini adalah `runtime-bundle.tar` + `runtime-config.json`
+- Jika `bun tauri build` timeout tetapi snapshot `wix/x64` sudah terbentuk, recovery MSI resmi adalah `bun run build:desktop:msi-finalize`
 
 ## Untuk task Fase 2
 

@@ -1,38 +1,90 @@
-/**
- * Runtime environment detection for EduCore (2026 Elite Pattern)
- *
- * Uses multiple checks to ensure accurate Tauri detection:
- * 1. Check for __TAURI_INTERNALS__
- * 2. Check for __TAURI__ (main Tauri global)
- * 3. Check if we're in a secure context (Tauri windows are secure)
- */
+const DESKTOP_RUNTIME_MARKER_KEY = "educore.desktop.runtime";
+const DESKTOP_RUNTIME_COOKIE_KEY = "educore.desktop.runtime";
+const DESKTOP_LOOPBACK_QUERY_TOKEN = "educore_desktop_token";
 
-export const isTauri = (): boolean => {
-  // Check if we're in a browser environment
+function persistDesktopRuntimeMarker() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(DESKTOP_RUNTIME_MARKER_KEY, "1");
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
+
+function hasPersistedDesktopRuntimeMarker() {
   if (typeof window === "undefined") {
     return false;
   }
 
-  // Primary check: Look for Tauri globals
-  // __TAURI_INTERNALS__ is set by Tauri at runtime
-  // __TAURI__ is the main Tauri global object
+  try {
+    return window.sessionStorage.getItem(DESKTOP_RUNTIME_MARKER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function hasDesktopRuntimeCookieMarker() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+
+  if (
+    typeof window.location === "undefined" ||
+    (window.location.hostname !== "127.0.0.1" &&
+      window.location.hostname !== "localhost")
+  ) {
+    return false;
+  }
+
+  try {
+    return document.cookie
+      .split(";")
+      .map((value) => value.trim())
+      .some((value) => value === `${DESKTOP_RUNTIME_COOKIE_KEY}=1`);
+  } catch {
+    return false;
+  }
+}
+
+export const isTauri = (): boolean => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
   const hasTauriInternals = window.__TAURI_INTERNALS__ !== undefined;
   const hasTauriGlobal = window.__TAURI__ !== undefined;
-
-  // For development, also check if we're in a Tauri-specific iframe
-  // or if the protocol is non-http (like tauri://)
   const isTauriProtocol =
     typeof window.location !== "undefined" &&
     window.location.protocol === "tauri:";
-
   const hasTauriUserAgent =
     typeof navigator !== "undefined" &&
     typeof navigator.userAgent === "string" &&
     navigator.userAgent.includes("Tauri");
+  const hasDesktopLoopbackQueryToken =
+    typeof window.location !== "undefined" &&
+    new URLSearchParams(window.location.search).has(
+      DESKTOP_LOOPBACK_QUERY_TOKEN,
+    );
+  const hasDesktopRuntimeCookie = hasDesktopRuntimeCookieMarker();
+  const hasPersistedMarker = hasPersistedDesktopRuntimeMarker();
 
-  return (
-    hasTauriInternals || hasTauriGlobal || isTauriProtocol || hasTauriUserAgent
-  );
+  const detectedDesktopRuntime =
+    hasTauriInternals ||
+    hasTauriGlobal ||
+    isTauriProtocol ||
+    hasTauriUserAgent ||
+    hasDesktopLoopbackQueryToken ||
+    hasDesktopRuntimeCookie ||
+    hasPersistedMarker;
+
+  if (detectedDesktopRuntime) {
+    persistDesktopRuntimeMarker();
+  }
+
+  return detectedDesktopRuntime;
 };
 
 export const isWeb = (): boolean => {

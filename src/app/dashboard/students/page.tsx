@@ -27,14 +27,14 @@ export default function StudentsPage() {
           <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-sky-500/10 blur-[100px]" />
           <div className="absolute top-1/2 -right-48 h-96 w-96 rounded-full bg-indigo-500/5 blur-[120px]" />
         </div>
-        
+
         <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-sky-300">
               <Users className="h-3.5 w-3.5" />
               <span>Students Workspace</span>
             </div>
-            
+
             <div className="space-y-4">
               <h1 className="bg-linear-to-r from-white via-sky-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
                 Data Siswa
@@ -50,10 +50,13 @@ export default function StudentsPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[220px]">
             {[
               { label: "Fokus", value: "Students" },
-              { label: "Runtime", value: desktopRuntime ? "Tauri App" : "Web Hub" },
+              {
+                label: "Runtime",
+                value: desktopRuntime ? "Tauri App" : "Web Hub",
+              },
               { label: "Mode", value: "Core CRUD" },
             ].map((item) => (
-              <div 
+              <div
                 key={item.label}
                 className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
               >

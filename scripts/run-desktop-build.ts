@@ -4,6 +4,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -29,10 +30,14 @@ const DESKTOP_RUNTIME_DIR = resolve(
   "src-tauri",
   "desktop-runtime",
 );
-const DESKTOP_RUNTIME_STAGING_DIR = resolve(
+const DESKTOP_RUNTIME_STAGING_ROOT = resolve(
   process.cwd(),
   ".desktop-runtime-staging",
 );
+const SHOULD_SKIP_NEXT_BUILD = (() => {
+  const value = process.env.EDUCORE_SKIP_NEXT_BUILD?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+})();
 
 function readText(relativePath: string) {
   return readFileSync(resolve(process.cwd(), relativePath), "utf8");
@@ -99,6 +104,13 @@ function resetNextBuildOutput() {
 }
 
 function runNextBuild() {
+  if (SHOULD_SKIP_NEXT_BUILD) {
+    console.log(
+      "[EDUCORE_DESKTOP_BUILD] Melewati next build dan memakai artefak .next yang sudah ada.",
+    );
+    return;
+  }
+
   const env = { ...process.env };
   const nodeMajor = getNodeMajorVersion();
   resetNextBuildOutput();
@@ -138,66 +150,12 @@ function readPackageVersion() {
   return packageJson.version?.trim() || "0.1.0";
 }
 
-function pickEnvValue(...keys: string[]) {
-  for (const key of keys) {
-    const value = process.env[key]?.trim();
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function requireEnv(label: string, ...keys: string[]) {
-  const value = pickEnvValue(...keys);
-  if (!value) {
-    failSecure(
-      [
-        "[EDUCORE_DESKTOP_BUILD_BLOCKED]",
-        `Desktop production packaging membutuhkan ${label}.`,
-        `Set salah satu env berikut sebelum menjalankan build: ${keys.join(", ")}.`,
-      ].join("\n"),
-    );
-  }
-
-  return value;
-}
-
 function prepareDesktopRuntimeConfig(): DesktopRuntimeConfig {
-  const authDatabaseUrl = requireEnv(
-    "AUTH database URL",
-    "AUTH_DATABASE_URL",
-    "TURSO_DATABASE_URL",
-  );
-  const authDatabaseAuthToken = requireEnv(
-    "AUTH database auth token",
-    "AUTH_DATABASE_AUTH_TOKEN",
-    "TURSO_AUTH_TOKEN",
-    "TURSO_DATABASE_AUTH_TOKEN",
-    "TURSO_DATABASE_TURSO_AUTH_TOKEN",
-  );
-  const syncDatabaseUrl = requireEnv(
-    "SYNC database URL",
-    "SYNC_DATABASE_URL",
-    "TURSO_DATABASE_URL",
-  );
-  const syncDatabaseAuthToken = requireEnv(
-    "SYNC database auth token",
-    "SYNC_DATABASE_AUTH_TOKEN",
-    "TURSO_AUTH_TOKEN",
-    "TURSO_DATABASE_AUTH_TOKEN",
-    "TURSO_DATABASE_TURSO_AUTH_TOKEN",
-  );
-  const authSecret = requireEnv(
-    "AUTH secret",
-    "AUTH_SECRET",
-    "NEXTAUTH_SECRET",
-  );
   const version =
     process.env.NEXT_PUBLIC_APP_VERSION?.trim() || readPackageVersion();
   const nodeBinary = basename(process.execPath);
   const appOrigin = `http://${DEFAULT_HOST}:${DEFAULT_PORT}`;
+  const bundleArchiveName = "runtime-bundle.tar";
 
   return {
     host: DEFAULT_HOST,
@@ -205,7 +163,7 @@ function prepareDesktopRuntimeConfig(): DesktopRuntimeConfig {
     nodeBinary,
     serverEntrypoint: "app/server.js",
     appDir: "app",
-    bundleArchive: "runtime-bundle.tar",
+    bundleArchive: bundleArchiveName,
     bundleVersion: `${version}-pending`,
     env: {
       NODE_ENV: "production",
@@ -214,12 +172,6 @@ function prepareDesktopRuntimeConfig(): DesktopRuntimeConfig {
       AUTH_TRUST_HOST: "true",
       AUTH_URL: appOrigin,
       NEXTAUTH_URL: appOrigin,
-      AUTH_SECRET: authSecret,
-      NEXTAUTH_SECRET: authSecret,
-      AUTH_DATABASE_URL: authDatabaseUrl,
-      AUTH_DATABASE_AUTH_TOKEN: authDatabaseAuthToken,
-      SYNC_DATABASE_URL: syncDatabaseUrl,
-      SYNC_DATABASE_AUTH_TOKEN: syncDatabaseAuthToken,
       NEXT_PUBLIC_APP_VERSION: version,
       EDUCORE_DESKTOP_RUNTIME: "embedded-local-web-server",
       EDUCORE_DESKTOP_RELEASE_CHANNEL:
@@ -314,6 +266,49 @@ function copyIfExists(source: string, target: string) {
   cpSync(source, target, { recursive: true, dereference: true, force: true });
 }
 
+function pruneDesktopRuntimeBundles() {
+  if (!existsSync(DESKTOP_RUNTIME_DIR)) {
+    return;
+  }
+
+  for (const entry of readdirSync(DESKTOP_RUNTIME_DIR, {
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const shouldDelete =
+      entry.name === "runtime-bundle.tar" ||
+      /^runtime-bundle-\d+\.tar$/u.test(entry.name);
+
+    if (!shouldDelete) {
+      continue;
+    }
+
+    try {
+      rmSync(join(DESKTOP_RUNTIME_DIR, entry.name), {
+        force: true,
+        maxRetries: 3,
+      });
+    } catch (error) {
+      const errorCode =
+        error instanceof Error && "code" in error
+          ? String(error.code)
+          : "UNKNOWN";
+
+      if (errorCode === "EBUSY" || errorCode === "EPERM") {
+        console.warn(
+          `[EDUCORE_DESKTOP_BUILD] Melewati bundle lama yang sedang terkunci: ${entry.name}`,
+        );
+        continue;
+      }
+
+      throw error;
+    }
+  }
+}
+
 function resolveTarBinary() {
   const explicitPath = process.env.SystemRoot
     ? join(process.env.SystemRoot, "System32", "tar.exe")
@@ -334,7 +329,6 @@ function runTarArchive(stagingDir: string, archivePath: string) {
     {
       cwd: process.cwd(),
       stdio: "inherit",
-      shell: true,
       env: process.env,
     },
   );
@@ -354,16 +348,17 @@ function prepareDesktopRuntimeBundle(config: DesktopRuntimeConfig) {
   ensureStandaloneArtifacts();
   ensureRuntimeHostExecutable();
 
-  const runtimeAppDir = join(DESKTOP_RUNTIME_STAGING_DIR, config.appDir);
+  const stagingDir = join(DESKTOP_RUNTIME_STAGING_ROOT, `bundle-${Date.now()}`);
+  const runtimeAppDir = join(stagingDir, config.appDir);
   const standaloneDir = resolve(process.cwd(), ".next", "standalone");
   const staticDir = resolve(process.cwd(), ".next", "static");
   const publicDir = resolve(process.cwd(), "public");
   const archivePath = join(DESKTOP_RUNTIME_DIR, config.bundleArchive);
+  const archiveTempPath = join(DESKTOP_RUNTIME_DIR, "runtime-bundle.next.tar");
 
-  rmSync(DESKTOP_RUNTIME_STAGING_DIR, { recursive: true, force: true });
-  rmSync(DESKTOP_RUNTIME_DIR, { recursive: true, force: true });
   mkdirSync(runtimeAppDir, { recursive: true });
   mkdirSync(DESKTOP_RUNTIME_DIR, { recursive: true });
+  pruneDesktopRuntimeBundles();
 
   cpSync(standaloneDir, runtimeAppDir, {
     recursive: true,
@@ -377,14 +372,19 @@ function prepareDesktopRuntimeBundle(config: DesktopRuntimeConfig) {
     force: true,
   });
   copyIfExists(publicDir, join(runtimeAppDir, "public"));
-  cpSync(
-    process.execPath,
-    join(DESKTOP_RUNTIME_STAGING_DIR, config.nodeBinary),
-  );
+  cpSync(process.execPath, join(stagingDir, config.nodeBinary));
 
-  runTarArchive(DESKTOP_RUNTIME_STAGING_DIR, archivePath);
+  runTarArchive(stagingDir, archiveTempPath);
+  cpSync(archiveTempPath, archivePath, { force: true });
+  rmSync(archiveTempPath, { force: true, maxRetries: 3 });
   config.bundleVersion = buildDesktopBundleVersion(config, archivePath);
-  rmSync(DESKTOP_RUNTIME_STAGING_DIR, { recursive: true, force: true });
+  try {
+    rmSync(stagingDir, { recursive: true, force: true, maxRetries: 3 });
+  } catch {
+    console.warn(
+      `[EDUCORE_DESKTOP_BUILD] Gagal membersihkan staging dir ${stagingDir}. Folder akan diabaikan untuk run berikutnya.`,
+    );
+  }
 
   writeFileSync(
     join(DESKTOP_RUNTIME_DIR, "runtime-config.json"),

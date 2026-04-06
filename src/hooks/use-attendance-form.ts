@@ -212,6 +212,16 @@ export function useAttendanceForm(
     toast.success("Set all students to present");
   };
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredList = studentList.filter((s) => {
+    if (!normalizedSearchQuery) return true;
+    return (
+      s.fullName.toLowerCase().includes(normalizedSearchQuery) ||
+      s.nis.toLowerCase().includes(normalizedSearchQuery) ||
+      s.nisn?.toLowerCase().includes(normalizedSearchQuery)
+    );
+  });
+
   const handleSubmit = async () => {
     if (!selectedClass) {
       toast.error("Please select a class");
@@ -233,8 +243,14 @@ export function useAttendanceForm(
     setSubmitting(true);
     try {
       setSubmitSummary(null);
-      // Filter out locked students as they are already handled by QR
-      const recordableStudents = studentList.filter((s) => !s.isLocked);
+      // Respect active search filtering so manual save only affects the visible subset.
+      const targetStudents = filteredList;
+      const recordableStudents = targetStudents.filter((s) => !s.isLocked);
+
+      if (targetStudents.length === 0) {
+        toast.info("Tidak ada siswa yang cocok dengan pencarian aktif.");
+        return;
+      }
 
       if (recordableStudents.length === 0) {
         toast.info("All records for this class were already synced via QR.");
@@ -254,9 +270,9 @@ export function useAttendanceForm(
         },
       );
       const failedStudents = (result.failures || []).map((failure) => {
-        const matchedStudent = studentList.find(
-          (student) => student.id === failure.studentId,
-        );
+        const matchedStudent =
+          targetStudents.find((student) => student.id === failure.studentId) ||
+          studentList.find((student) => student.id === failure.studentId);
         return {
           studentId: failure.studentId,
           studentName:
@@ -303,16 +319,6 @@ export function useAttendanceForm(
       setSubmitting(false);
     }
   };
-
-  const filteredList = studentList.filter((s) => {
-    if (!searchQuery) return true;
-    const search = searchQuery.toLowerCase();
-    return (
-      s.fullName.toLowerCase().includes(search) ||
-      s.nis.toLowerCase().includes(search) ||
-      s.nisn?.toLowerCase().includes(search)
-    );
-  });
 
   const totalPages = Math.ceil(filteredList.length / itemsPerPage);
   const paginatedStudentList = filteredList.slice(

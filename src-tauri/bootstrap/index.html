@@ -118,6 +118,88 @@
         font-size: 13px;
       }
 
+      .provisioning {
+        margin-top: 18px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(116, 89, 55, 0.12);
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .provisioning[hidden] {
+        display: none;
+      }
+
+      .provisioning h2 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+
+      .provisioning-copy {
+        margin-bottom: 14px;
+        font-size: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .field label {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .field input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(116, 89, 55, 0.16);
+        background: rgba(255, 255, 255, 0.96);
+        color: var(--text);
+        font: inherit;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .actions button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 16px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .actions button:disabled {
+        cursor: wait;
+        opacity: 0.7;
+      }
+
+      .primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .secondary {
+        background: rgba(116, 89, 55, 0.08);
+        color: var(--text);
+      }
+
+      .provisioning-status {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+        white-space: pre-wrap;
+      }
+
       @keyframes pulse {
         0%,
         100% {
@@ -154,12 +236,132 @@
         Jika startup berhenti lama, cek log desktop dan pastikan paket runtime
         desktop terbangun lengkap.
       </p>
+
+      <section class="provisioning" id="provisioning" hidden>
+        <h2>Provisioning Runtime Desktop</h2>
+        <p class="provisioning-copy">
+          Isi URL sync dan auth token sekali saja untuk perangkat ini. Kredensial
+          akan disimpan di storage lokal desktop, bukan di bundle MSI.
+        </p>
+
+        <div class="field">
+          <label for="sync-url">URL Sync</label>
+          <input id="sync-url" type="text" autocomplete="off" placeholder="libsql://... atau https://..." />
+        </div>
+
+        <div class="field">
+          <label for="sync-token">Auth Token Sync</label>
+          <input id="sync-token" type="password" autocomplete="off" placeholder="Tempel auth token desktop" />
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="save-and-start" type="button">Simpan dan Jalankan</button>
+          <button class="secondary" id="retry-start" type="button">Coba Lagi</button>
+        </div>
+
+        <p class="provisioning-status" id="provisioning-status">
+          Runtime desktop akan dijalankan ulang setelah konfigurasi tersimpan.
+        </p>
+      </section>
     </main>
 
     <script>
       const titleNode = document.getElementById("title");
       const detailNode = document.getElementById("detail");
       const statusNode = document.getElementById("status");
+      const provisioningNode = document.getElementById("provisioning");
+      const syncUrlInput = document.getElementById("sync-url");
+      const syncTokenInput = document.getElementById("sync-token");
+      const saveAndStartButton = document.getElementById("save-and-start");
+      const retryStartButton = document.getElementById("retry-start");
+      const provisioningStatusNode = document.getElementById("provisioning-status");
+
+      function shouldShowProvisioning(payload) {
+        const text = `${payload?.title || ""}\n${payload?.detail || ""}`.toLowerCase();
+        return (
+          payload?.state === "error" &&
+          (text.includes("konfigurasi desktop belum lengkap") ||
+            text.includes("url sync") ||
+            text.includes("auth token") ||
+            text.includes("runtime desktop sebelum menjalankan msi"))
+        );
+      }
+
+      async function invokeTauri(command, args = {}) {
+        const invoke = window.__TAURI_INTERNALS__?.invoke;
+        if (typeof invoke !== "function") {
+          throw new Error("Bridge Tauri belum tersedia di shell bootstrap.");
+        }
+
+        return invoke(command, args);
+      }
+
+      function setProvisioningBusy(isBusy, message) {
+        saveAndStartButton.disabled = isBusy;
+        retryStartButton.disabled = isBusy;
+        provisioningStatusNode.textContent =
+          message ||
+          "Runtime desktop akan dijalankan ulang setelah konfigurasi tersimpan.";
+      }
+
+      async function prefillSyncConfig() {
+        try {
+          const config = await invokeTauri("get_sync_config");
+          if (config?.url) {
+            syncUrlInput.value = config.url;
+          }
+          if (config?.auth_token) {
+            syncTokenInput.value = config.auth_token;
+          }
+        } catch {
+          // Tidak apa-apa jika credential belum pernah disimpan.
+        }
+      }
+
+      async function retryBootstrap() {
+        try {
+          setProvisioningBusy(true, "Menjalankan ulang startup runtime desktop...");
+          const result = await invokeTauri("ensure_runtime_bootstrap_ready");
+          if (result?.ok) {
+            setProvisioningBusy(false, "Runtime desktop sehat. Window utama akan dibuka.");
+            return;
+          }
+
+          throw new Error(result?.message || "Runtime desktop belum siap.");
+        } catch (error) {
+          setProvisioningBusy(
+            false,
+            error instanceof Error ? error.message : "Gagal menjalankan runtime desktop.",
+          );
+        }
+      }
+
+      async function handleProvisioningSave() {
+        const url = syncUrlInput.value.trim();
+        const authToken = syncTokenInput.value.trim();
+
+        if (!url || !authToken) {
+          setProvisioningBusy(false, "URL sync dan auth token wajib diisi.");
+          return;
+        }
+
+        try {
+          setProvisioningBusy(true, "Menyimpan credential desktop ke storage lokal...");
+          await invokeTauri("set_sync_config", {
+            request: {
+              url,
+              authToken,
+            },
+          });
+          setProvisioningBusy(true, "Credential tersimpan. Menyalakan runtime desktop...");
+          await retryBootstrap();
+        } catch (error) {
+          setProvisioningBusy(
+            false,
+            error instanceof Error ? error.message : "Gagal menyimpan credential desktop.",
+          );
+        }
+      }
 
       window.__EDUCORE_BOOTSTRAP__ = {
         setState(payload) {
@@ -169,8 +371,19 @@
           detailNode.textContent =
             payload?.detail ||
             "Menunggu startup manager native menyelesaikan health check loopback.";
+          provisioningNode.hidden = !shouldShowProvisioning(payload);
         },
       };
+
+      saveAndStartButton.addEventListener("click", () => {
+        void handleProvisioningSave();
+      });
+
+      retryStartButton.addEventListener("click", () => {
+        void retryBootstrap();
+      });
+
+      void prefillSyncConfig();
     </script>
   </body>
 </html>

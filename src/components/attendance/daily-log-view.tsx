@@ -146,21 +146,30 @@ function formatStatusLabel(status: TodayAttendanceLog["status"]) {
   }
 }
 
+function formatHistoryStatusLabel(log: TodayAttendanceLog) {
+  return log.statusLabel || formatStatusLabel(log.status);
+}
+
+function formatLocalDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getTodayDateString() {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDateInput(new Date());
 }
 
 function getMonthStartDateString() {
   const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+  return formatLocalDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
 }
 
 function getDaysAgoDateString(days: number) {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return formatLocalDateInput(date);
 }
 
 async function exportAttendanceRowsToXlsx(input: {
@@ -1736,8 +1745,13 @@ export function DailyLogView({
                   tone: "text-amber-300",
                 },
                 {
-                  label: "Izin/Sakit",
-                  value: historySummary.excused,
+                  label: "Izin",
+                  value: historySummary.permission,
+                  tone: "text-sky-300",
+                },
+                {
+                  label: "Sakit",
+                  value: historySummary.sick,
                   tone: "text-sky-300",
                 },
                 {
@@ -1912,7 +1926,7 @@ export function DailyLogView({
               <HistoryLogList
                 logs={historyLogs}
                 density={historyDensity}
-                formatStatusLabel={formatStatusLabel}
+                formatStatusLabel={formatHistoryStatusLabel}
                 formatTime={formatTime}
               />
             ) : (
@@ -1920,7 +1934,7 @@ export function DailyLogView({
                 groups={groupedHistoryLogs}
                 groupBy={historyGroupBy}
                 density={historyDensity}
-                formatStatusLabel={formatStatusLabel}
+                formatStatusLabel={formatHistoryStatusLabel}
                 formatTime={formatTime}
               />
             )

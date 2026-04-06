@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { InlineState } from "@/components/common/inline-state";
@@ -24,13 +25,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiDelete, apiGet } from "@/lib/api/request";
-import { AddTeachingAssignmentDialog } from "./add-teaching-assignment-dialog";
-import { EditTeachingAssignmentDialog } from "./edit-teaching-assignment-dialog";
 import type {
   ClassItem,
   SemesterItem,
   TeachingAssignmentItem,
 } from "./schemas";
+
+const AddTeachingAssignmentDialog = dynamic(
+  () =>
+    import("./add-teaching-assignment-dialog").then((module) => ({
+      default: module.AddTeachingAssignmentDialog,
+    })),
+  { ssr: false },
+);
+
+const EditTeachingAssignmentDialog = dynamic(
+  () =>
+    import("./edit-teaching-assignment-dialog").then((module) => ({
+      default: module.EditTeachingAssignmentDialog,
+    })),
+  { ssr: false },
+);
 
 export function TeachingAssignmentList({
   readOnly = false,
@@ -61,7 +76,7 @@ export function TeachingAssignmentList({
       setSemesters(semesterRows);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Gagal memuat assignment";
+        error instanceof Error ? error.message : "Gagal memuat penugasan guru";
       setData([]);
       setClasses([]);
       setSemesters([]);
@@ -103,12 +118,14 @@ export function TeachingAssignmentList({
     setDeleting(true);
     try {
       await apiDelete(`/api/teaching-assignments/${deleteTarget.id}`);
-      toast.success("Assignment guru-mapel berhasil dihapus");
+      toast.success("Penugasan guru berhasil dihapus");
       setDeleteTarget(null);
       await fetchData();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Gagal menghapus assignment",
+        error instanceof Error
+          ? error.message
+          : "Gagal menghapus penugasan guru",
       );
     } finally {
       setDeleting(false);
@@ -134,7 +151,7 @@ export function TeachingAssignmentList({
   if (errorMessage && data.length === 0) {
     return (
       <InlineState
-        title="Assignment guru-mapel belum tersedia"
+        title="Penugasan guru belum tersedia"
         description={errorMessage}
         actionLabel="Muat ulang"
         onAction={() => {
@@ -149,8 +166,8 @@ export function TeachingAssignmentList({
     <div className="space-y-4">
       {readOnly ? (
         <InlineState
-          title="Mode read only"
-          description="Aksi tambah, edit, dan hapus assignment guru-mapel disembunyikan."
+          title="Mode baca saja"
+          description="Aksi tambah, edit, dan hapus penugasan guru disembunyikan."
           variant="info"
           className="text-sm"
         />
@@ -182,7 +199,7 @@ export function TeachingAssignmentList({
                     colSpan={readOnly ? 4 : 5}
                     className="h-24 text-center text-zinc-500"
                   >
-                    Belum ada assignment guru-mapel.
+                    Belum ada penugasan guru.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -227,7 +244,7 @@ export function TeachingAssignmentList({
         <div className="space-y-3 p-3 md:hidden">
           {data.length === 0 ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 text-center text-sm text-zinc-500">
-              Belum ada assignment guru-mapel.
+              Belum ada penugasan guru.
             </div>
           ) : (
             data.map((item) => (
@@ -278,11 +295,11 @@ export function TeachingAssignmentList({
         >
           <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white">
             <AlertDialogHeader>
-              <AlertDialogTitle>Hapus assignment guru-mapel?</AlertDialogTitle>
+              <AlertDialogTitle>Hapus penugasan guru?</AlertDialogTitle>
               <AlertDialogDescription className="text-zinc-400">
                 {deleteTarget
                   ? `${deleteTarget.guruName} untuk ${deleteTarget.mataPelajaranName} di ${getResolvedClassLabel(deleteTarget)} akan dihapus.`
-                  : "Assignment akan dihapus."}
+                  : "Penugasan guru akan dihapus."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

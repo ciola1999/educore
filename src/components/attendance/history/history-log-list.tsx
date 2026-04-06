@@ -4,7 +4,7 @@ import type { HistoryDensity, TodayAttendanceLog } from "./history-types";
 type HistoryLogListProps = {
   logs: TodayAttendanceLog[];
   density: HistoryDensity;
-  formatStatusLabel: (status: TodayAttendanceLog["status"]) => string;
+  formatStatusLabel: (log: TodayAttendanceLog) => string;
   formatTime: (value: string | Date | null) => string;
 };
 
@@ -21,7 +21,7 @@ export function HistoryLogList({
           key={log.id}
           log={log}
           density={density}
-          statusLabel={formatStatusLabel(log.status)}
+          statusLabel={formatStatusLabel(log)}
           checkInLabel={formatTime(log.checkInTime)}
           checkOutLabel={formatTime(log.checkOutTime)}
         />

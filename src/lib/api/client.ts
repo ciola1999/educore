@@ -16,12 +16,26 @@ export async function readApiResponse<T>(
 ): Promise<ApiResponse<T>> {
   const raw = await response.text();
   const trimmed = raw.trim();
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
 
   if (!trimmed) {
     return {
       success: false,
       error: "Server mengembalikan respons kosong.",
       code: "EMPTY_RESPONSE",
+    };
+  }
+
+  if (
+    contentType.includes("text/html") ||
+    trimmed.startsWith("<!DOCTYPE") ||
+    trimmed.startsWith("<html")
+  ) {
+    return {
+      success: false,
+      error:
+        "Runtime desktop tidak mengembalikan JSON API. Jalur /api kemungkinan belum terhubung ke server lokal.",
+      code: "INVALID_RESPONSE_HTML",
     };
   }
 

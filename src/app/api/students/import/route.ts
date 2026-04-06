@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
 import {
+  buildClassNameLookupKeys,
+  canonicalizeClassDisplayName,
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
@@ -166,8 +168,10 @@ function parseRows(
     const rowNumber = headerRowIndex + index + 2;
     const nis = asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.nis));
     const fullName = asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.fullName));
-    const grade = sanitizeClassDisplayName(
-      asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.grade)),
+    const grade = canonicalizeClassDisplayName(
+      sanitizeClassDisplayName(
+        asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.grade)),
+      ),
     );
     const gender = parseGender(pickCell(rawRow, COLUMN_ALIASES.gender));
     const nisnRaw = asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.nisn));
@@ -416,13 +420,21 @@ export async function POST(request: Request) {
   const existingStudentByNis = new Map(
     existingStudents.map((row) => [row.nis, row]),
   );
+  const classLookupKeys = Array.from(
+    new Set(
+      gradeNames.flatMap((gradeName) => buildClassNameLookupKeys(gradeName)),
+    ),
+  );
   const classRows =
-    gradeNames.length > 0
+    classLookupKeys.length > 0
       ? await db
           .select({ id: classes.id, name: classes.name })
           .from(classes)
           .where(
-            and(inArray(classes.name, gradeNames), isNull(classes.deletedAt)),
+            and(
+              inArray(classes.name, classLookupKeys),
+              isNull(classes.deletedAt),
+            ),
           )
       : [];
   const classIdByName = new Map(

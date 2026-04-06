@@ -439,4 +439,143 @@ describe("student-projection", () => {
       }),
     );
   }, 20000);
+
+  it("rebinds legacy standalone student rows to the authoritative account-backed user id when NIS matches", async () => {
+    const { syncUsersToStudentsProjection } = await import(
+      "./student-projection"
+    );
+
+    selectPlans.push(
+      {
+        result: [{ id: "class-12-tsm", name: "KELAS 12 TSM" }],
+      },
+      {
+        result: [
+          {
+            user: {
+              id: "account-student-1",
+              fullName: "EGA SAPUTRA",
+              nis: "2324.10.007",
+              nisn: "9988776655",
+              jenisKelamin: "L",
+              tempatLahir: null,
+              tanggalLahir: null,
+              alamat: null,
+              kelasId: "class-12-tsm",
+            },
+            className: "KELAS 12 TSM",
+          },
+        ],
+      },
+      {
+        result: [],
+        viaOrderBy: true,
+      },
+      {
+        result: [
+          {
+            id: "legacy-student-1",
+            nis: "2324.10.007",
+            fullName: "EGA SAPUTRA",
+            gender: "L",
+            grade: "UNASSIGNED",
+            nisn: "9988776655",
+            alamat: null,
+          },
+        ],
+      },
+      {
+        result: [{ id: "setting-1" }],
+        viaLimit: true,
+      },
+    );
+
+    const result = await syncUsersToStudentsProjection();
+
+    expect(result).toEqual({
+      classCreated: 0,
+      studentUpserted: 2,
+      settingsSeeded: 0,
+    });
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "account-student-1",
+        syncStatus: "pending",
+      }),
+    );
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        grade: "KELAS 12 TSM",
+      }),
+    );
+  });
+
+  it("repairs UUID-named account class references by reusing the student's valid grade class", async () => {
+    const { syncUsersToStudentsProjection } = await import(
+      "./student-projection"
+    );
+
+    selectPlans.push(
+      {
+        result: [
+          { id: "bad-class-id", name: "bad-class-id" },
+          { id: "class-9", name: "KELAS 9" },
+        ],
+      },
+      {
+        result: [
+          {
+            user: {
+              id: "student-corrupt-class",
+              fullName: "Tes Via Deskkk",
+              nis: "0998767876",
+              nisn: null,
+              jenisKelamin: "L",
+              tempatLahir: null,
+              tanggalLahir: null,
+              alamat: null,
+              kelasId: "bad-class-id",
+            },
+            className: "bad-class-id",
+          },
+        ],
+      },
+      {
+        result: [],
+        viaOrderBy: true,
+      },
+      {
+        result: [
+          {
+            id: "student-corrupt-class",
+            nis: "0998767876",
+            fullName: "Tes Via Deskkk",
+            gender: "L",
+            grade: "KELAS 9",
+            nisn: null,
+            alamat: null,
+          },
+        ],
+      },
+      {
+        result: [{ id: "setting-1" }],
+        viaLimit: true,
+      },
+    );
+
+    const result = await syncUsersToStudentsProjection();
+
+    expect(result).toEqual({
+      classCreated: 0,
+      studentUpserted: 1,
+      settingsSeeded: 0,
+    });
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kelasId: "class-9",
+        syncStatus: "pending",
+      }),
+    );
+  });
 });

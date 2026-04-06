@@ -1,9 +1,9 @@
 "use client";
 
 import { Loader2, RefreshCcw, Wrench } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AddTeachingAssignmentDialog } from "@/components/academic/add-teaching-assignment-dialog";
 import { InlineState } from "@/components/common/inline-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,15 +33,25 @@ import type {
   LegacyScheduleRepairResponse,
 } from "./schemas";
 
+const AddTeachingAssignmentDialog = dynamic(
+  () =>
+    import("@/components/academic/add-teaching-assignment-dialog").then(
+      (module) => ({
+        default: module.AddTeachingAssignmentDialog,
+      }),
+    ),
+  { ssr: false },
+);
+
 const STATUS_OPTIONS: Array<{
   value: "all" | LegacyScheduleAuditStatus;
   label: string;
 }> = [
   { value: "all", label: "Semua status" },
   { value: "ready_to_backfill", label: "Siap dipromosikan" },
-  { value: "ambiguous_assignment", label: "Assignment ambigu" },
-  { value: "missing_assignment", label: "Assignment belum ada" },
-  { value: "already_canonical", label: "Sudah canonical" },
+  { value: "ambiguous_assignment", label: "Penugasan ambigu" },
+  { value: "missing_assignment", label: "Penugasan belum ada" },
+  { value: "already_canonical", label: "Sudah utama" },
 ];
 
 const DAY_LABELS = [
@@ -63,13 +73,13 @@ function getStatusBadgeVariant(status: LegacyScheduleAuditStatus) {
 function getStatusLabel(status: LegacyScheduleAuditStatus) {
   switch (status) {
     case "already_canonical":
-      return "Sudah canonical";
+      return "Sudah utama";
     case "ready_to_backfill":
       return "Siap dipromosikan";
     case "ambiguous_assignment":
-      return "Assignment ambigu";
+      return "Penugasan ambigu";
     case "missing_assignment":
-      return "Assignment belum ada";
+      return "Penugasan belum ada";
   }
 }
 
@@ -158,8 +168,8 @@ export function ScheduleLegacyAuditList({
       );
       toast.success(
         result.action === "created"
-          ? "Schedule legacy berhasil dipromosikan ke jadwal canonical"
-          : "Schedule legacy berhasil dipautkan ke jadwal canonical yang sudah ada",
+          ? "Jadwal legacy berhasil dipromosikan ke jadwal utama"
+          : "Jadwal legacy berhasil dipautkan ke jadwal utama yang sudah ada",
       );
       await fetchData();
     } catch (error) {
@@ -184,7 +194,7 @@ export function ScheduleLegacyAuditList({
         },
       );
       toast.success(
-        `Bulk repair selesai. Diproses ${result.processed}, dibuat ${result.created}, reuse ${result.reused}, skip ${result.skipped}.`,
+        `Perbaikan massal selesai. Diproses ${result.processed}, dibuat ${result.created}, reuse ${result.reused}, skip ${result.skipped}.`,
       );
       await fetchData();
     } catch (error) {
@@ -209,14 +219,14 @@ export function ScheduleLegacyAuditList({
         },
       );
       toast.success(
-        `Cleanup canonical selesai. Diarsipkan ${result.archived}, skip ${result.skipped}.`,
+        `Pembersihan jadwal utama selesai. Diarsipkan ${result.archived}, skip ${result.skipped}.`,
       );
       await fetchData();
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Gagal mengarsipkan schedule legacy yang sudah canonical",
+          : "Gagal mengarsipkan jadwal legacy yang sudah utama",
       );
     } finally {
       setBulkArchiving(false);
@@ -246,16 +256,16 @@ export function ScheduleLegacyAuditList({
       <div className="space-y-4">
         {readOnly ? (
           <InlineState
-            title="Mode read only"
-            description="Audit legacy tetap terlihat, tetapi aksi repair disembunyikan."
+            title="Mode baca saja"
+            description="Audit legacy tetap terlihat, tetapi aksi perbaikan disembunyikan."
             variant="info"
             className="text-sm"
           />
         ) : null}
 
         <InlineState
-          title="Tabel schedule legacy sudah retired"
-          description="Cleanup legacy schedule sudah selesai di level storage. Audit ini dipertahankan hanya sebagai fallback compatibility."
+          title="Tabel jadwal legacy sudah dipensiunkan"
+          description="Pembersihan jadwal legacy sudah selesai di level penyimpanan. Audit ini dipertahankan hanya sebagai fallback kompatibilitas."
           actionLabel="Muat ulang"
           onAction={() => {
             void fetchData();
@@ -270,8 +280,8 @@ export function ScheduleLegacyAuditList({
     <div className="space-y-4">
       {readOnly ? (
         <InlineState
-          title="Mode read only"
-          description="Audit legacy tetap terlihat, tetapi aksi repair disembunyikan."
+          title="Mode baca saja"
+          description="Audit legacy tetap terlihat, tetapi aksi perbaikan disembunyikan."
           variant="info"
           className="text-sm"
         />
@@ -326,7 +336,7 @@ export function ScheduleLegacyAuditList({
                   ) : (
                     <Wrench className="mr-2 h-4 w-4" />
                   )}
-                  Bulk Ready
+                  Proses Siap
                 </Button>
                 <Button
                   type="button"
@@ -341,7 +351,7 @@ export function ScheduleLegacyAuditList({
                   ) : (
                     <RefreshCcw className="mr-2 h-4 w-4" />
                   )}
-                  Cleanup Canonical
+                  Bersihkan Utama
                 </Button>
               </>
             ) : null}
@@ -364,9 +374,9 @@ export function ScheduleLegacyAuditList({
           {(
             [
               ["ready_to_backfill", "Siap dipromosikan"],
-              ["ambiguous_assignment", "Assignment ambigu"],
-              ["missing_assignment", "Belum ada assignment"],
-              ["already_canonical", "Sudah canonical"],
+              ["ambiguous_assignment", "Penugasan ambigu"],
+              ["missing_assignment", "Belum ada penugasan"],
+              ["already_canonical", "Sudah utama"],
             ] as const
           ).map(([status, label]) => (
             <div
@@ -387,7 +397,7 @@ export function ScheduleLegacyAuditList({
       {report && report.items.length === 0 ? (
         <InlineState
           title="Tidak ada schedule legacy untuk filter ini"
-          description="Semua baris untuk filter aktif sudah canonical, atau belum ada data legacy yang perlu ditinjau."
+          description="Semua baris untuk filter aktif sudah utama, atau belum ada data legacy yang perlu ditinjau."
           variant="info"
         />
       ) : null}
@@ -402,7 +412,7 @@ export function ScheduleLegacyAuditList({
                   <TableHead className="text-zinc-400">Relasi</TableHead>
                   <TableHead className="text-zinc-400">Waktu</TableHead>
                   <TableHead className="text-zinc-400">Status</TableHead>
-                  <TableHead className="text-zinc-400">Repair</TableHead>
+                  <TableHead className="text-zinc-400">Tindakan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -491,7 +501,7 @@ export function ScheduleLegacyAuditList({
                                 ) : (
                                   <Wrench className="mr-2 h-4 w-4" />
                                 )}
-                                Repair
+                                Perbaiki
                               </Button>
                             ) : null}
                           </div>
@@ -510,13 +520,13 @@ export function ScheduleLegacyAuditList({
                             ) : (
                               <Wrench className="mr-2 h-4 w-4" />
                             )}
-                            Promote
+                            Promosikan
                           </Button>
                         ) : (
                           <span className="text-sm text-zinc-500">
                             {item.status === "already_canonical"
                               ? "Tidak perlu aksi"
-                              : "Pilih assignment"}
+                              : "Pilih penugasan"}
                           </span>
                         )}
                         {item.status === "missing_assignment" && !readOnly ? (
@@ -536,7 +546,7 @@ export function ScheduleLegacyAuditList({
                                   size="sm"
                                   className="bg-sky-500 text-zinc-950 hover:bg-sky-400"
                                 >
-                                  Buat Assignment
+                                  Buat Penugasan
                                 </Button>
                               }
                             />
@@ -630,7 +640,7 @@ export function ScheduleLegacyAuditList({
                             type="button"
                             className="w-full bg-sky-500 text-zinc-950 hover:bg-sky-400"
                           >
-                            Buat Assignment
+                            Buat Penugasan
                           </Button>
                         }
                       />
@@ -651,8 +661,8 @@ export function ScheduleLegacyAuditList({
                           <Wrench className="mr-2 h-4 w-4" />
                         )}
                         {item.status === "ready_to_backfill"
-                          ? "Promote ke Canonical"
-                          : "Repair Schedule Legacy"}
+                          ? "Promosikan ke Jadwal Utama"
+                          : "Perbaiki Jadwal Legacy"}
                       </Button>
                     )
                   ) : null}

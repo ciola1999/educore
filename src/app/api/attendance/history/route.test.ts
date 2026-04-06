@@ -150,6 +150,8 @@ describe("GET /api/attendance/history", () => {
       present: 5,
       late: 2,
       excused: 2,
+      sick: 1,
+      permission: 1,
       absent: 1,
       qr: 7,
       manual: 3,

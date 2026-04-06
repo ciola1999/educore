@@ -383,14 +383,14 @@ export function AttendancePageClient({
           <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px]" />
           <div className="absolute top-1/2 -right-48 h-96 w-96 rounded-full bg-cyan-500/5 blur-[120px]" />
         </div>
-        
+
         <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-300">
               <Sparkles className="h-3.5 w-3.5" />
               <span>Attendance Hub</span>
             </div>
-            
+
             <div className="space-y-4">
               <h1 className="bg-linear-to-r from-white via-emerald-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
                 Absensi & Giat
@@ -417,11 +417,22 @@ export function AttendancePageClient({
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[220px]">
             {[
-              { label: "Section", value: activeMenuItem?.label || "-", icon: QrCode },
-              { label: "Sinkronisasi", value: attendanceBootstrapState === "ready" ? "Sudah Siap" : "Sedang Proses", icon: ClipboardList },
+              {
+                label: "Section",
+                value: activeMenuItem?.label || "-",
+                icon: QrCode,
+              },
+              {
+                label: "Sinkronisasi",
+                value:
+                  attendanceBootstrapState === "ready"
+                    ? "Sudah Siap"
+                    : "Sedang Proses",
+                icon: ClipboardList,
+              },
               { label: "Scope", value: "Real-time", icon: Sparkles },
             ].map((item) => (
-              <div 
+              <div
                 key={item.label}
                 className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
               >
@@ -443,10 +454,17 @@ export function AttendancePageClient({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between px-2">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-[1.25rem] border border-emerald-500/20 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-              <ActiveSectionIcon className={cn("h-6 w-6", activeSectionTheme.accentClass)} />
+              <ActiveSectionIcon
+                className={cn("h-6 w-6", activeSectionTheme.accentClass)}
+              />
             </div>
             <div>
-              <p className={cn("text-[10px] font-bold uppercase tracking-[0.2em]", activeSectionTheme.accentClass)}>
+              <p
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-[0.2em]",
+                  activeSectionTheme.accentClass,
+                )}
+              >
                 {activeSectionTheme.eyebrow}
               </p>
               <h2 className="text-xl font-bold tracking-tight text-white">
@@ -460,15 +478,22 @@ export function AttendancePageClient({
             onClick={() => setIsMenuCollapsed(!isMenuCollapsed)}
             className="inline-flex items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all hover:border-zinc-700 hover:bg-zinc-900 xl:hidden"
           >
-            <ChevronDown className={cn("h-4 w-4 transition-transform", !isMenuCollapsed && "rotate-180")} />
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 transition-transform",
+                !isMenuCollapsed && "rotate-180",
+              )}
+            />
             {isMenuCollapsed ? "Pilih Menu" : "Tutup Menu"}
           </button>
         </div>
 
-        <div className={cn(
-          "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 transition-all duration-500 ease-in-out",
-          isMenuCollapsed && "hidden xl:grid"
-        )}>
+        <div
+          className={cn(
+            "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 transition-all duration-500 ease-in-out",
+            isMenuCollapsed && "hidden xl:grid",
+          )}
+        >
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.id;
@@ -481,23 +506,37 @@ export function AttendancePageClient({
                 onClick={() => handleSectionChange(item.id)}
                 className={cn(
                   "group relative flex flex-col justify-between overflow-hidden rounded-[2rem] border p-6 transition-all duration-300 hover:-translate-y-1",
-                  isActive 
-                    ? "border-emerald-500/40 bg-emerald-500/10 shadow-emerald-950/20 shadow-2xl" 
-                    : "border-zinc-800/60 bg-zinc-950/40 hover:border-emerald-500/30 hover:bg-zinc-900/40"
+                  isActive
+                    ? "border-emerald-500/40 bg-emerald-500/10 shadow-emerald-950/20 shadow-2xl"
+                    : "border-zinc-800/60 bg-zinc-950/40 hover:border-emerald-500/30 hover:bg-zinc-900/40",
                 )}
               >
                 <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-500/5 blur-2xl transition-all group-hover:bg-emerald-500/10" />
-                
+
                 <div className="space-y-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/80 text-emerald-400 shadow-inner group-hover:border-emerald-500/20 group-hover:bg-emerald-500/5">
                     <Icon className="h-6 w-6" />
                   </div>
-                  
+
                   <div className="text-left">
-                    <p className={cn("text-[10px] font-bold uppercase tracking-[0.2em]", isActive ? theme.accentClass : "text-zinc-500 group-hover:text-zinc-400")}>
+                    <p
+                      className={cn(
+                        "text-[10px] font-bold uppercase tracking-[0.2em]",
+                        isActive
+                          ? theme.accentClass
+                          : "text-zinc-500 group-hover:text-zinc-400",
+                      )}
+                    >
                       {theme.eyebrow}
                     </p>
-                    <h3 className={cn("mt-1.5 text-base font-bold transition-colors", isActive ? "text-white" : "text-zinc-300 group-hover:text-white")}>
+                    <h3
+                      className={cn(
+                        "mt-1.5 text-base font-bold transition-colors",
+                        isActive
+                          ? "text-white"
+                          : "text-zinc-300 group-hover:text-white",
+                      )}
+                    >
                       {item.label}
                     </h3>
                   </div>
@@ -506,7 +545,9 @@ export function AttendancePageClient({
                 {isActive && (
                   <div className="mt-4 flex items-center gap-2">
                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Aktif</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+                      Aktif
+                    </span>
                   </div>
                 )}
               </button>
@@ -525,11 +566,15 @@ export function AttendancePageClient({
                   <ShieldMinus className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-rose-200">Koneksi Database Terhambat</h3>
-                  <p className="text-sm text-rose-100/70">{attendanceBootstrapError}</p>
+                  <h3 className="font-bold text-rose-200">
+                    Koneksi Database Terhambat
+                  </h3>
+                  <p className="text-sm text-rose-100/70">
+                    {attendanceBootstrapError}
+                  </p>
                 </div>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => runAttendanceBootstrap({ force: true })}
                 className="rounded-xl bg-rose-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-rose-400 hover:bg-rose-500/20"

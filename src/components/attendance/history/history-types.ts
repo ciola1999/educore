@@ -9,6 +9,7 @@ export type TodayAttendanceLog = {
   checkInTime: string | Date | null;
   checkOutTime: string | Date | null;
   status: "PRESENT" | "LATE" | "EXCUSED" | "ABSENT";
+  statusLabel?: string | null;
   lateDuration: number | null;
   notes?: string | null;
   syncStatus: "synced" | "pending" | "error";
@@ -51,6 +52,8 @@ export type AttendanceHistorySummary = {
   present: number;
   late: number;
   excused: number;
+  sick: number;
+  permission: number;
   absent: number;
   qr: number;
   manual: number;

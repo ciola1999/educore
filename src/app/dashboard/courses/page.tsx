@@ -136,7 +136,11 @@ export default function CoursesPage() {
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:w-[220px]">
             {[
-              { label: "Modul", value: "Canonical System", icon: GraduationCap },
+              {
+                label: "Modul",
+                value: "Canonical System",
+                icon: GraduationCap,
+              },
               { label: "Status", value: "Ready to Sync", icon: RefreshCw },
               { label: "Audit", value: "Log Active", icon: ClipboardList },
             ].map((item) => (

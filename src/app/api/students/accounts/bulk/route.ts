@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
 import {
+  buildClassNameLookupKeys,
+  canonicalizeClassDisplayName,
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
@@ -148,21 +150,31 @@ export async function POST(request: Request) {
     new Set(
       candidates
         .map((student) =>
-          sanitizeClassDisplayName(
-            student.grade,
-            student.grade ? classNameById.get(student.grade.trim()) : null,
+          canonicalizeClassDisplayName(
+            sanitizeClassDisplayName(
+              student.grade,
+              student.grade ? classNameById.get(student.grade.trim()) : null,
+            ),
           ),
         )
         .filter((grade) => grade !== "UNASSIGNED"),
     ),
   );
+  const classLookupKeys = Array.from(
+    new Set(
+      classNames.flatMap((className) => buildClassNameLookupKeys(className)),
+    ),
+  );
   const classRows =
-    classNames.length > 0
+    classLookupKeys.length > 0
       ? await db
           .select({ id: classes.id, name: classes.name })
           .from(classes)
           .where(
-            and(inArray(classes.name, classNames), isNull(classes.deletedAt)),
+            and(
+              inArray(classes.name, classLookupKeys),
+              isNull(classes.deletedAt),
+            ),
           )
       : [];
   const classIdByName = new Map(
@@ -203,16 +215,29 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const kelasId = (() => {
-        const grade = sanitizeClassDisplayName(
+      const canonicalGrade = canonicalizeClassDisplayName(
+        sanitizeClassDisplayName(
           student.grade,
           student.grade ? classNameById.get(student.grade.trim()) : null,
-        );
-        if (!grade || grade === "UNASSIGNED") {
+        ),
+      );
+      const kelasId = (() => {
+        if (!canonicalGrade || canonicalGrade === "UNASSIGNED") {
           return null;
         }
-        return classIdByName.get(grade) ?? null;
+        return classIdByName.get(canonicalGrade) ?? null;
       })();
+
+      if (canonicalGrade !== "UNASSIGNED" && student.grade !== canonicalGrade) {
+        await tx
+          .update(students)
+          .set({
+            grade: canonicalGrade,
+            syncStatus: "pending",
+            updatedAt: now,
+          })
+          .where(eq(students.id, student.id));
+      }
 
       if (deletedAccountSet.has(student.id)) {
         await tx

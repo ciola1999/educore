@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InlineState } from "@/components/common/inline-state";
@@ -24,9 +25,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiDelete, apiGet } from "@/lib/api/request";
-import { AddSubjectDialog } from "./add-subject-dialog";
-import { EditSubjectDialog } from "./edit-subject-dialog";
 import type { SubjectItem } from "./schemas";
+
+const AddSubjectDialog = dynamic(
+  () =>
+    import("./add-subject-dialog").then((module) => module.AddSubjectDialog),
+  { ssr: false },
+);
+
+const EditSubjectDialog = dynamic(
+  () =>
+    import("./edit-subject-dialog").then((module) => module.EditSubjectDialog),
+  { ssr: false },
+);
 
 export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
   const [data, setData] = useState<SubjectItem[]>([]);
@@ -85,9 +96,9 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
   if (errorMessage && data.length === 0) {
     return (
       <InlineState
-        title="Subject data unavailable"
+        title="Data mata pelajaran belum tersedia"
         description={errorMessage}
-        actionLabel="Retry"
+        actionLabel="Muat ulang"
         onAction={() => {
           void fetchData();
         }}
@@ -120,11 +131,11 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
           <Table>
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-zinc-900">
-                <TableHead className="text-zinc-400">Subject Name</TableHead>
+                <TableHead className="text-zinc-400">Mata Pelajaran</TableHead>
                 <TableHead className="text-zinc-400">Code</TableHead>
                 {!readOnly ? (
                   <TableHead className="text-zinc-400 text-right">
-                    Actions
+                    Aksi
                   </TableHead>
                 ) : null}
               </TableRow>
@@ -136,7 +147,7 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
                     colSpan={readOnly ? 2 : 3}
                     className="h-24 text-center text-zinc-500"
                   >
-                    No subjects found.
+                    Belum ada mata pelajaran.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -176,7 +187,7 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
         <div className="space-y-3 p-3 md:hidden">
           {data.length === 0 ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 text-center text-sm text-zinc-500">
-              No subjects found.
+              Belum ada mata pelajaran.
             </div>
           ) : (
             data.map((item) => (
@@ -222,7 +233,7 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
         >
           <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white">
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete subject?</AlertDialogTitle>
+              <AlertDialogTitle>Hapus mata pelajaran?</AlertDialogTitle>
               <AlertDialogDescription className="text-zinc-400">
                 {deleteTarget
                   ? `Mata pelajaran ${deleteTarget.name} (${deleteTarget.code}) akan dihapus.`
@@ -234,7 +245,7 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
                 className="bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700"
                 disabled={deleting}
               >
-                Cancel
+                Batal
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={(event) => {
@@ -247,7 +258,7 @@ export function SubjectList({ readOnly = false }: { readOnly?: boolean }) {
                 {deleting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Delete"
+                  "Hapus"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>

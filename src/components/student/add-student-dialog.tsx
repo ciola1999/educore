@@ -220,7 +220,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   name="nisn"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-400">NISN (Opsional)</FormLabel>
+                      <FormLabel className="text-zinc-400">
+                        NISN (Opsional)
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -240,7 +242,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   name="fullName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-400">Nama Lengkap</FormLabel>
+                      <FormLabel className="text-zinc-400">
+                        Nama Lengkap
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -277,8 +281,13 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   name="gender"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-400">Jenis Kelamin</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <FormLabel className="text-zinc-400">
+                        Jenis Kelamin
+                      </FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
                         <FormControl>
                           <SelectTrigger className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20">
                             <SelectValue />
@@ -298,7 +307,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   name="tanggalLahir"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-400">Tanggal Lahir</FormLabel>
+                      <FormLabel className="text-zinc-400">
+                        Tanggal Lahir
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -318,7 +329,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   name="tempatLahir"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-zinc-400">Tempat Lahir</FormLabel>
+                      <FormLabel className="text-zinc-400">
+                        Tempat Lahir
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -356,10 +369,10 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   <FormItem>
                     <FormLabel className="text-zinc-400">No. HP Wali</FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
+                      <Input
+                        {...field}
                         placeholder="Contoh: 0812..."
-                        className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20" 
+                        className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
                       />
                     </FormControl>
                     <FormMessage />
@@ -374,10 +387,10 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   <FormItem>
                     <FormLabel className="text-zinc-400">Alamat</FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
+                      <Input
+                        {...field}
                         placeholder="Alamat lengkap tempat tinggal..."
-                        className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20" 
+                        className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
                       />
                     </FormControl>
                     <FormMessage />
@@ -396,7 +409,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                           type="checkbox"
                           className="h-4 w-4 rounded border-zinc-700 bg-zinc-950 text-sky-600 focus:ring-offset-zinc-950"
                           checked={field.value}
-                          onChange={(event) => field.onChange(event.target.checked)}
+                          onChange={(event) =>
+                            field.onChange(event.target.checked)
+                          }
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
@@ -426,7 +441,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sky-200/70">Email Login</FormLabel>
+                          <FormLabel className="text-sky-200/70">
+                            Email Login
+                          </FormLabel>
                           <FormControl>
                             <Input
                               {...field}
@@ -444,7 +461,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sky-200/70">Password Login</FormLabel>
+                          <FormLabel className="text-sky-200/70">
+                            Password Login
+                          </FormLabel>
                           <FormControl>
                             <Input
                               {...field}
@@ -463,7 +482,9 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                     name="confirmPassword"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sky-200/70">Konfirmasi Password</FormLabel>
+                        <FormLabel className="text-sky-200/70">
+                          Konfirmasi Password
+                        </FormLabel>
                         <FormControl>
                           <Input
                             {...field}
@@ -481,8 +502,8 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
             </div>
 
             <DialogFooter className="shrink-0 bg-zinc-900/50 px-6 py-4 border-t border-zinc-800/50">
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={loading}
                 className="w-full sm:w-auto bg-sky-600 hover:bg-sky-500 px-8"
               >

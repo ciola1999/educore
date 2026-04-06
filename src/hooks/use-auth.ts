@@ -47,8 +47,8 @@ type DesktopNativeLoginResponse = {
   dbPath?: string | null;
 };
 
-const DESKTOP_NATIVE_LOGIN_TIMEOUT_MS = 5_000;
-const DESKTOP_LOGIN_FALLBACK_TIMEOUT_MS = 15_000;
+const DESKTOP_NATIVE_LOGIN_TIMEOUT_MS = 15_000;
+const DESKTOP_POST_LOGIN_REPAIR_TIMEOUT_MS = 30_000;
 
 function toDesktopDate(value: number | string | null | undefined) {
   if (value === null || value === undefined) {
@@ -206,6 +206,100 @@ function getDesktopLoginErrorMessage(errorCode?: string | null) {
   }
 }
 
+async function verifyDesktopLoginNativeFallback(
+  identifier: string,
+  password: string,
+) {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const nativeResult = await withTimeout(
+    invoke<DesktopNativeLoginResponse>("verify_local_desktop_login", {
+      request: {
+        identifier,
+        password,
+      },
+    }),
+    DESKTOP_NATIVE_LOGIN_TIMEOUT_MS,
+    "Native desktop login timeout",
+  );
+
+  if (!nativeResult.success || !nativeResult.user) {
+    return null;
+  }
+
+  return buildDesktopNativeSession(nativeResult.user);
+}
+
+async function finalizeDesktopLogin(
+  identifier: string,
+  password: string,
+  setUser: (user: UserSession) => void,
+  seedUser?: UserSession | null,
+) {
+  if (seedUser) {
+    setUser(seedUser);
+  }
+
+  const { apiPost } = await import("@/lib/api/request");
+  const repairPromise = apiPost<{ user: UserSession }>("/api/auth/login", {
+    email: identifier,
+    password,
+  });
+
+  const applyRepairedUser = (
+    result: { user: UserSession } | null | undefined,
+  ) => {
+    if (result?.user) {
+      setUser(result.user);
+    }
+  };
+
+  if (seedUser) {
+    try {
+      const result = await withTimeout(
+        repairPromise,
+        DESKTOP_POST_LOGIN_REPAIR_TIMEOUT_MS,
+        "Desktop post-login repair timeout",
+      );
+      applyRepairedUser(result);
+      clearForcedLogoutMarker();
+      return { success: true as const };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Desktop post-login repair timeout"
+      ) {
+        console.warn(
+          "[AUTH] Desktop post-login repair is still running in the background.",
+        );
+        void repairPromise
+          .then((result) => {
+            applyRepairedUser(result);
+          })
+          .catch((backgroundError) => {
+            console.warn(
+              "[AUTH] Background desktop post-login repair failed.",
+              backgroundError,
+            );
+          });
+        clearForcedLogoutMarker();
+        return { success: true as const };
+      }
+
+      throw error;
+    }
+  }
+
+  const result = await withTimeout(
+    repairPromise,
+    DESKTOP_POST_LOGIN_REPAIR_TIMEOUT_MS,
+    "Desktop post-login repair timeout",
+  );
+
+  applyRepairedUser(result);
+  clearForcedLogoutMarker();
+  return { success: true as const };
+}
+
 /**
  * Auth hook for managing user authentication state
  */
@@ -215,7 +309,9 @@ export function useAuth() {
   const user = useStore((state) => state.user);
   const setUser = useStore((state) => state.login);
   const clearUser = useStore((state) => state.logout);
-  const desktopRuntime = hasMounted && isTauri();
+  const detectedDesktopRuntime = hasMounted && isTauri();
+  const desktopRuntime =
+    runtimeSession.desktopRuntime || detectedDesktopRuntime;
   const session = runtimeSession.session;
   const status = runtimeSession.status;
   const sessionUser = session?.user ? buildUserSession(session.user) : null;
@@ -261,7 +357,12 @@ export function useAuth() {
       return;
     }
 
-    if (user && !desktopRuntime) {
+    if (
+      user &&
+      !desktopRuntime &&
+      status === "unauthenticated" &&
+      authSource !== "desktop-store"
+    ) {
       clearUser();
     }
   }, [
@@ -272,6 +373,7 @@ export function useAuth() {
     clearUser,
     desktopRuntime,
     hasMounted,
+    authSource,
   ]);
 
   /**
@@ -299,9 +401,22 @@ export function useAuth() {
         if (nativeResult.success && nativeResult.user) {
           const nativeUser = buildDesktopNativeSession(nativeResult.user);
           if (nativeUser) {
-            setUser(nativeUser);
-            clearForcedLogoutMarker();
-            return { success: true as const };
+            try {
+              return await finalizeDesktopLogin(
+                identifier,
+                password,
+                setUser,
+                nativeUser,
+              );
+            } catch (error) {
+              console.warn(
+                "[AUTH] Desktop post-login repair failed after native login.",
+                error,
+              );
+              setUser(nativeUser);
+              clearForcedLogoutMarker();
+              return { success: true as const };
+            }
           }
         }
 
@@ -336,18 +451,34 @@ export function useAuth() {
       }
 
       try {
-        const { apiPost } = await import("@/lib/api/request");
-        await withTimeout(
-          apiPost<{ user: UserSession }>("/api/auth/login", {
-            email: identifier,
-            password,
-          }),
-          DESKTOP_LOGIN_FALLBACK_TIMEOUT_MS,
-          "Desktop login repair timeout",
-        );
-        clearForcedLogoutMarker();
-        return { success: true as const };
+        return await finalizeDesktopLogin(identifier, password, setUser);
       } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "Desktop post-login repair timeout"
+        ) {
+          try {
+            const nativeUser = await verifyDesktopLoginNativeFallback(
+              identifier,
+              password,
+            );
+
+            if (nativeUser) {
+              return await finalizeDesktopLogin(
+                identifier,
+                password,
+                setUser,
+                nativeUser,
+              );
+            }
+          } catch (nativeFallbackError) {
+            console.warn(
+              "[AUTH] Native desktop fallback after repair timeout failed.",
+              nativeFallbackError,
+            );
+          }
+        }
+
         return {
           success: false as const,
           error:
@@ -398,20 +529,20 @@ export function useAuth() {
    */
   async function logout() {
     setForcedLogoutMarker();
-    clearUser();
 
     if (desktopRuntime) {
       try {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          credentials: "include",
-        });
+        const { apiPost } = await import("@/lib/api/request");
+        await apiPost<{ success?: boolean }>("/api/auth/logout");
       } catch (error) {
         console.warn("[AUTH] Desktop logout cleanup failed.", error);
+      } finally {
+        clearUser();
       }
       return;
     }
 
+    clearUser();
     await signOut({ redirect: true, redirectTo: "/" });
   }
 

@@ -38,11 +38,11 @@ export async function handleDesktopSyncRoute(
   }
 
   if (pathname === "/api/sync/pull") {
-    return apiOk(await pullFromCloud());
+    return apiOk(await pullFromCloud({ pruneAuthoritativeTables: true }));
   }
 
   if (pathname === "/api/sync/full") {
-    return apiOk(await fullSync());
+    return apiOk(await fullSync({ pruneAuthoritativeTables: true }));
   }
 
   return null;

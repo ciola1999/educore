@@ -1,6 +1,13 @@
 "use client";
 
-import { Loader2, Trash2 } from "lucide-react";
+import {
+  GraduationCap,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InlineState } from "@/components/common/inline-state";
@@ -24,9 +31,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiDelete, apiGet } from "@/lib/api/request";
-import { AddClassDialog } from "./add-class-dialog";
-import { EditClassDialog } from "./edit-class-dialog";
+import { cn } from "@/lib/utils";
 import type { ClassItem } from "./schemas";
+
+const AddClassDialog = dynamic(
+  () => import("./add-class-dialog").then((module) => module.AddClassDialog),
+  { ssr: false },
+);
+
+const EditClassDialog = dynamic(
+  () => import("./edit-class-dialog").then((module) => module.EditClassDialog),
+  { ssr: false },
+);
 
 export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
   const [data, setData] = useState<ClassItem[]>([]);
@@ -81,9 +97,9 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
   if (errorMessage && data.length === 0) {
     return (
       <InlineState
-        title="Class data unavailable"
+        title="Data kelas belum tersedia"
         description={errorMessage}
-        actionLabel="Retry"
+        actionLabel="Muat ulang"
         onAction={() => {
           void fetchData();
         }}
@@ -101,7 +117,9 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-2">
         <div>
           <h3 className="text-lg font-bold text-white">Daftar Kelas</h3>
-          <p className="text-xs text-zinc-500">Kelola rombongan belajar dan wali kelas.</p>
+          <p className="text-xs text-zinc-500">
+            Kelola rombongan belajar dan wali kelas.
+          </p>
         </div>
         {!readOnly && (
           <div className="flex items-center gap-2">
@@ -111,7 +129,12 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
               onClick={() => void fetchData()}
               className="group flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900 hover:text-white transition-all"
             >
-              <RefreshCw className={cn("h-4.5 w-4.5 transition-transform group-hover:rotate-180", loading && "animate-spin text-orange-400")} />
+              <RefreshCw
+                className={cn(
+                  "h-4.5 w-4.5 transition-transform group-hover:rotate-180",
+                  loading && "animate-spin text-orange-400",
+                )}
+              />
             </button>
           </div>
         )}
@@ -131,11 +154,19 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
           <Table>
             <TableHeader className="bg-zinc-900/50">
               <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="font-bold text-zinc-400 py-5 pl-8 text-[11px] uppercase tracking-widest">Nama Kelas</TableHead>
-                <TableHead className="font-bold text-zinc-400 text-[11px] uppercase tracking-widest">Tahun Ajaran</TableHead>
-                <TableHead className="font-bold text-zinc-400 text-[11px] uppercase tracking-widest">Wali Kelas</TableHead>
+                <TableHead className="font-bold text-zinc-400 py-5 pl-8 text-[11px] uppercase tracking-widest">
+                  Nama Kelas
+                </TableHead>
+                <TableHead className="font-bold text-zinc-400 text-[11px] uppercase tracking-widest">
+                  Tahun Ajaran
+                </TableHead>
+                <TableHead className="font-bold text-zinc-400 text-[11px] uppercase tracking-widest">
+                  Wali Kelas
+                </TableHead>
                 {!readOnly && (
-                  <TableHead className="font-bold text-zinc-400 text-right pr-8 text-[11px] uppercase tracking-widest">Kontrol</TableHead>
+                  <TableHead className="font-bold text-zinc-400 text-right pr-8 text-[11px] uppercase tracking-widest">
+                    Kontrol
+                  </TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -150,7 +181,9 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                       <div className="h-16 w-16 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800">
                         <GraduationCap className="h-8 w-8 text-zinc-700" />
                       </div>
-                      <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">Data Kelas Kosong</p>
+                      <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">
+                        Data Kelas Kosong
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -166,7 +199,9 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black">
                           {item.name.charAt(0)}
                         </div>
-                        <span className="font-bold text-white tracking-tight">{item.name}</span>
+                        <span className="font-bold text-white tracking-tight">
+                          {item.name}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -177,7 +212,9 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        <span className="text-sm text-zinc-300">{item.homeroomTeacherName || "Belum Ditentukan"}</span>
+                        <span className="text-sm text-zinc-300">
+                          {item.homeroomTeacherName || "Belum Ditentukan"}
+                        </span>
                       </div>
                     </TableCell>
                     {!readOnly && (
@@ -209,7 +246,9 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
         <div className="space-y-4 p-4 md:hidden">
           {data.length === 0 ? (
             <div className="rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center">
-              <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">Belum Ada Data Kelas</p>
+              <p className="text-sm font-bold text-zinc-600 uppercase tracking-widest">
+                Belum Ada Data Kelas
+              </p>
             </div>
           ) : (
             data.map((item) => (
@@ -218,18 +257,24 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                 className="group relative overflow-hidden rounded-[1.5rem] border border-zinc-800 bg-zinc-900/30 p-5 transition-all hover:bg-zinc-900/50"
               >
                 <div className="absolute top-0 right-0 p-4">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-700">{item.academicYear}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-700">
+                    {item.academicYear}
+                  </span>
                 </div>
-                
+
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 border border-orange-500/20 font-black text-lg">
                     {item.name.charAt(0)}
                   </div>
                   <div className="space-y-1">
-                    <p className="font-black text-white tracking-tight">{item.name}</p>
+                    <p className="font-black text-white tracking-tight">
+                      {item.name}
+                    </p>
                     <div className="flex items-center gap-2">
-                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                       <p className="text-xs text-zinc-400">{item.homeroomTeacherName || "Belum Ditentukan"}</p>
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <p className="text-xs text-zinc-400">
+                        {item.homeroomTeacherName || "Belum Ditentukan"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -263,11 +308,11 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
         >
           <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white">
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete class?</AlertDialogTitle>
+              <AlertDialogTitle>Hapus kelas?</AlertDialogTitle>
               <AlertDialogDescription className="text-zinc-400">
                 {deleteTarget
-                  ? `Class ${deleteTarget.name} akan dihapus dari academic master data.`
-                  : "Class ini akan dihapus."}
+                  ? `Kelas ${deleteTarget.name} akan dihapus dari master data akademik.`
+                  : "Kelas ini akan dihapus."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -275,7 +320,7 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                 className="bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700"
                 disabled={deleting}
               >
-                Cancel
+                Batal
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={(event) => {
@@ -288,7 +333,7 @@ export function ClassList({ readOnly = false }: { readOnly?: boolean }) {
                 {deleting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Delete"
+                  "Hapus"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>

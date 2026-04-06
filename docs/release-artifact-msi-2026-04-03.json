@@ -1,0 +1,32 @@
+{
+  "artifact": "src-tauri/target/release/bundle/msi/educore_0.1.0_x64_en-US.msi",
+  "channel": "MSI",
+  "timestamp": "2026-04-05T07:52:00+07:00",
+  "sha256": "cdaaf59ff5bcdd2a2e9e12df7612a4320b598809bc8a0e36a4bc575be304fdc9",
+  "sizeBytes": 67764224,
+  "appVersion": "0.8.0",
+  "bundleVersion": "0.8.0-6b942a793b9f-59897a95cf1a",
+  "runtimeConfig": {
+    "host": "127.0.0.1",
+    "port": 3210,
+    "nodeBinary": "bun.exe",
+    "serverEntrypoint": "app/server.js",
+    "appDir": "app",
+    "bundleArchive": "runtime-bundle.tar",
+    "containsPackagedSecrets": false
+  },
+  "validation": {
+    "biome": "pass",
+    "tsc": "pass",
+    "webBuild": "previous-pass",
+    "cargoCheck": "previous-pass",
+    "desktopBuildReuse": "pass-after-hardening",
+    "tauriBuild": "wix-snapshot-pass-msi-finalized-via-helper"
+  },
+  "notes": [
+    "runtime-config.json tidak lagi membawa AUTH_SECRET atau token database packaged",
+    "desktop bootstrap sekarang memerlukan provisioning credential lokal pada first run bila storage lokal belum terisi",
+    "jalur recovery build MSI tersedia melalui bun run build:desktop:msi-finalize",
+    "SHA-256 artifact final sudah dihitung ulang melalui helper hash-file-sha256.cjs di host agent"
+  ]
+}

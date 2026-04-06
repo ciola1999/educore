@@ -46,21 +46,22 @@ function TeachersContent() {
           <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px]" />
           <div className="absolute top-1/2 -right-48 h-96 w-96 rounded-full bg-cyan-500/5 blur-[120px]" />
         </div>
-        
+
         <div className="relative flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-300">
               <Sparkles className="h-3.5 w-3.5" />
               <span>Human Resources</span>
             </div>
-            
+
             <div className="space-y-4">
               <h1 className="bg-linear-to-r from-white via-emerald-200 to-zinc-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent sm:text-6xl lg:text-7xl">
                 Teachers & Staff
               </h1>
               <p className="max-w-2xl text-base leading-relaxed text-zinc-400 md:text-lg">
-                Pusat manajemen sumber daya manusia EDUCORE. Kelola profil pengajar, staf administratif, 
-                dan hak akses sistem secara terpusat dengan standar keamanan tingkat tinggi.
+                Pusat manajemen sumber daya manusia EDUCORE. Kelola profil
+                pengajar, staf administratif, dan hak akses sistem secara
+                terpusat dengan standar keamanan tingkat tinggi.
               </p>
             </div>
 
@@ -80,7 +81,7 @@ function TeachersContent() {
               { label: "Otoritas", value: "Admin Access", icon: ShieldCheck },
               { label: "Keamanan", value: "Verified", icon: Lock },
             ].map((item) => (
-              <div 
+              <div
                 key={item.label}
                 className="group relative overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-900/50"
               >

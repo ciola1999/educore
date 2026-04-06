@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { classes, students, users } from "@/lib/db/schema";
 import {
+  buildClassNameLookupKeys,
+  canonicalizeClassDisplayName,
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
@@ -105,16 +107,18 @@ export async function POST(
       .limit(1);
     gradeName = sanitizeClassDisplayName(classById[0]?.name, rawGrade);
   }
+  gradeName = canonicalizeClassDisplayName(gradeName);
   let kelasId: string | null = null;
   if (
     gradeName &&
     gradeName !== "UNASSIGNED" &&
     !isUuidLikeClassValue(gradeName)
   ) {
+    const lookupKeys = buildClassNameLookupKeys(gradeName);
     const classRows = await db
       .select({ id: classes.id })
       .from(classes)
-      .where(and(eq(classes.name, gradeName), isNull(classes.deletedAt)))
+      .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
       .limit(1);
 
     if (classRows.length > 0) {
@@ -133,6 +137,18 @@ export async function POST(
     }
   }
 
+  const now = new Date();
+  if (gradeName !== "UNASSIGNED" && student.grade !== gradeName) {
+    await db
+      .update(students)
+      .set({
+        grade: gradeName,
+        syncStatus: "pending",
+        updatedAt: now,
+      })
+      .where(eq(students.id, id));
+  }
+
   if (
     existingById.length > 0 &&
     existingById[0]?.role &&
@@ -145,7 +161,6 @@ export async function POST(
     );
   }
 
-  const now = new Date();
   if (existingById.length > 0) {
     await db
       .update(users)

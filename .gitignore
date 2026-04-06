@@ -21,6 +21,9 @@
 
 # production
 /build
+.desktop-runtime-staging/
+tauri-build-latest.log
+.codex-commit-message.txt
 
 # misc
 .DS_Store

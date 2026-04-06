@@ -77,4 +77,35 @@ describe("HistoryRecordCard", () => {
     expect(screen.getByText(/In - • Out -/i)).toBeInTheDocument();
     expect(screen.queryByText("Catatan")).not.toBeInTheDocument();
   });
+
+  it("renders manual status labels with specific wording when provided", () => {
+    render(
+      <HistoryRecordCard
+        density="comfortable"
+        statusLabel="Sakit"
+        checkInLabel="-"
+        checkOutLabel="-"
+        log={{
+          id: "log-3",
+          studentId: "student-3",
+          snapshotStudentName: "Citra",
+          snapshotStudentNis: "2324.10.003",
+          snapshotStudentNisn: null,
+          className: "XII TSM 1",
+          date: "2026-04-06",
+          checkInTime: null,
+          checkOutTime: null,
+          status: "EXCUSED",
+          statusLabel: "Sakit",
+          lateDuration: null,
+          notes: "Surat dokter",
+          syncStatus: "synced",
+          source: "manual",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Sakit")).toBeInTheDocument();
+    expect(screen.queryByText("Izin/Sakit")).not.toBeInTheDocument();
+  });
 });

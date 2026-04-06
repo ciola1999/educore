@@ -4,6 +4,7 @@ import {
   attendance,
   attendanceSettings,
   classes,
+  studentDailyAttendance,
   students,
   users,
 } from "@/lib/db/schema";
@@ -75,7 +76,16 @@ export async function syncUsersToStudentsProjection(): Promise<{
     .where(isNull(classes.deletedAt));
 
   const classById = new Map(existingClasses.map((c) => [c.id, c.name]));
-  const classByName = new Map(existingClasses.map((c) => [c.name, c.id]));
+  const classByName = new Map(
+    existingClasses
+      .filter((c) => !isUuidLikeClassValue(c.name))
+      .map((c) => [c.name, c.id]),
+  );
+  const invalidClassIds = new Set(
+    existingClasses
+      .filter((c) => isUuidLikeClassValue(c.name))
+      .map((c) => c.id),
+  );
 
   const studentUsers = await db
     .select({
@@ -152,6 +162,42 @@ export async function syncUsersToStudentsProjection(): Promise<{
   let classCreated = 0;
   let studentUpserted = 0;
 
+  const rebindProjectedStudentIdentity = async (
+    currentStudentId: string,
+    targetStudentId: string,
+  ) => {
+    if (currentStudentId === targetStudentId) {
+      return;
+    }
+
+    await db
+      .update(attendance)
+      .set({
+        studentId: targetStudentId,
+        updatedAt: now,
+        syncStatus: "pending",
+      })
+      .where(eq(attendance.studentId, currentStudentId));
+
+    await db
+      .update(studentDailyAttendance)
+      .set({
+        studentId: targetStudentId,
+        updatedAt: now,
+        syncStatus: "pending",
+      })
+      .where(eq(studentDailyAttendance.studentId, currentStudentId));
+
+    await db
+      .update(students)
+      .set({
+        id: targetStudentId,
+        updatedAt: now,
+        syncStatus: "pending",
+      })
+      .where(eq(students.id, currentStudentId));
+  };
+
   // 2. Class creation optimization
   const classCandidates = new Set<string>();
   for (const student of existingStudents) {
@@ -168,13 +214,13 @@ export async function syncUsersToStudentsProjection(): Promise<{
   }
   for (const entry of studentUsers) {
     const cr = entry.user.kelasId?.trim();
-    // If it's a UUID, we shouldn't add it as a candidate name
-    // unless we really don't have a className from the join
-    if (cr && !classById.has(cr) && !classByName.has(cr)) {
-      const bestName = sanitizeClassDisplayName(entry.className, cr);
-      if (bestName !== "UNASSIGNED" && !classByName.has(bestName)) {
-        classCandidates.add(bestName);
-      }
+    const bestName = sanitizeClassDisplayName(
+      entry.className,
+      cr ? classById.get(cr) : null,
+      cr,
+    );
+    if (bestName !== "UNASSIGNED" && !classByName.has(bestName)) {
+      classCandidates.add(bestName);
     }
   }
 
@@ -233,7 +279,7 @@ export async function syncUsersToStudentsProjection(): Promise<{
     if (!nis) continue;
     const existingByNis = studentMap.get(nis);
     const existingById = studentMapById.get(user.id);
-    const existingCandidate = existingByNis || existingById;
+    let existingCandidate = existingByNis || existingById;
     const classRef = user.kelasId?.trim();
     const attendanceClassId = latestAttendanceClassByStudent.get(user.id);
     const attendanceClassName = attendanceClassId
@@ -246,9 +292,16 @@ export async function syncUsersToStudentsProjection(): Promise<{
       existingRawGrade ? classById.get(existingRawGrade) : null,
     );
 
-    if (className && !isUuidLikeClassValue(className)) {
-      grade = sanitizeClassDisplayName(className);
-      resolvedClassId = classRef || classByName.get(className) || null;
+    const resolvedUserClassName = sanitizeClassDisplayName(
+      className,
+      classRef ? classById.get(classRef) : null,
+    );
+
+    if (resolvedUserClassName !== "UNASSIGNED") {
+      grade = sanitizeClassDisplayName(resolvedUserClassName);
+      resolvedClassId =
+        classByName.get(resolvedUserClassName) ||
+        (classRef && !invalidClassIds.has(classRef) ? classRef : null);
     } else if (classRef && !isUuidLikeClassValue(classRef)) {
       grade = sanitizeClassDisplayName(
         classById.get(classRef),
@@ -281,12 +334,28 @@ export async function syncUsersToStudentsProjection(): Promise<{
 
     const gender = user.jenisKelamin === "P" ? "P" : "L";
 
-    // 1. Try finding by NIS (Primary uniqueness for projection)
-    let existing = existingByNis;
+    // 1. If a standalone student already exists by NIS but uses a stale ID,
+    // rebind that projection row to the authoritative student user ID.
+    if (existingByNis && existingByNis.id !== user.id && !existingById) {
+      await rebindProjectedStudentIdentity(existingByNis.id, user.id);
+      studentMapById.delete(existingByNis.id);
+      existingCandidate = {
+        ...existingByNis,
+        id: user.id,
+        updatedAt: now,
+        syncStatus: "pending" as const,
+      };
+      studentMap.set(nis, existingCandidate);
+      studentMapById.set(user.id, existingCandidate);
+      studentUpserted++;
+    }
 
-    // 2. Fallback check by ID to ensure consistency
+    // 2. Try finding by NIS (Primary uniqueness for projection)
+    let existing = studentMap.get(nis);
+
+    // 3. Fallback check by ID to ensure consistency
     if (!existing) {
-      existing = existingById;
+      existing = studentMapById.get(user.id);
     }
 
     const needsUpdate =

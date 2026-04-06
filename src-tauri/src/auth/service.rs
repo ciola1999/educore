@@ -1,8 +1,10 @@
+use crate::desktop_config::{
+    normalize_sync_url_for_client, read_sync_config, save_sync_config, StoredSyncConfig,
+};
 use tauri::Manager;
 use tauri::Runtime;
 use rusqlite::{params_from_iter, Connection, OpenFlags, OptionalExtension};
-use std::collections::HashMap;
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -109,114 +111,6 @@ pub struct SyncConfigResponse {
 pub struct SetSyncConfigRequest {
     pub url: String,
     pub auth_token: String,
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
-struct SyncConfigFilePayload {
-    url: String,
-    auth_token: String,
-}
-
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct EmbeddedRuntimeBundleConfig {
-    env: HashMap<String, String>,
-}
-
-fn desktop_runtime_resource_dir<R: Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-) -> Result<PathBuf, String> {
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Gagal menentukan resource_dir: {e}"))?;
-
-    Ok(resource_dir.join("desktop-runtime"))
-}
-
-fn runtime_bundle_config_path<R: Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-) -> Result<PathBuf, String> {
-    Ok(desktop_runtime_resource_dir(app_handle)?.join("runtime-config.json"))
-}
-
-fn read_packaged_runtime_sync_config<R: Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-) -> Option<SyncConfigResponse> {
-    let config_path = runtime_bundle_config_path(app_handle).ok()?;
-    let raw = fs::read_to_string(config_path).ok()?;
-    let parsed = serde_json::from_str::<EmbeddedRuntimeBundleConfig>(&raw).ok()?;
-
-    let raw_url = parsed
-        .env
-        .get("SYNC_DATABASE_URL")
-        .or_else(|| parsed.env.get("TURSO_DATABASE_URL"))?
-        .trim()
-        .to_string();
-    let auth_token = parsed
-        .env
-        .get("SYNC_DATABASE_AUTH_TOKEN")
-        .or_else(|| parsed.env.get("TURSO_AUTH_TOKEN"))?
-        .trim()
-        .to_string();
-
-    if raw_url.is_empty() || auth_token.is_empty() {
-        return None;
-    }
-
-    let url = if raw_url.starts_with("libsql://") {
-        raw_url.replacen("libsql://", "https://", 1)
-    } else {
-        raw_url
-    };
-
-    Some(SyncConfigResponse { url, auth_token })
-}
-
-fn sync_config_file_path<R: Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-) -> Result<PathBuf, String> {
-    let base_dir = app_handle
-        .path()
-        .app_config_dir()
-        .map_err(|e| format!("Gagal menentukan app_config_dir: {e}"))?;
-
-    if !base_dir.exists() {
-        fs::create_dir_all(&base_dir)
-            .map_err(|e| format!("Gagal membuat folder konfigurasi app: {e}"))?;
-    }
-
-    Ok(base_dir.join("sync-config.json"))
-}
-
-fn read_sync_config_file<R: Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-) -> Option<SyncConfigResponse> {
-    let file_path = sync_config_file_path(app_handle).ok()?;
-    let raw = fs::read_to_string(file_path).ok()?;
-    let parsed = serde_json::from_str::<SyncConfigFilePayload>(&raw).ok()?;
-
-    if parsed.url.trim().is_empty() || parsed.auth_token.trim().is_empty() {
-        return None;
-    }
-
-    Some(SyncConfigResponse {
-        url: parsed.url,
-        auth_token: parsed.auth_token,
-    })
-}
-
-fn write_sync_config_file<R: Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-    payload: &SyncConfigFilePayload,
-) -> Result<(), String> {
-    let file_path = sync_config_file_path(app_handle)?;
-    let encoded = serde_json::to_string_pretty(payload)
-        .map_err(|e| format!("Gagal serialisasi sync config: {e}"))?;
-    fs::write(file_path, encoded)
-        .map_err(|e| format!("Gagal menulis sync config file fallback: {e}"))?;
-
-    Ok(())
 }
 
 fn desktop_auth_db_path<R: Runtime>(
@@ -518,60 +412,15 @@ pub async fn verify_password(
 pub async fn get_sync_config<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
 ) -> Result<SyncConfigResponse, String> {
-    let service_name = "educore.sync";
-    let keyring_url = keyring::Entry::new(service_name, "sync_url")
-        .map_err(|e| format!("Gagal inisialisasi keyring sync_url: {e}"))?;
-    let keyring_token = keyring::Entry::new(service_name, "sync_auth_token")
-        .map_err(|e| format!("Gagal inisialisasi keyring sync_auth_token: {e}"))?;
+    let config = read_sync_config(&app_handle).ok_or_else(|| {
+        "SYNC_DATABASE_URL/TURSO_DATABASE_URL belum dikonfigurasi (keyring/file/env)."
+            .to_string()
+    })?;
 
-    let keyring_url_value = keyring_url.get_password().ok();
-    let keyring_token_value = keyring_token.get_password().ok();
-    let file_payload = read_sync_config_file(&app_handle);
-    let packaged_payload = read_packaged_runtime_sync_config(&app_handle);
-
-    let raw_url = match keyring_url_value {
-        Some(value) if !value.trim().is_empty() => value,
-        _ => {
-            if let Some(file_payload) = &file_payload {
-                file_payload.url.clone()
-            } else if let Some(packaged_payload) = &packaged_payload {
-                packaged_payload.url.clone()
-            } else {
-                std::env::var("SYNC_DATABASE_URL")
-                    .or_else(|_| std::env::var("TURSO_DATABASE_URL"))
-                    .map_err(|_| {
-                        "SYNC_DATABASE_URL/TURSO_DATABASE_URL belum dikonfigurasi (keyring/file/env)."
-                            .to_string()
-                    })?
-            }
-        }
-    };
-
-    let auth_token = match keyring_token_value {
-        Some(value) if !value.trim().is_empty() => value,
-        _ => {
-            if let Some(file_payload) = &file_payload {
-                file_payload.auth_token.clone()
-            } else if let Some(packaged_payload) = &packaged_payload {
-                packaged_payload.auth_token.clone()
-            } else {
-                std::env::var("SYNC_DATABASE_AUTH_TOKEN")
-                    .or_else(|_| std::env::var("TURSO_AUTH_TOKEN"))
-                    .map_err(|_| {
-                        "SYNC_DATABASE_AUTH_TOKEN/TURSO_AUTH_TOKEN belum dikonfigurasi (keyring/file/env)."
-                            .to_string()
-                    })?
-            }
-        }
-    };
-
-    let url = if raw_url.starts_with("libsql://") {
-        raw_url.replacen("libsql://", "https://", 1)
-    } else {
-        raw_url
-    };
-
-    Ok(SyncConfigResponse { url, auth_token })
+    Ok(SyncConfigResponse {
+        url: normalize_sync_url_for_client(config.url),
+        auth_token: config.auth_token,
+    })
 }
 
 #[tauri::command]
@@ -586,44 +435,11 @@ pub async fn set_sync_config<R: Runtime>(
         return Err("Auth token sync tidak boleh kosong.".to_string());
     }
 
-    let service_name = "educore.sync";
-    let keyring_url = keyring::Entry::new(service_name, "sync_url")
-        .map_err(|e| format!("Gagal inisialisasi keyring sync_url: {e}"))?;
-    let keyring_token = keyring::Entry::new(service_name, "sync_auth_token")
-        .map_err(|e| format!("Gagal inisialisasi keyring sync_auth_token: {e}"))?;
-
-    let mut keyring_errors: Vec<String> = Vec::new();
-
-    if let Err(error) = keyring_url.set_password(request.url.trim()) {
-        keyring_errors.push(format!("sync_url: {error}"));
-    }
-    if let Err(error) = keyring_token.set_password(request.auth_token.trim()) {
-        keyring_errors.push(format!("sync_auth_token: {error}"));
-    }
-
-    let payload = SyncConfigFilePayload {
+    let payload = StoredSyncConfig {
         url: request.url.trim().to_string(),
         auth_token: request.auth_token.trim().to_string(),
     };
-
-    if !keyring_errors.is_empty() {
-        write_sync_config_file(&app_handle, &payload).map_err(|file_error| {
-            format!(
-                "Gagal simpan ke keyring ({}) dan fallback file: {}",
-                keyring_errors.join("; "),
-                file_error
-            )
-        })?;
-
-        return Ok(());
-    }
-
-    // Keep a durable local mirror even when keyring succeeds so desktop can
-    // recover cleanly if future keyring reads become unavailable.
-    write_sync_config_file(&app_handle, &payload)
-        .map_err(|file_error| format!("Berhasil simpan ke keyring tetapi gagal memperbarui fallback file: {file_error}"))?;
-
-    Ok(())
+    save_sync_config(&app_handle, &payload)
 }
 
 #[cfg(test)]

@@ -1,23 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { isUuidLikeClassValue, sanitizeClassDisplayName } from "./class-name";
+import {
+  buildClassNameLookupKeys,
+  canonicalizeClassDisplayName,
+  sanitizeClassDisplayName,
+} from "./class-name";
 
-describe("class-name", () => {
-  it("detects uuid-like class values", () => {
-    expect(isUuidLikeClassValue("55c3881a-6362-4220-9fc1-dce2a4902eb6")).toBe(
-      true,
-    );
-    expect(isUuidLikeClassValue("XII TSM 1")).toBe(false);
+describe("class-name utils", () => {
+  it("canonicalizes roman numeral kelas labels into numeric labels", () => {
+    expect(canonicalizeClassDisplayName("KELAS XII TSM")).toBe("KELAS 12 TSM");
+    expect(canonicalizeClassDisplayName("kelas ix")).toBe("KELAS 9");
   });
 
-  it("never returns uuid-like values for display", () => {
+  it("keeps non-kelas labels stable while still sanitizing uuid-like values", () => {
+    expect(canonicalizeClassDisplayName("X-TSM")).toBe("X-TSM");
+    expect(sanitizeClassDisplayName("  X-TSM  ")).toBe("X-TSM");
     expect(
-      sanitizeClassDisplayName(
-        "55c3881a-6362-4220-9fc1-dce2a4902eb6",
-        "XII TSM 1",
-      ),
-    ).toBe("XII TSM 1");
-    expect(
-      sanitizeClassDisplayName("55c3881a-6362-4220-9fc1-dce2a4902eb6"),
+      sanitizeClassDisplayName("2361c8a3-0355-4836-99a1-136f78fe299d"),
     ).toBe("UNASSIGNED");
+  });
+
+  it("builds lookup keys that include sanitized and canonical aliases", () => {
+    expect(buildClassNameLookupKeys("KELAS XII TSM")).toEqual([
+      "KELAS XII TSM",
+      "KELAS 12 TSM",
+    ]);
   });
 });

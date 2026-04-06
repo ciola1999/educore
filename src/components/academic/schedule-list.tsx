@@ -208,8 +208,8 @@ export function ScheduleList({ readOnly = false }: { readOnly?: boolean }) {
           title="Masih ada backlog schedule legacy"
           description={
             legacyAuditSummary.actionableRows > 0
-              ? `${legacyAuditSummary.actionableRows} row legacy masih perlu dipromosikan atau diperbaiki agar jadwal aktif tetap konsisten.`
-              : `${legacyAuditSummary.totalLegacyRows} row legacy sudah terdeteksi. Audit tetap perlu dipantau sampai seluruh data lama bersih.`
+              ? `${legacyAuditSummary.actionableRows} baris legacy masih perlu dipromosikan atau diperbaiki agar jadwal aktif tetap konsisten.`
+              : `${legacyAuditSummary.totalLegacyRows} baris legacy sudah terdeteksi. Audit tetap perlu dipantau sampai seluruh data lama bersih.`
           }
           variant="warning"
           actionLabel="Buka Audit Jadwal"
@@ -222,7 +222,7 @@ export function ScheduleList({ readOnly = false }: { readOnly?: boolean }) {
       ) : null}
       {readOnly ? (
         <InlineState
-          title="Mode read only"
+          title="Mode baca saja"
           description="Aksi tambah, edit, dan hapus jadwal disembunyikan."
           variant="info"
           className="text-sm"
@@ -279,7 +279,7 @@ export function ScheduleList({ readOnly = false }: { readOnly?: boolean }) {
                   >
                     {search.trim() || dayFilter !== "all"
                       ? "Tidak ada jadwal yang cocok dengan filter saat ini."
-                      : "Belum ada jadwal canonical."}
+                      : "Belum ada jadwal utama."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -339,7 +339,7 @@ export function ScheduleList({ readOnly = false }: { readOnly?: boolean }) {
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-6 text-center text-sm text-zinc-500">
               {search.trim() || dayFilter !== "all"
                 ? "Tidak ada jadwal yang cocok dengan filter saat ini."
-                : "Belum ada jadwal canonical."}
+                : "Belum ada jadwal utama."}
             </div>
           ) : (
             data.map((item) => (
@@ -425,7 +425,7 @@ export function ScheduleList({ readOnly = false }: { readOnly?: boolean }) {
         </AlertDialog>
       ) : null}
       <div className="text-xs text-zinc-500">
-        Cleanup legacy bisa dipantau dari{" "}
+        Pembersihan legacy bisa dipantau dari{" "}
         <Link
           href="/dashboard/courses?tab=schedule-legacy-audit"
           className="text-amber-300 hover:text-amber-200"

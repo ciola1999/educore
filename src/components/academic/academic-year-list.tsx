@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InlineState } from "@/components/common/inline-state";
@@ -24,9 +25,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiDelete, apiGet } from "@/lib/api/request";
-import { AddAcademicYearDialog } from "./add-academic-year-dialog";
-import { EditAcademicYearDialog } from "./edit-academic-year-dialog";
 import type { AcademicYearItem } from "./schemas";
+
+const AddAcademicYearDialog = dynamic(
+  () =>
+    import("./add-academic-year-dialog").then((module) => ({
+      default: module.AddAcademicYearDialog,
+    })),
+  { ssr: false },
+);
+
+const EditAcademicYearDialog = dynamic(
+  () =>
+    import("./edit-academic-year-dialog").then((module) => ({
+      default: module.EditAcademicYearDialog,
+    })),
+  { ssr: false },
+);
 
 export function AcademicYearList({ readOnly = false }: { readOnly?: boolean }) {
   const [data, setData] = useState<AcademicYearItem[]>([]);
@@ -98,7 +113,7 @@ export function AcademicYearList({ readOnly = false }: { readOnly?: boolean }) {
     <div className="space-y-4">
       {readOnly ? (
         <InlineState
-          title="Mode read only"
+          title="Mode baca saja"
           description="Aksi tambah, edit, dan hapus tahun ajaran disembunyikan."
           variant="info"
           className="text-sm"

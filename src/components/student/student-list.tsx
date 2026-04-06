@@ -468,10 +468,7 @@ export function StudentList() {
                       value={accountFilter}
                       onValueChange={(value) =>
                         setAccountFilter(
-                          value as
-                            | "all"
-                            | "with_account"
-                            | "without_account",
+                          value as "all" | "with_account" | "without_account",
                         )
                       }
                     >
@@ -546,7 +543,9 @@ export function StudentList() {
                         <div className="flex items-center justify-center">
                           <Layers3
                             className={`mr-2 h-4 w-4 transition-transform duration-300 ${
-                              bulkActionsOpen ? "rotate-180 text-sky-400" : "text-zinc-500"
+                              bulkActionsOpen
+                                ? "rotate-180 text-sky-400"
+                                : "text-zinc-500"
                             }`}
                           />
                           <span className="font-semibold">

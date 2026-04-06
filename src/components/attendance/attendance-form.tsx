@@ -921,7 +921,7 @@ export function AttendanceForm({
                     )}
                     {selectedClass === "all"
                       ? "Pilih Kelas Untuk Simpan"
-                      : "Simpan Attendance"}
+                      : "Simpan Absensi"}
                   </Button>
                 </div>
               </div>

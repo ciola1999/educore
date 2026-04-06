@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth/web/auth";
 import {
   DESKTOP_LOOPBACK_ENV_TOKEN,
   DESKTOP_LOOPBACK_QUERY_TOKEN,
+  DESKTOP_LOOPBACK_RUNTIME_COOKIE,
   DESKTOP_LOOPBACK_SESSION_COOKIE,
   hasDesktopLoopbackSessionToken,
   isLoopbackHostname,
@@ -56,11 +57,24 @@ export default auth((request) => {
         path: "/",
       },
     );
+    response.cookies.set(DESKTOP_LOOPBACK_RUNTIME_COOKIE, "1", {
+      httpOnly: false,
+      sameSite: "strict",
+      secure: false,
+      path: "/",
+    });
     return response;
   }
 
   if (loopbackHost && hasDesktopLoopbackSession) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    response.cookies.set(DESKTOP_LOOPBACK_RUNTIME_COOKIE, "1", {
+      httpOnly: false,
+      sameSite: "strict",
+      secure: false,
+      path: "/",
+    });
+    return response;
   }
 
   if (pathname === "/") {

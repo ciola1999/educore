@@ -1,4 +1,5 @@
 mod auth;
+mod desktop_config;
 mod runtime;
 
 use crate::auth::service::{

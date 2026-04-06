@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InlineState } from "@/components/common/inline-state";
@@ -24,9 +25,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiDelete, apiGet } from "@/lib/api/request";
-import { AddSemesterDialog } from "./add-semester-dialog";
-import { EditSemesterDialog } from "./edit-semester-dialog";
 import type { SemesterItem } from "./schemas";
+
+const AddSemesterDialog = dynamic(
+  () =>
+    import("./add-semester-dialog").then((module) => ({
+      default: module.AddSemesterDialog,
+    })),
+  { ssr: false },
+);
+
+const EditSemesterDialog = dynamic(
+  () =>
+    import("./edit-semester-dialog").then((module) => ({
+      default: module.EditSemesterDialog,
+    })),
+  { ssr: false },
+);
 
 function formatSemesterDate(value: string | Date | number) {
   const normalizedDate =
@@ -123,7 +138,7 @@ export function SemesterList({ readOnly = false }: { readOnly?: boolean }) {
     <div className="space-y-4">
       {readOnly ? (
         <InlineState
-          title="Mode read only"
+          title="Mode baca saja"
           description="Aksi tambah, edit, dan hapus semester disembunyikan."
           variant="info"
           className="text-sm"

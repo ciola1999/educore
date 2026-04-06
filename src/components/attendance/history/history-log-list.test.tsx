@@ -4,8 +4,8 @@ import { HistoryLogList } from "./history-log-list";
 
 describe("HistoryLogList", () => {
   it("renders all records with formatted status and time labels", () => {
-    const formatStatusLabel = vi.fn((status: string) =>
-      status === "LATE" ? "Terlambat" : "Hadir",
+    const formatStatusLabel = vi.fn((log: { status: string }) =>
+      log.status === "LATE" ? "Terlambat" : "Hadir",
     );
     const formatTime = vi.fn((value: string | Date | null) =>
       value ? "07:00" : "-",
@@ -54,6 +54,14 @@ describe("HistoryLogList", () => {
     expect(screen.getByText("Hadir")).toBeInTheDocument();
     expect(screen.getByText("Terlambat")).toBeInTheDocument();
     expect(formatStatusLabel).toHaveBeenCalledTimes(2);
+    expect(formatStatusLabel).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ id: "log-1", status: "PRESENT" }),
+    );
+    expect(formatStatusLabel).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ id: "log-2", status: "LATE" }),
+    );
     expect(formatTime).toHaveBeenCalledTimes(4);
   });
 });

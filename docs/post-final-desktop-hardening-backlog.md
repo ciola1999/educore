@@ -1,6 +1,6 @@
 # Post-Final Desktop Hardening Backlog
 
-Tanggal referensi: 1 April 2026
+Tanggal referensi: 5 April 2026
 
 Dokumen ini memecah follow-up pasca-final menjadi backlog yang konkret. Tujuannya bukan membuka ulang blocker MSI yang sudah lolos, tetapi menurunkan residual risk dengan urutan kerja yang sehat.
 
@@ -48,17 +48,20 @@ Definition of done:
 
 Masalah saat ini:
 - installer sudah final secara fungsional, tetapi kontrol distribusi perlu lebih disiplin
+- host Windows tertentu masih bisa timeout pada jalur `bun tauri build` penuh meski snapshot WiX sudah berhasil dibuat
 
 Action:
-- [ ] catat hash `SHA-256` artifact MSI final
-- [ ] simpan metadata build final: timestamp, commit, operator, smoke status
+- [x] catat hash `SHA-256` artifact MSI final
+- [x] simpan metadata build final: timestamp, operator, smoke status dasar
 - [ ] batasi distribusi installer ke channel resmi
 - [ ] tambahkan code signing MSI
+- [x] siapkan jalur recovery MSI final dari snapshot WiX
 
 Definition of done:
-- [ ] artifact final punya hash resmi
+- [x] artifact final punya hash resmi
 - [ ] artifact final punya signature resmi
-- [ ] ada catatan build yang bisa diaudit
+- [x] ada catatan build yang bisa diaudit
+- [x] ada jalur finalisasi MSI yang repeatable tanpa edit manual `main.wxs`
 
 ## 4. Runtime Hardening
 
@@ -93,3 +96,10 @@ Prioritas paling disarankan:
 3. `NSIS` readiness
 4. runtime hardening lanjutan
 5. modularisasi lanjutan
+
+## 7. New Operational Notes
+
+- source of truth archive runtime desktop sekarang adalah `runtime-bundle.tar`
+- `runtime-bundle-<timestamp>.tar` tidak lagi boleh dianggap contract release
+- helper recovery yang sekarang tersedia:
+  - `bun run build:desktop:msi-finalize`

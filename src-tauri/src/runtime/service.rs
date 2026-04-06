@@ -1,3 +1,4 @@
+use crate::desktop_config::resolve_provisioned_runtime_env;
 use std::{
     fs,
     net::TcpListener,
@@ -115,6 +116,28 @@ fn build_window_entry_url(
 
 fn build_health_url(config: &DesktopRuntimeBootstrapConfig) -> String {
     format!("{}{}", build_base_url(config), config.health_path)
+}
+
+fn navigate_main_window_to_runtime<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    config: &DesktopRuntimeBootstrapConfig,
+    state: &DesktopRuntimeManagerState,
+) -> Result<(), String> {
+    let runtime_url = build_window_entry_url(config, state);
+    let parsed = Url::parse(&runtime_url)
+        .map_err(|error| format!("URL runtime desktop tidak valid: {error}"))?;
+    let Some(window) = app_handle.get_webview_window(BOOTSTRAP_WINDOW_LABEL) else {
+        return Err("Window utama Tauri tidak ditemukan.".to_string());
+    };
+
+    window
+        .navigate(parsed)
+        .map_err(|error| format!("Gagal mengarahkan window ke loopback runtime: {error}"))?;
+    window
+        .show()
+        .map_err(|error| format!("Gagal menampilkan window utama: {error}"))?;
+
+    Ok(())
 }
 
 fn generate_desktop_session_token() -> String {
@@ -359,6 +382,7 @@ fn spawn_embedded_runtime<R: Runtime>(
     config: &DesktopRuntimeBootstrapConfig,
 ) -> Result<String, String> {
     let bundle_config = load_embedded_runtime_bundle_config(app_handle)?;
+    let provisioned_env = resolve_provisioned_runtime_env(app_handle)?;
     let (node_path, app_dir, server_path) = resolve_runtime_paths(app_handle, &bundle_config)?;
     let selected_port = select_loopback_port(&config.loopback_host, bundle_config.port)?;
     let desktop_session_token = generate_desktop_session_token();
@@ -375,6 +399,18 @@ fn spawn_embedded_runtime<R: Runtime>(
     for (key, value) in &bundle_config.env {
         command.env(key, value);
     }
+    command.env("AUTH_DATABASE_URL", &provisioned_env.auth_database_url);
+    command.env(
+        "AUTH_DATABASE_AUTH_TOKEN",
+        &provisioned_env.auth_database_auth_token,
+    );
+    command.env("SYNC_DATABASE_URL", &provisioned_env.sync_database_url);
+    command.env(
+        "SYNC_DATABASE_AUTH_TOKEN",
+        &provisioned_env.sync_database_auth_token,
+    );
+    command.env("AUTH_SECRET", &provisioned_env.auth_secret);
+    command.env("NEXTAUTH_SECRET", &provisioned_env.auth_secret);
 
     command.env("HOSTNAME", &config.loopback_host);
     command.env("PORT", selected_port.to_string());
@@ -654,16 +690,7 @@ pub fn setup_desktop_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Result<()
         return Err(result.message);
     }
 
-    let runtime_url = build_window_entry_url(&result.config, &state);
-    let parsed = Url::parse(&runtime_url)
-        .map_err(|error| format!("URL runtime desktop tidak valid: {error}"))?;
-
-    window
-        .navigate(parsed)
-        .map_err(|error| format!("Gagal mengarahkan window ke loopback runtime: {error}"))?;
-    window
-        .show()
-        .map_err(|error| format!("Gagal menampilkan window utama: {error}"))?;
+    navigate_main_window_to_runtime(app_handle, &result.config, &state)?;
 
     Ok(())
 }
@@ -704,6 +731,7 @@ pub async fn ensure_runtime_bootstrap_ready<R: Runtime>(
             "Runtime desktop sehat.",
             "Bootstrap native selesai. Window akan memakai loopback runtime lokal.",
         );
+        navigate_main_window_to_runtime(&app_handle, &result.config, &state)?;
     } else if should_manage_embedded_runtime() {
         set_bootstrap_window_state(
             &app_handle,

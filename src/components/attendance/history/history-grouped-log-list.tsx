@@ -11,7 +11,7 @@ type HistoryGroupedLogListProps = {
   groups: HistoryLogGroup[];
   groupBy: "date" | "class";
   density: HistoryDensity;
-  formatStatusLabel: (status: TodayAttendanceLog["status"]) => string;
+  formatStatusLabel: (log: TodayAttendanceLog) => string;
   formatTime: (value: string | Date | null) => string;
 };
 
@@ -47,7 +47,7 @@ export function HistoryGroupedLogList({
                 key={log.id}
                 log={log}
                 density={density}
-                statusLabel={formatStatusLabel(log.status)}
+                statusLabel={formatStatusLabel(log)}
                 checkInLabel={formatTime(log.checkInTime)}
                 checkOutLabel={formatTime(log.checkOutTime)}
               />

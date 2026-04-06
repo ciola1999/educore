@@ -16,10 +16,6 @@ async function getDesktopLocalApiResponse(
   input: string,
   options: { method: string; body: unknown },
 ) {
-  if (process.env.NODE_ENV === "production") {
-    return null;
-  }
-
   const { isTauri } = await import("@/core/env");
   if (!isTauri()) {
     return null;
