@@ -14,26 +14,54 @@ vi.mock("@/lib/runtime/desktop-local-api", () => ({
 import { apiGet, isDesktopLocalOnlyApiRoute } from "./request";
 
 describe("api request desktop boundary", () => {
+  const desktopCoreRoutes = [
+    "/api/academic-years",
+    "/api/attendance/history",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/classes",
+    "/api/dashboard",
+    "/api/schedules",
+    "/api/semesters",
+    "/api/students",
+    "/api/subjects",
+    "/api/sync/full",
+    "/api/teachers",
+    "/api/teaching-assignments",
+  ] as const;
+
   beforeEach(() => {
     vi.clearAllMocks();
     isTauriMock.mockReturnValue(true);
   });
 
   it("recognizes desktop-local-only API prefixes for core local-first routes", () => {
-    expect(isDesktopLocalOnlyApiRoute("/api/students")).toBe(true);
+    for (const route of desktopCoreRoutes) {
+      expect(isDesktopLocalOnlyApiRoute(route)).toBe(true);
+    }
     expect(isDesktopLocalOnlyApiRoute("/api/students?includeStats=1")).toBe(
       true,
     );
-    expect(isDesktopLocalOnlyApiRoute("/api/sync/full")).toBe(true);
     expect(isDesktopLocalOnlyApiRoute("/api/telemetry/settings-auth")).toBe(
       false,
     );
   });
 
-  it("fails secure when a desktop-local-only route has no local handler", async () => {
+  it.each(desktopCoreRoutes)(
+    "fails secure when desktop-local-only route %s has no local handler",
+    async (route) => {
+      handleDesktopLocalApiRequestMock.mockResolvedValue(null);
+
+      await expect(apiGet(route)).rejects.toThrow(
+        "Runtime desktop tidak menemukan handler API lokal",
+      );
+    },
+  );
+
+  it("keeps failing secure for nested desktop-local-only route variants", async () => {
     handleDesktopLocalApiRequestMock.mockResolvedValue(null);
 
-    await expect(apiGet("/api/students")).rejects.toThrow(
+    await expect(apiGet("/api/students/classes/repair")).rejects.toThrow(
       "Runtime desktop tidak menemukan handler API lokal",
     );
   });
