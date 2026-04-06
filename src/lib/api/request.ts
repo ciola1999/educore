@@ -11,6 +11,31 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 };
 
 const shouldLogApiDebug = process.env.NEXT_PUBLIC_DEBUG_API === "1";
+const DESKTOP_LOCAL_ONLY_API_PREFIXES = [
+  "/api/academic-years",
+  "/api/attendance",
+  "/api/auth/change-password",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/classes",
+  "/api/dashboard",
+  "/api/schedules",
+  "/api/semesters",
+  "/api/students",
+  "/api/subjects",
+  "/api/sync",
+  "/api/teachers",
+  "/api/teaching-assignments",
+] as const;
+
+export function isDesktopLocalOnlyApiRoute(input: string) {
+  return DESKTOP_LOCAL_ONLY_API_PREFIXES.some(
+    (prefix) =>
+      input === prefix ||
+      input.startsWith(`${prefix}/`) ||
+      input.startsWith(`${prefix}?`),
+  );
+}
 
 async function getDesktopLocalApiResponse(
   input: string,
@@ -25,7 +50,15 @@ async function getDesktopLocalApiResponse(
     "@/lib/runtime/desktop-local-api"
   );
 
-  return handleDesktopLocalApiRequest(input, options);
+  const response = await handleDesktopLocalApiRequest(input, options);
+
+  if (!response && isDesktopLocalOnlyApiRoute(input)) {
+    throw new Error(
+      "Runtime desktop tidak menemukan handler API lokal untuk route inti ini. Request diblok agar tidak bocor ke jalur web.",
+    );
+  }
+
+  return response;
 }
 
 async function requestJson<T>(
