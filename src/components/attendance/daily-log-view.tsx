@@ -11,6 +11,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPost, apiPut } from "@/lib/api/request";
 import { InlineState } from "../common/inline-state";
 import {
+  getQuickRangeDateRange,
+  isQuickRangeDateRangeActive,
+} from "./history/history-date-range";
+import {
   buildAttendanceHistoryFileScope,
   buildAttendanceHistoryQueryParams,
   escapeAttendanceHistoryHtml,
@@ -148,28 +152,6 @@ function formatStatusLabel(status: TodayAttendanceLog["status"]) {
 
 function formatHistoryStatusLabel(log: TodayAttendanceLog) {
   return log.statusLabel || formatStatusLabel(log.status);
-}
-
-function formatLocalDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getTodayDateString() {
-  return formatLocalDateInput(new Date());
-}
-
-function getMonthStartDateString() {
-  const now = new Date();
-  return formatLocalDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
-}
-
-function getDaysAgoDateString(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return formatLocalDateInput(date);
 }
 
 async function exportAttendanceRowsToXlsx(input: {
@@ -621,22 +603,10 @@ export function DailyLogView({
     ) {
       setHistoryQuickRange(storedQuickRange);
       if (!initialStartDate && !initialEndDate) {
-        if (storedQuickRange === "all") {
-          setHistoryStartDate("");
-          setHistoryEndDate("");
-        } else if (storedQuickRange === "today") {
-          const today = getTodayDateString();
-          setHistoryStartDate(today);
-          setHistoryEndDate(today);
-        } else if (storedQuickRange === "7d") {
-          setHistoryStartDate(getDaysAgoDateString(6));
-          setHistoryEndDate(getTodayDateString());
-        } else if (storedQuickRange === "30d") {
-          setHistoryStartDate(getDaysAgoDateString(29));
-          setHistoryEndDate(getTodayDateString());
-        } else if (storedQuickRange === "month") {
-          setHistoryStartDate(getMonthStartDateString());
-          setHistoryEndDate(getTodayDateString());
+        const quickRangeDateRange = getQuickRangeDateRange(storedQuickRange);
+        if (quickRangeDateRange) {
+          setHistoryStartDate(quickRangeDateRange.startDate);
+          setHistoryEndDate(quickRangeDateRange.endDate);
         }
       }
     }
@@ -1395,35 +1365,14 @@ export function DailyLogView({
   }
 
   function applyQuickRange(range: "today" | "7d" | "30d" | "month" | "all") {
-    const today = getTodayDateString();
     setHistoryQuickRange(range);
-
-    if (range === "today") {
-      setHistoryStartDate(today);
-      setHistoryEndDate(today);
+    const quickRangeDateRange = getQuickRangeDateRange(range);
+    if (!quickRangeDateRange) {
       return;
     }
 
-    if (range === "7d") {
-      setHistoryStartDate(getDaysAgoDateString(6));
-      setHistoryEndDate(today);
-      return;
-    }
-
-    if (range === "30d") {
-      setHistoryStartDate(getDaysAgoDateString(29));
-      setHistoryEndDate(today);
-      return;
-    }
-
-    if (range === "month") {
-      setHistoryStartDate(getMonthStartDateString());
-      setHistoryEndDate(today);
-      return;
-    }
-
-    setHistoryStartDate("");
-    setHistoryEndDate("");
+    setHistoryStartDate(quickRangeDateRange.startDate);
+    setHistoryEndDate(quickRangeDateRange.endDate);
   }
 
   function handleHistoryStartDateChange(value: string) {
@@ -1437,35 +1386,7 @@ export function DailyLogView({
   }
 
   function isQuickRangeActive(range: "today" | "7d" | "30d" | "month" | "all") {
-    const today = getTodayDateString();
-    if (range === "all") {
-      return !historyStartDate && !historyEndDate;
-    }
-
-    if (!historyStartDate || !historyEndDate) {
-      return false;
-    }
-
-    if (range === "today") {
-      return historyStartDate === today && historyEndDate === today;
-    }
-
-    if (range === "7d") {
-      return (
-        historyStartDate === getDaysAgoDateString(6) && historyEndDate === today
-      );
-    }
-
-    if (range === "30d") {
-      return (
-        historyStartDate === getDaysAgoDateString(29) &&
-        historyEndDate === today
-      );
-    }
-
-    return (
-      historyStartDate === getMonthStartDateString() && historyEndDate === today
-    );
+    return isQuickRangeDateRangeActive(range, historyStartDate, historyEndDate);
   }
 
   const groupedHistoryLogs =
