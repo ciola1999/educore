@@ -749,6 +749,112 @@ describe("turso full sync idempotency", () => {
     expect(syncedUpdates).toHaveLength(1);
   });
 
+  it("pushes missing synced parent semester records before guru-mapel child rows", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let selectCallCount = 0;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => {
+            selectCallCount += 1;
+
+            if (selectCallCount === 1) {
+              return Promise.resolve([
+                {
+                  id: "local-assignment-4",
+                  guruId: "remote-teacher-1",
+                  mataPelajaranId: "remote-subject-1",
+                  kelasId: "remote-class-1",
+                  semesterId: "local-semester-1",
+                  updatedAt: new Date("2026-04-01T00:00:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => {
+                if (selectCallCount === 5) {
+                  return [
+                    {
+                      id: "local-semester-1",
+                      tahunAjaranId: "remote-year-1",
+                      nama: "Ganjil",
+                      updatedAt: new Date("2026-04-01T00:00:00.000Z"),
+                      syncStatus: "synced",
+                    },
+                  ];
+                }
+
+                return [];
+              }),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executedTables: string[] = [];
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes(
+          'SELECT id FROM "semester" WHERE "tahun_ajaran_id" = ? AND "nama" = ?',
+        )
+      ) {
+        return { rows: [] };
+      }
+
+      if (sql.includes('INSERT INTO "semester"')) {
+        executedTables.push("semester");
+        expect(statement.args).toContain("local-semester-1");
+        expect(statement.args).toContain("remote-year-1");
+        expect(statement.args).toContain("Ganjil");
+        return { rows: [] };
+      }
+
+      if (sql.includes('SELECT id FROM "guru_mapel" WHERE "guru_id" = ?')) {
+        return { rows: [] };
+      }
+
+      if (sql.includes('INSERT INTO "guru_mapel"')) {
+        executedTables.push("guru_mapel");
+        expect(statement.args).toContain("local-semester-1");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["guru_mapel"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(executedTables).toEqual(["semester", "guru_mapel"]);
+    expect(syncedUpdates).toHaveLength(1);
+  });
+
   it("revives a soft-deleted remote class before pushing a pending user", async () => {
     const syncedUpdates: Array<Record<string, unknown>> = [];
     let selectCallCount = 0;
