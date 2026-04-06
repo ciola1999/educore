@@ -22,6 +22,7 @@ import {
   users,
 } from "../db/schema";
 import { syncUsersToStudentsProjection } from "../services/student-projection";
+import { buildClassNameLookupKeys } from "../utils/class-name";
 import { getTursoCloudClient } from "./client";
 import type { SyncResult } from "./types";
 
@@ -563,9 +564,16 @@ export async function pushToCloud(
           return null;
         }
 
+        const lookupKeys = buildClassNameLookupKeys(name);
+        if (lookupKeys.length === 0) {
+          return null;
+        }
+
+        const placeholders = lookupKeys.map(() => "?").join(", ");
+
         const result = await tursoCloud.execute({
-          sql: `SELECT id FROM "classes" WHERE "name" = ?${deletedFilter} LIMIT 2`,
-          args: [name],
+          sql: `SELECT id FROM "classes" WHERE "name" IN (${placeholders})${deletedFilter} LIMIT 2`,
+          args: lookupKeys,
         });
 
         const candidateIds = (result.rows ?? [])

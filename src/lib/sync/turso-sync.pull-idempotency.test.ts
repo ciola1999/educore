@@ -613,7 +613,7 @@ describe("turso full sync idempotency", () => {
 
       if (
         sql.includes(
-          'SELECT id FROM "classes" WHERE "name" = ? AND "deleted_at" IS NULL LIMIT 2',
+          'SELECT id FROM "classes" WHERE "name" IN (?) AND "deleted_at" IS NULL LIMIT 2',
         )
       ) {
         expect(statement.args).toEqual(["KELAS 12 TSM"]);
@@ -944,6 +944,113 @@ describe("turso full sync idempotency", () => {
       if (sql.includes('INSERT INTO "users"')) {
         expect(statement.args).toContain("remote-deleted-class-7");
         expect(statement.args).not.toContain("local-class-7");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["users"],
+      syncUsersProjection: vi.fn(async () => {}),
+    });
+
+    expect(result.status).toBe("success");
+    expect(syncedUpdates).toHaveLength(1);
+  });
+
+  it("remaps class aliases to the canonical remote class before pushing a pending user", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let selectCallCount = 0;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => {
+            selectCallCount += 1;
+
+            if (selectCallCount === 1) {
+              return Promise.resolve([
+                {
+                  id: "local-student-alias-1",
+                  email: "2324.10.007@smp.ypms",
+                  fullName: "EGA SAPUTRA",
+                  role: "student",
+                  kelasId: "local-class-alias-1",
+                  updatedAt: new Date("2026-04-06T00:00:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => {
+                if (selectCallCount === 2) {
+                  return [
+                    {
+                      id: "local-class-alias-1",
+                      name: "KELAS XII TSM",
+                      academicYear: "2026/2027-local",
+                      deletedAt: null,
+                      updatedAt: new Date("2026-04-06T00:00:00.000Z"),
+                      syncStatus: "pending",
+                    },
+                  ];
+                }
+
+                return [];
+              }),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes(
+          'SELECT id FROM "classes" WHERE "name" = ? AND "academic_year" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        return { rows: [] };
+      }
+
+      if (
+        sql.includes(
+          'SELECT id FROM "classes" WHERE "name" IN (?, ?) AND "deleted_at" IS NULL LIMIT 2',
+        )
+      ) {
+        expect(statement.args).toEqual(["KELAS XII TSM", "KELAS 12 TSM"]);
+        return { rows: [{ id: "remote-class-12-tsm" }] };
+      }
+
+      if (sql.includes('INSERT INTO "classes"')) {
+        throw new Error("should not create a duplicate canonical class");
+      }
+
+      if (sql.includes('INSERT INTO "users"')) {
+        expect(statement.args).toContain("remote-class-12-tsm");
+        expect(statement.args).not.toContain("local-class-alias-1");
         return { rows: [] };
       }
 
