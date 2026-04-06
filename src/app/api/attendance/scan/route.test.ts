@@ -19,6 +19,27 @@ vi.mock("@/core/services/attendance-service", () => ({
 import { POST } from "./route";
 
 describe("POST /api/attendance/scan", () => {
+  it("requires attendance:write permission before parsing scan payload", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(
+      new Response("forbidden", { status: 403 }),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/scan", {
+        method: "POST",
+        body: JSON.stringify({
+          qrData: '{"nis":"2324.10.001"}',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(processQRScanMock).not.toHaveBeenCalled();
+  });
+
   it("returns validation error when request body is malformed JSON", async () => {
     authMock.mockResolvedValue({
       user: { id: "user-1", role: "teacher" },
@@ -109,5 +130,30 @@ describe("POST /api/attendance/scan", () => {
     expect(payload.data.success).toBe(true);
     expect(payload.data.type).toBe("CHECK_IN");
     expect(processQRScanMock).toHaveBeenCalledWith('{"nis":"2324.10.001"}');
+  });
+
+  it("returns 500 when the scan service throws unexpectedly", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    processQRScanMock.mockRejectedValue(new Error("scanner runtime failed"));
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/scan", {
+        method: "POST",
+        body: JSON.stringify({
+          qrData: '{"nis":"2324.10.001"}',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    const payload = (await response.json()) as {
+      success: boolean;
+      error?: string;
+    };
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain("scanner runtime failed");
   });
 });

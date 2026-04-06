@@ -136,4 +136,50 @@ describe("POST /api/attendance/bulk", () => {
     expect(payload.data?.successCount).toBe(20);
     expect(payload.data?.failedCount).toBe(2);
   });
+
+  it("always uses recordedBy from the authenticated session instead of request body spoofing", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-session-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    recordBulkAttendanceMock.mockResolvedValue({
+      success: true,
+      partial: false,
+      message: "Absensi tersimpan",
+      successCount: 1,
+      failedCount: 0,
+      totalRecords: 1,
+      failures: [],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          classId: "550e8400-e29b-41d4-a716-446655440000",
+          date: "2026-03-19",
+          recordedBy: "spoofed-user-id",
+          records: [
+            {
+              studentId: "550e8400-e29b-41d4-a716-446655440001",
+              status: "present",
+              notes: "",
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(recordBulkAttendanceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordedBy: "teacher-session-1",
+      }),
+    );
+    expect(recordBulkAttendanceMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordedBy: "spoofed-user-id",
+      }),
+    );
+  });
 });

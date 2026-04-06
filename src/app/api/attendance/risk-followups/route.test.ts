@@ -70,6 +70,43 @@ describe("POST /api/attendance/risk-followups", () => {
     expect(createAttendanceRiskFollowUpMock).not.toHaveBeenCalled();
   });
 
+  it("returns unauthorized when session user id is missing", async () => {
+    authMock.mockResolvedValue({ user: { role: "teacher" } });
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/risk-followups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          studentId: "student-1",
+          riskFlags: ["Alpha >= 3"],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(createAttendanceRiskFollowUpMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed JSON payloads", async () => {
+    authMock.mockResolvedValue({ user: { id: "teacher-1" } });
+
+    const response = await POST(
+      new Request("http://localhost/api/attendance/risk-followups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: "{invalid-json",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(createAttendanceRiskFollowUpMock).not.toHaveBeenCalled();
+  });
+
   it("normalizes risk flags and strips spoofed identity fields", async () => {
     authMock.mockResolvedValue({ user: { id: "teacher-1" } });
 
