@@ -6,6 +6,12 @@ Sebelum mulai, wajib baca dan ikuti:
 - CLAUDE.md
 - docs/new-chat-bootstrap.md
 
+Kalau task melanjutkan incident sync/students/attendance/settings yang pernah dibedah di repo ini, baca juga:
+- docs/thread-checkpoint-sync-attendance.md
+- docs/playbooks/desktop-sync-recovery.md
+- docs/playbooks/student-class-drift-recovery.md
+- docs/playbooks/attendance-verification-checklist.md
+
 Kalau task menyentuh arsitektur/runtime/sync/build/release, lanjut baca juga:
 - docs/runtime-matrix.md
 - docs/desktop-production-runtime-plan.md

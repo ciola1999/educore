@@ -3,6 +3,10 @@
 import { format } from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import {
+  buildManualAttendanceSubmissionTargets,
+  filterAttendanceStudents,
+} from "@/hooks/use-attendance-form.utils";
 import { apiGet, apiPost } from "@/lib/api/request";
 import { useStore } from "@/lib/store/use-store";
 import type { AttendanceStatus } from "@/types/attendance";
@@ -212,15 +216,7 @@ export function useAttendanceForm(
     toast.success("Set all students to present");
   };
 
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const filteredList = studentList.filter((s) => {
-    if (!normalizedSearchQuery) return true;
-    return (
-      s.fullName.toLowerCase().includes(normalizedSearchQuery) ||
-      s.nis.toLowerCase().includes(normalizedSearchQuery) ||
-      s.nisn?.toLowerCase().includes(normalizedSearchQuery)
-    );
-  });
+  const filteredList = filterAttendanceStudents(studentList, searchQuery);
 
   const handleSubmit = async () => {
     if (!selectedClass) {
@@ -244,8 +240,8 @@ export function useAttendanceForm(
     try {
       setSubmitSummary(null);
       // Respect active search filtering so manual save only affects the visible subset.
-      const targetStudents = filteredList;
-      const recordableStudents = targetStudents.filter((s) => !s.isLocked);
+      const { targetStudents, recordableStudents } =
+        buildManualAttendanceSubmissionTargets(studentList, searchQuery);
 
       if (targetStudents.length === 0) {
         toast.info("Tidak ada siswa yang cocok dengan pencarian aktif.");

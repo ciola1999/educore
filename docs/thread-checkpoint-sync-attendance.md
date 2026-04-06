@@ -161,6 +161,13 @@
 
 - `docs/runtime-boundary-incident-postmortem.md`
 
+### Jika butuh jalur praktis
+
+- `scripts/README.md`
+- `docs/playbooks/desktop-sync-recovery.md`
+- `docs/playbooks/student-class-drift-recovery.md`
+- `docs/playbooks/attendance-verification-checklist.md`
+
 ## Checklist Cepat Untuk Repro Bug Serupa
 
 1. Tentukan runtime: `web`, `desktop dev`, atau `MSI`

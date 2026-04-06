@@ -63,4 +63,12 @@ describe("desktop sync route", () => {
     });
     expect(pullFromCloudMock).not.toHaveBeenCalled();
   });
+
+  it("keeps manual push non-destructive and does not pass prune flags", async () => {
+    await handleDesktopSyncRoute("/api/sync/push", "POST");
+
+    expect(pushToCloudMock).toHaveBeenCalledWith();
+    expect(pullFromCloudMock).not.toHaveBeenCalled();
+    expect(fullSyncMock).not.toHaveBeenCalled();
+  });
 });

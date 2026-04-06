@@ -24,6 +24,11 @@ Sebelum mulai, baca dan ikuti:
 
 Audit dulu, jangan asumsi. Jaga source of truth, runtime boundary, schema safety, sync safety, dan fail-secure desktop release.
 Kalau bug hanya muncul di deploy web atau installer desktop, anggap itu sebagai runtime boundary issue sampai terbukti bukan.
+Kalau task melanjutkan incident sync/students/attendance/settings terbaru, baca juga:
+- docs/thread-checkpoint-sync-attendance.md
+- docs/playbooks/desktop-sync-recovery.md
+- docs/playbooks/student-class-drift-recovery.md
+- docs/playbooks/attendance-verification-checklist.md
 ```
 
 ---

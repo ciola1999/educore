@@ -1,8 +1,8 @@
 // Script to clear invalid holiday records
 
 import { eq } from "drizzle-orm";
-import { getDb } from "../src/lib/db/index";
-import { holidays } from "../src/lib/db/schema";
+import { getDb } from "../../src/lib/db/index";
+import { holidays } from "../../src/lib/db/schema";
 
 async function clearInvalidHolidays() {
   console.log("🔍 Checking for invalid holiday records...");

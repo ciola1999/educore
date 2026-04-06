@@ -118,7 +118,7 @@ Yang harus tetap fail-secure jika belum siap:
 - [ ] attendance shell sehat
 
 Command:
-- [ ] `bun run scripts/run-e2e-smoke-local.ts`
+- [ ] `bun run scripts/dev/run-e2e-smoke-local.ts`
 
 ---
 

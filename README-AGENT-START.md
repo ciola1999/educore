@@ -15,6 +15,11 @@ Setelah itu, pilih bootstrap yang sesuai dari:
   - [docs/prompt-template-all-in-one.md](/e:/Freelance/Project/educore/docs/prompt-template-all-in-one.md)
 - jika task terkait deploy/packaged bug yang sulit, baca juga:
   - [docs/runtime-boundary-incident-postmortem.md](/e:/Freelance/Project/educore/docs/runtime-boundary-incident-postmortem.md)
+- jika task melanjutkan incident sync/students/attendance/settings terbaru, baca juga:
+  - [docs/thread-checkpoint-sync-attendance.md](/e:/Freelance/Project/educore/docs/thread-checkpoint-sync-attendance.md)
+  - [docs/playbooks/desktop-sync-recovery.md](/e:/Freelance/Project/educore/docs/playbooks/desktop-sync-recovery.md)
+  - [docs/playbooks/student-class-drift-recovery.md](/e:/Freelance/Project/educore/docs/playbooks/student-class-drift-recovery.md)
+  - [docs/playbooks/attendance-verification-checklist.md](/e:/Freelance/Project/educore/docs/playbooks/attendance-verification-checklist.md)
 
 ## Rule utama
 

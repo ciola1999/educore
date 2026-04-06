@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "../src/lib/db/index";
+import { getDb } from "../../src/lib/db/index";
 
 async function cleanBadData() {
   console.log("🧹 Cleaning corrupted data...");

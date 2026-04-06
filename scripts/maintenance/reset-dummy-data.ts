@@ -1,7 +1,7 @@
 import { and, count, inArray, isNull, sql } from "drizzle-orm";
-import { getDb } from "../src/lib/db";
-import { classes, guruMapel, students, users } from "../src/lib/db/schema";
-import { ensureDefaultAttendanceSettings } from "../src/lib/services/student-projection";
+import { getDb } from "../../src/lib/db";
+import { classes, guruMapel, students, users } from "../../src/lib/db/schema";
+import { ensureDefaultAttendanceSettings } from "../../src/lib/services/student-projection";
 
 const DEFAULT_PRESERVED_EMAILS = [
   "admin@educore.school",
