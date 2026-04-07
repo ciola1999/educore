@@ -3,11 +3,13 @@ import { z } from "zod";
 import { AUTH_ROLES, type AuthRole } from "@/core/auth/roles";
 import { hashPassword } from "@/lib/auth/hash";
 import { getDb } from "@/lib/db";
-import { classes, students, users } from "@/lib/db/schema";
+import { students, users } from "@/lib/db/schema";
 import {
-  isUuidLikeClassValue,
-  sanitizeClassDisplayName,
-} from "@/lib/utils/class-name";
+  buildMissingClassReferenceMessage,
+  normalizeStudentGradeInput,
+  resolveExistingClassIdsByGrade,
+} from "@/lib/students/class-reference";
+import { isUuidLikeClassValue } from "@/lib/utils/class-name";
 
 type DesktopRouteErrorInit = {
   code: string;
@@ -45,6 +47,16 @@ type ParsedStudentImportRow = {
   tanggalLahir: Date | null;
   alamat: string | null;
 };
+
+function buildUnknownDesktopClassRowError(
+  row: ParsedStudentImportRow,
+): StudentImportRowError {
+  return {
+    row: row.row,
+    message: `Kelas "${row.grade}" belum ada di master kelas`,
+    nis: row.nis,
+  };
+}
 
 type TeacherImportRowError = {
   row: number;
@@ -298,11 +310,6 @@ function decodeBase64ToArrayBuffer(base64: string) {
   return bytes.buffer;
 }
 
-function getStudentAcademicYearLabel(): string {
-  const year = new Date().getFullYear();
-  return `${year}/${year + 1}`;
-}
-
 function extractStudentRowsFromSheet(
   sheet: unknown,
   XLSX: typeof import("xlsx"),
@@ -396,7 +403,7 @@ function parseStudentRows(
     const fullName = asTrimmedString(
       pickCell(rawRow, STUDENT_COLUMN_ALIASES.fullName),
     );
-    const grade = sanitizeClassDisplayName(
+    const grade = normalizeStudentGradeInput(
       asTrimmedString(pickCell(rawRow, STUDENT_COLUMN_ALIASES.grade)),
     );
     const gender = parseGender(pickCell(rawRow, STUDENT_COLUMN_ALIASES.gender));
@@ -433,7 +440,7 @@ function parseStudentRows(
       return;
     }
 
-    if (!grade) {
+    if (!grade || grade === "UNASSIGNED") {
       errors.push({
         row: rowNumber,
         message: "Kelas wajib diisi",
@@ -660,40 +667,33 @@ export async function handleDesktopStudentImportRequest(body: unknown) {
   const existingStudentByNis = new Map(
     existingStudents.map((row) => [row.nis, row]),
   );
-  const classRows =
-    gradeNames.length > 0
-      ? await db
-          .select({ id: classes.id, name: classes.name })
-          .from(classes)
-          .where(
-            and(inArray(classes.name, gradeNames), isNull(classes.deletedAt)),
-          )
-      : [];
-  const classIdByName = new Map(
-    classRows.map((classRow) => [classRow.name.trim(), classRow.id]),
+  const { classIdByGrade, missingGrades } =
+    await resolveExistingClassIdsByGrade(db, gradeNames);
+
+  const missingGradeSet = new Set(missingGrades);
+  const classReferenceErrors = parsed
+    .filter(
+      (row) => row.grade !== "UNASSIGNED" && missingGradeSet.has(row.grade),
+    )
+    .map(buildUnknownDesktopClassRowError);
+  const importableRows = parsed.filter(
+    (row) => row.grade === "UNASSIGNED" || !missingGradeSet.has(row.grade),
   );
+  const allErrors = [...errors, ...classReferenceErrors];
 
-  for (const gradeName of gradeNames) {
-    if (classIdByName.has(gradeName)) continue;
-
-    const classId = crypto.randomUUID();
-    await db.insert(classes).values({
-      id: classId,
-      name: gradeName,
-      academicYear: getStudentAcademicYearLabel(),
-      isActive: true,
-      syncStatus: "pending",
-      createdAt: now,
-      updatedAt: now,
-    });
-    classIdByName.set(gradeName, classId);
+  if (importableRows.length === 0) {
+    fail(
+      buildMissingClassReferenceMessage(missingGrades),
+      400,
+      "UNKNOWN_CLASS_REFERENCE",
+    );
   }
 
   let created = 0;
   let updated = 0;
   let skipped = 0;
 
-  for (const row of parsed) {
+  for (const row of importableRows) {
     const existing = existingStudentByNis.get(row.nis);
 
     if (existing) {
@@ -733,7 +733,7 @@ export async function handleDesktopStudentImportRequest(body: unknown) {
           alamat: row.alamat,
           kelasId:
             row.grade !== "UNASSIGNED"
-              ? (classIdByName.get(row.grade) ?? null)
+              ? (classIdByGrade.get(row.grade) ?? null)
               : null,
           syncStatus: "pending",
           updatedAt: now,
@@ -771,12 +771,12 @@ export async function handleDesktopStudentImportRequest(body: unknown) {
 
   return {
     totalRows: rawRows.length,
-    validRows: parsed.length,
+    validRows: importableRows.length,
     created,
     updated,
     skipped,
-    errorCount: errors.length,
-    errors: errors.slice(0, 20),
+    errorCount: allErrors.length,
+    errors: allErrors.slice(0, 20),
   };
 }
 

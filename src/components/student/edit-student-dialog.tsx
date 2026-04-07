@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useStudentClassOptions } from "@/hooks/use-student-class-options";
 import type { StudentListItem } from "@/hooks/use-student-list";
 import { apiPatch } from "@/lib/api/request";
 
@@ -102,6 +103,11 @@ export function EditStudentDialog({
   onSuccess,
 }: EditStudentDialogProps) {
   const [loading, setLoading] = useState(false);
+  const {
+    options: classOptions,
+    loading: classOptionsLoading,
+    error: classOptionsError,
+  } = useStudentClassOptions();
 
   const form = useForm<UpdateStudentFormValues>({
     resolver: zodResolver(updateStudentSchema),
@@ -145,6 +151,24 @@ export function EditStudentDialog({
       confirmNewPassword: "",
     });
   }, [form, student]);
+  const selectedGrade = form.watch("grade");
+  const gradeOptions = useMemo(() => {
+    const currentGrade = selectedGrade.trim();
+    if (
+      currentGrade &&
+      !classOptions.some((option) => option.name === currentGrade)
+    ) {
+      return [
+        {
+          id: `legacy-${currentGrade}`,
+          name: currentGrade,
+        },
+        ...classOptions,
+      ];
+    }
+
+    return classOptions;
+  }, [classOptions, selectedGrade]);
 
   async function handleSubmit(values: UpdateStudentFormValues) {
     if (!student) {
@@ -274,12 +298,37 @@ export function EditStudentDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Kelas</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          className="border-zinc-800 bg-zinc-950"
-                        />
-                      </FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={
+                          classOptionsLoading || gradeOptions.length === 0
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger className="border-zinc-800 bg-zinc-950">
+                            <SelectValue
+                              placeholder={
+                                classOptionsLoading
+                                  ? "Memuat master kelas..."
+                                  : "Pilih kelas dari master..."
+                              }
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="border-zinc-800 bg-zinc-900 text-white">
+                          {gradeOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.name}>
+                              {option.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {classOptionsError ? (
+                        <p className="text-xs text-amber-400">
+                          {classOptionsError}
+                        </p>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}

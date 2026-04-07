@@ -1,16 +1,16 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { hashPassword } from "@/lib/auth/hash";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
-import { classes, students, users } from "@/lib/db/schema";
+import { students, users } from "@/lib/db/schema";
 import {
-  buildClassNameLookupKeys,
-  canonicalizeClassDisplayName,
-  sanitizeClassDisplayName,
-} from "@/lib/utils/class-name";
+  buildMissingClassReferenceMessage,
+  resolveExistingClassReference,
+} from "@/lib/students/class-reference";
+import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import { studentUpdateSchema } from "@/lib/validations/schemas";
 
 export const dynamic = "force-dynamic";
@@ -43,56 +43,6 @@ function normalizeStudentPayload(payload: StudentUpdatePayload) {
     tempatLahir: payload.tempatLahir?.trim() || null,
     tanggalLahir: payload.tanggalLahir ?? null,
     alamat: payload.alamat?.trim() || null,
-  };
-}
-
-function getAcademicYearLabel(): string {
-  const year = new Date().getFullYear();
-  return `${year}/${year + 1}`;
-}
-
-async function ensureClassReference(
-  db: Awaited<ReturnType<typeof getDb>>,
-  grade: string | null | undefined,
-  now: Date,
-) {
-  const normalizedGrade = sanitizeClassDisplayName(grade);
-  const canonicalGrade = canonicalizeClassDisplayName(normalizedGrade);
-  if (canonicalGrade === "UNASSIGNED") {
-    return {
-      normalizedGrade: canonicalGrade,
-      kelasId: null as string | null,
-    };
-  }
-
-  const lookupKeys = buildClassNameLookupKeys(canonicalGrade);
-  const existingClass = await db
-    .select({ id: classes.id })
-    .from(classes)
-    .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
-    .limit(1);
-
-  if (existingClass[0]?.id) {
-    return {
-      normalizedGrade: canonicalGrade,
-      kelasId: existingClass[0].id,
-    };
-  }
-
-  const kelasId = crypto.randomUUID();
-  await db.insert(classes).values({
-    id: kelasId,
-    name: canonicalGrade,
-    academicYear: getAcademicYearLabel(),
-    isActive: true,
-    syncStatus: "pending",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return {
-    normalizedGrade: canonicalGrade,
-    kelasId,
   };
 }
 
@@ -154,11 +104,24 @@ export async function PATCH(
   }
 
   const now = new Date();
-  const { normalizedGrade, kelasId } = await ensureClassReference(
+  const { normalizedGrade, kelasId } = await resolveExistingClassReference(
     db,
     payload.grade,
-    now,
   );
+  if (normalizedGrade === "UNASSIGNED") {
+    return apiError(
+      "Kelas wajib dipilih dari master kelas",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+  if (normalizedGrade !== "UNASSIGNED" && !kelasId) {
+    return apiError(
+      buildMissingClassReferenceMessage([normalizedGrade]),
+      400,
+      "UNKNOWN_CLASS_REFERENCE",
+    );
+  }
   await db
     .update(students)
     .set({

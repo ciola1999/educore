@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useStudentClassOptions } from "@/hooks/use-student-class-options";
 import { apiPost } from "@/lib/api/request";
 
 const createStudentSchema = z
@@ -110,6 +111,11 @@ interface AddStudentDialogProps {
 export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const {
+    options: classOptions,
+    loading: classOptionsLoading,
+    error: classOptionsError,
+  } = useStudentClassOptions();
 
   const form = useForm<CreateStudentFormValues>({
     resolver: zodResolver(createStudentSchema),
@@ -131,6 +137,24 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
     },
   });
   const createAccount = form.watch("createAccount");
+  const selectedGrade = form.watch("grade");
+  const gradeOptions = useMemo(() => {
+    const currentGrade = selectedGrade.trim();
+    if (
+      currentGrade &&
+      !classOptions.some((option) => option.name === currentGrade)
+    ) {
+      return [
+        {
+          id: `legacy-${currentGrade}`,
+          name: currentGrade,
+        },
+        ...classOptions,
+      ];
+    }
+
+    return classOptions;
+  }, [classOptions, selectedGrade]);
 
   async function handleSubmit(values: CreateStudentFormValues) {
     setLoading(true);
@@ -262,13 +286,37 @@ export function AddStudentDialog({ onSuccess }: AddStudentDialogProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-zinc-400">Kelas</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="Contoh: X-A, XI-IPA-1..."
-                          className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20"
-                        />
-                      </FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={
+                          classOptionsLoading || gradeOptions.length === 0
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-zinc-900/50 border-zinc-800 focus:ring-sky-500/20">
+                            <SelectValue
+                              placeholder={
+                                classOptionsLoading
+                                  ? "Memuat master kelas..."
+                                  : "Pilih kelas dari master..."
+                              }
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                          {gradeOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.name}>
+                              {option.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {classOptionsError ? (
+                        <p className="text-xs text-amber-400">
+                          {classOptionsError}
+                        </p>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}

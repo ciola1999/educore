@@ -23,10 +23,10 @@ import {
   users,
 } from "@/lib/db/schema";
 import {
-  buildClassNameLookupKeys,
-  canonicalizeClassDisplayName,
-  sanitizeClassDisplayName,
-} from "@/lib/utils/class-name";
+  buildMissingClassReferenceMessage,
+  resolveExistingClassReference,
+} from "@/lib/students/class-reference";
+import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import { studentInsertSchema } from "@/lib/validations/schemas";
 
 export const dynamic = "force-dynamic";
@@ -237,56 +237,6 @@ const studentCreateRequestSchema = studentInsertSchema.extend({
     })
     .optional(),
 });
-
-function getAcademicYearLabel(): string {
-  const year = new Date().getFullYear();
-  return `${year}/${year + 1}`;
-}
-
-async function ensureClassReference(
-  db: Awaited<ReturnType<typeof getDb>>,
-  grade: string | null | undefined,
-  now: Date,
-) {
-  const normalizedGrade = sanitizeClassDisplayName(grade);
-  const canonicalGrade = canonicalizeClassDisplayName(normalizedGrade);
-  if (canonicalGrade === "UNASSIGNED") {
-    return {
-      normalizedGrade: canonicalGrade,
-      kelasId: null as string | null,
-    };
-  }
-
-  const lookupKeys = buildClassNameLookupKeys(canonicalGrade);
-  const existingClass = await db
-    .select({ id: classes.id })
-    .from(classes)
-    .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
-    .limit(1);
-
-  if (existingClass[0]?.id) {
-    return {
-      normalizedGrade: canonicalGrade,
-      kelasId: existingClass[0].id,
-    };
-  }
-
-  const kelasId = crypto.randomUUID();
-  await db.insert(classes).values({
-    id: kelasId,
-    name: canonicalGrade,
-    academicYear: getAcademicYearLabel(),
-    isActive: true,
-    syncStatus: "pending",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return {
-    normalizedGrade: canonicalGrade,
-    kelasId,
-  };
-}
 
 async function resolveStudentGrades<T extends StudentRowWithAccountClass>(
   db: Awaited<ReturnType<typeof getDb>>,
@@ -584,11 +534,26 @@ export async function POST(request: Request) {
   const normalizedAccountEmail = data.account?.email.trim().toLowerCase();
   const normalizedFullName = data.fullName.trim();
   const now = new Date();
-  const { normalizedGrade, kelasId } = await ensureClassReference(
+  const { normalizedGrade, kelasId } = await resolveExistingClassReference(
     db,
     data.grade,
-    now,
   );
+
+  if (normalizedGrade === "UNASSIGNED") {
+    return apiError(
+      "Kelas wajib dipilih dari master kelas",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+
+  if (normalizedGrade !== "UNASSIGNED" && !kelasId) {
+    return apiError(
+      buildMissingClassReferenceMessage([normalizedGrade]),
+      400,
+      "UNKNOWN_CLASS_REFERENCE",
+    );
+  }
 
   const existing = await db
     .select({ id: students.id, deletedAt: students.deletedAt })

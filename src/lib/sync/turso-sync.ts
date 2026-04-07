@@ -1048,8 +1048,11 @@ export async function pullFromCloud(
             const localTime = Math.floor(
               (localItem.updatedAt?.getTime() || 0) / 1000,
             );
+            const shouldReviveDeletedRow =
+              localItem.deletedAt instanceof Date &&
+              mappedData.deletedAt === null;
 
-            if (remoteTime > localTime) {
+            if (remoteTime > localTime || shouldReviveDeletedRow) {
               await db
                 .update(table as never)
                 .set(mappedData as never)
@@ -1097,8 +1100,11 @@ export async function pullFromCloud(
               const localTime = Math.floor(
                 (localRecord.updatedAt?.getTime() || 0) / 1000,
               );
+              const shouldReviveDeletedRow =
+                localRecord.deletedAt instanceof Date &&
+                mappedData.deletedAt === null;
 
-              if (remoteTime > localTime) {
+              if (remoteTime > localTime || shouldReviveDeletedRow) {
                 await db
                   .update(table as never)
                   .set({

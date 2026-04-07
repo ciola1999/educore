@@ -4,10 +4,13 @@ import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
-import { classes, students, users } from "@/lib/db/schema";
+import { students, users } from "@/lib/db/schema";
 import {
-  buildClassNameLookupKeys,
-  canonicalizeClassDisplayName,
+  buildMissingClassReferenceMessage,
+  normalizeStudentGradeInput,
+  resolveExistingClassIdsByGrade,
+} from "@/lib/students/class-reference";
+import {
   isUuidLikeClassValue,
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
@@ -35,6 +38,14 @@ type ParsedStudentRow = {
   tanggalLahir: Date | null;
   alamat: string | null;
 };
+
+function buildUnknownClassRowError(row: ParsedStudentRow): ImportRowError {
+  return {
+    row: row.row,
+    message: `Kelas "${row.grade}" belum ada di master kelas`,
+    nis: row.nis,
+  };
+}
 
 type SheetRowsExtraction = {
   rows: Record<string, unknown>[];
@@ -68,11 +79,6 @@ const COLUMN_ALIASES = {
   tanggalLahir: ["tanggal lahir", "tanggal_lahir", "birth date", "birth_date"],
   alamat: ["alamat", "address"],
 } as const;
-
-function getAcademicYearLabel(): string {
-  const year = new Date().getFullYear();
-  return `${year}/${year + 1}`;
-}
 
 function normalizeHeader(input: string): string {
   return input
@@ -168,7 +174,7 @@ function parseRows(
     const rowNumber = headerRowIndex + index + 2;
     const nis = asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.nis));
     const fullName = asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.fullName));
-    const grade = canonicalizeClassDisplayName(
+    const grade = normalizeStudentGradeInput(
       sanitizeClassDisplayName(
         asTrimmedString(pickCell(rawRow, COLUMN_ALIASES.grade)),
       ),
@@ -205,7 +211,7 @@ function parseRows(
       return;
     }
 
-    if (!grade) {
+    if (!grade || grade === "UNASSIGNED") {
       errors.push({
         row: rowNumber,
         message: "Kelas wajib diisi",
@@ -420,50 +426,33 @@ export async function POST(request: Request) {
   const existingStudentByNis = new Map(
     existingStudents.map((row) => [row.nis, row]),
   );
-  const classLookupKeys = Array.from(
-    new Set(
-      gradeNames.flatMap((gradeName) => buildClassNameLookupKeys(gradeName)),
-    ),
-  );
-  const classRows =
-    classLookupKeys.length > 0
-      ? await db
-          .select({ id: classes.id, name: classes.name })
-          .from(classes)
-          .where(
-            and(
-              inArray(classes.name, classLookupKeys),
-              isNull(classes.deletedAt),
-            ),
-          )
-      : [];
-  const classIdByName = new Map(
-    classRows.map((classRow) => [classRow.name.trim(), classRow.id]),
-  );
+  const { classIdByGrade, missingGrades } =
+    await resolveExistingClassIdsByGrade(db, gradeNames);
 
-  for (const gradeName of gradeNames) {
-    if (classIdByName.has(gradeName)) {
-      continue;
-    }
+  const missingGradeSet = new Set(missingGrades);
+  const classReferenceErrors = parsed
+    .filter(
+      (row) => row.grade !== "UNASSIGNED" && missingGradeSet.has(row.grade),
+    )
+    .map(buildUnknownClassRowError);
+  const importableRows = parsed.filter(
+    (row) => row.grade === "UNASSIGNED" || !missingGradeSet.has(row.grade),
+  );
+  const allErrors = [...errors, ...classReferenceErrors];
 
-    const classId = crypto.randomUUID();
-    await db.insert(classes).values({
-      id: classId,
-      name: gradeName,
-      academicYear: getAcademicYearLabel(),
-      isActive: true,
-      syncStatus: "pending",
-      createdAt: now,
-      updatedAt: now,
-    });
-    classIdByName.set(gradeName, classId);
+  if (importableRows.length === 0) {
+    return apiError(
+      buildMissingClassReferenceMessage(missingGrades),
+      400,
+      "UNKNOWN_CLASS_REFERENCE",
+    );
   }
 
   let created = 0;
   let updated = 0;
   let skipped = 0;
 
-  for (const row of parsed) {
+  for (const row of importableRows) {
     const existing = existingStudentByNis.get(row.nis);
 
     if (existing) {
@@ -502,7 +491,9 @@ export async function POST(request: Request) {
           tanggalLahir: row.tanggalLahir,
           alamat: row.alamat,
           kelasId:
-            row.grade !== "UNASSIGNED" ? classIdByName.get(row.grade) : null,
+            row.grade !== "UNASSIGNED"
+              ? (classIdByGrade.get(row.grade) ?? null)
+              : null,
           syncStatus: "pending",
           updatedAt: now,
         })
@@ -539,11 +530,11 @@ export async function POST(request: Request) {
 
   return apiOk({
     totalRows: rawRows.length,
-    validRows: parsed.length,
+    validRows: importableRows.length,
     created,
     updated,
     skipped,
-    errorCount: errors.length,
-    errors: errors.slice(0, 20),
+    errorCount: allErrors.length,
+    errors: allErrors.slice(0, 20),
   });
 }

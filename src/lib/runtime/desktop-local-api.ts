@@ -107,6 +107,10 @@ import {
 } from "@/lib/services/legacy-schedule-repair";
 import { syncUsersToStudentsProjection } from "@/lib/services/student-projection";
 import { useStore } from "@/lib/store/use-store";
+import {
+  buildMissingClassReferenceMessage,
+  resolveExistingClassReference,
+} from "@/lib/students/class-reference";
 import { getTursoCloudClient } from "@/lib/sync/client";
 import { pullFromCloud, pushToCloud } from "@/lib/sync/turso-sync";
 import {
@@ -1339,46 +1343,8 @@ function getStudentAcademicYearLabel(): string {
 async function ensureDesktopClassReference(
   db: Awaited<ReturnType<typeof getDb>>,
   grade: string | null | undefined,
-  now: Date,
 ) {
-  const normalizedGrade = sanitizeClassDisplayName(grade);
-  const canonicalGrade = canonicalizeClassDisplayName(normalizedGrade);
-  if (canonicalGrade === "UNASSIGNED") {
-    return {
-      normalizedGrade: canonicalGrade,
-      kelasId: null as string | null,
-    };
-  }
-
-  const lookupKeys = buildClassNameLookupKeys(canonicalGrade);
-  const existingClass = await db
-    .select({ id: classes.id })
-    .from(classes)
-    .where(and(inArray(classes.name, lookupKeys), isNull(classes.deletedAt)))
-    .limit(1);
-
-  if (existingClass[0]?.id) {
-    return {
-      normalizedGrade: canonicalGrade,
-      kelasId: existingClass[0].id,
-    };
-  }
-
-  const kelasId = crypto.randomUUID();
-  await db.insert(classes).values({
-    id: kelasId,
-    name: canonicalGrade,
-    academicYear: getStudentAcademicYearLabel(),
-    isActive: true,
-    syncStatus: "pending",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return {
-    normalizedGrade: canonicalGrade,
-    kelasId,
-  };
+  return resolveExistingClassReference(db, grade);
 }
 
 function normalizeEmailLocalPart(nis: string) {
@@ -4006,8 +3972,23 @@ async function handleDesktopCreateStudent(body: unknown) {
   const { normalizedGrade, kelasId } = await ensureDesktopClassReference(
     db,
     data.grade,
-    now,
   );
+
+  if (normalizedGrade === "UNASSIGNED") {
+    return apiError(
+      "Kelas wajib dipilih dari master kelas",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+
+  if (normalizedGrade !== "UNASSIGNED" && !kelasId) {
+    return apiError(
+      buildMissingClassReferenceMessage([normalizedGrade]),
+      400,
+      "UNKNOWN_CLASS_REFERENCE",
+    );
+  }
 
   const existingStudentRows = await db
     .select({ id: students.id, deletedAt: students.deletedAt })
@@ -4202,7 +4183,23 @@ async function handleDesktopUpdateStudent(
 
   const now = new Date();
   const { normalizedGrade: normalizedPayloadGrade, kelasId } =
-    await ensureDesktopClassReference(db, payload.grade, now);
+    await ensureDesktopClassReference(db, payload.grade);
+
+  if (normalizedPayloadGrade === "UNASSIGNED") {
+    return apiError(
+      "Kelas wajib dipilih dari master kelas",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+
+  if (normalizedPayloadGrade !== "UNASSIGNED" && !kelasId) {
+    return apiError(
+      buildMissingClassReferenceMessage([normalizedPayloadGrade]),
+      400,
+      "UNKNOWN_CLASS_REFERENCE",
+    );
+  }
 
   await db
     .update(students)

@@ -3,6 +3,7 @@ import {
   attendance,
   notifikasi,
   studentDailyAttendance,
+  students,
 } from "@/lib/db/schema";
 import { fullSync, pullFromCloud, pushToCloud } from "./turso-sync";
 
@@ -1211,5 +1212,102 @@ describe("turso full sync idempotency", () => {
     expect(
       updates.filter((payload) => payload.deletedAt instanceof Date),
     ).toHaveLength(3);
+  });
+
+  it("revives a soft-deleted local student when an active cloud row matches by logical key", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    let selectCallCount = 0;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) => {
+          if (table === students) {
+            selectCallCount += 1;
+
+            if (selectCallCount === 1) {
+              return {
+                where: vi.fn(() => ({
+                  limit: vi.fn(async () => []),
+                })),
+              };
+            }
+
+            return {
+              where: vi.fn(() => ({
+                limit: vi.fn(async () => [
+                  {
+                    id: "local-student-1",
+                    nis: "12345",
+                    fullName: "Student Pulled",
+                    deletedAt: new Date("2026-04-07T00:00:00.000Z"),
+                    updatedAt: new Date("2026-04-07T00:00:00.000Z"),
+                    syncStatus: "synced",
+                  },
+                ]),
+              })),
+            };
+          }
+
+          return createAwaitableQuery([], async () => []);
+        }),
+      })),
+      insert: vi.fn(() => ({
+        values: vi.fn(async () => {}),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            updates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (sql.includes('SELECT * FROM "students"')) {
+        return {
+          rows: [
+            {
+              id: "remote-student-1",
+              nis: "12345",
+              full_name: "Student Pulled",
+              gender: "L",
+              grade: "KELAS 9",
+              deleted_at: null,
+              updated_at: 1712448000,
+            },
+          ],
+        };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pullFromCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      syncUsersProjection: vi.fn(async () => {}),
+    });
+
+    expect(result.status).toBe("success");
+    expect(
+      updates.some(
+        (payload) =>
+          payload.id === "local-student-1" &&
+          payload.deletedAt === null &&
+          payload.syncStatus === "synced",
+      ),
+    ).toBe(true);
   });
 });
