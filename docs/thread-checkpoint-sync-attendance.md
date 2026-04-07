@@ -180,3 +180,58 @@
 
 - Thread ini menghasilkan banyak script audit/repair yang berguna, tapi jangan jadikan repair manual sebagai pengganti hardening source code
 - Jika ada bug baru yang mirip, mulai dari audit runtime boundary dan source-of-truth drift, jangan langsung dari UI symptom
+
+## Addendum 2026-04-07
+
+### Batch terbaru yang sudah beres
+
+- Filter kelas di `Attendance` sudah dibersihkan dari alias/duplikat sehingga dropdown tidak lagi banjir
+- Form tambah/edit student sekarang wajib memilih kelas dari master class, bukan free text
+- Import student web dan desktop sekarang:
+  - tidak membuat kelas baru diam-diam
+  - menolak kelas yang tidak ada di master
+  - memakai partial import, jadi row valid tetap diproses walau ada row lain yang gagal
+- Sync desktop pull sekarang bisa merevive row student lokal yang pernah soft-delete jika cloud masih punya row aktif yang cocok
+- Smoke test area student end-to-end sudah lolos:
+  - add manual
+  - edit student
+  - import partial
+  - sync web -> desktop
+  - sync desktop -> web
+
+### File/area penting dari batch terbaru
+
+- `src/lib/utils/class-name.ts`
+- `src/app/api/attendance/classes/route.ts`
+- `src/lib/runtime/desktop-local-api.ts`
+- `src/lib/students/class-reference.ts`
+- `src/lib/students/class-reference.test.ts`
+- `src/hooks/use-student-class-options.ts`
+- `src/components/student/add-student-dialog.tsx`
+- `src/components/student/edit-student-dialog.tsx`
+- `src/app/api/students/route.ts`
+- `src/app/api/students/[id]/route.ts`
+- `src/app/api/students/import/route.ts`
+- `src/lib/runtime/desktop-import-handlers.ts`
+- `src/lib/sync/turso-sync.ts`
+- `src/lib/sync/turso-sync.pull-idempotency.test.ts`
+
+### Keputusan desain terbaru yang harus dipertahankan
+
+- Student create/edit tidak boleh lagi jadi jalur pembuatan class baru
+- Import student tidak boleh auto-create class dari teks Excel
+- Untuk operasional sekolah, partial import lebih cocok daripada all-or-nothing selama error per baris tetap jelas
+- Kalau desktop dan web beda total student, anggap dulu sebagai mismatch data nyata, bukan sekadar bug kartu stats
+- Jika cloud punya row aktif dan desktop punya pasangan lokal deleted, pull sync harus bisa merevive row lokal itu
+
+### Retest cepat untuk thread berikutnya bila menyentuh student/import
+
+1. Cek `Students` web: total, laki-laki, perempuan
+2. Cek `Students` desktop: total, laki-laki, perempuan
+3. Pastikan angka match
+4. Tambah 1 student manual tanpa akun
+5. Tambah 1 student manual dengan akun
+6. Import file campuran: beberapa row valid + 1 row kelas invalid
+7. Pastikan row valid masuk, row invalid gagal dengan pesan jelas
+8. Jalankan `Sinkron Penuh`
+9. Pastikan web dan desktop tetap match setelah sync
