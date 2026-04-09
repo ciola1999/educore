@@ -349,13 +349,16 @@ export const bulkAttendanceSchema = z.object({
   classId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   recordedBy: z.string().uuid(),
-  records: z.array(
-    z.object({
-      studentId: z.string().uuid(),
-      status: AttendanceStatusEnum,
-      notes: z.string().optional(),
-    }),
-  ),
+  records: z
+    .array(
+      z.object({
+        studentId: z.string().uuid(),
+        status: AttendanceStatusEnum,
+        notes: z.string().max(500).optional(),
+      }),
+    )
+    .min(1, "Minimal satu record attendance wajib dikirim")
+    .max(500, "Maksimal 500 record attendance per request"),
 });
 
 export type BulkAttendance = z.infer<typeof bulkAttendanceSchema>;

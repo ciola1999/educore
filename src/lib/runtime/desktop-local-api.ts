@@ -37,6 +37,13 @@ import {
   upsertAttendanceSetting,
 } from "@/core/services/attendance-service";
 import { qrScanSchema } from "@/core/validation/schemas";
+import {
+  canAccessAttendanceClass,
+  getAuthorizedAttendanceClasses,
+  getAuthorizedAttendanceClassNames,
+  resolveAttendanceAccessScope,
+  resolveAttendanceClassNameFilter,
+} from "@/lib/auth/attendance-access";
 import { hashPassword, verifyPassword } from "@/lib/auth/hash";
 import {
   checkAnyPermission,
@@ -121,6 +128,7 @@ import {
   sanitizeClassDisplayName,
 } from "@/lib/utils/class-name";
 import {
+  bulkAttendanceSchema,
   studentInsertSchema,
   studentUpdateSchema,
 } from "@/lib/validations/schemas";
@@ -2054,10 +2062,12 @@ async function handleDesktopAttendanceClasses() {
   if (guard) return guard;
 
   const db = await getDb();
-  const data = await db
-    .select({ id: classes.id, name: classes.name })
-    .from(classes)
-    .where(isNull(classes.deletedAt));
+  const scope = await resolveAttendanceAccessScope(db, getDesktopSessionUser());
+  if (!scope || !scope.hasRosterAccess) {
+    return apiError("Forbidden", 403, "FORBIDDEN");
+  }
+
+  const data = await getAuthorizedAttendanceClasses(db, scope);
   return apiOk(dedupeCanonicalClassOptions(data));
 }
 
@@ -2084,6 +2094,18 @@ async function handleDesktopAttendanceStudents(url: URL) {
   }
 
   const db = await getDb();
+  const scope = await resolveAttendanceAccessScope(db, getDesktopSessionUser());
+  if (!scope || !scope.hasRosterAccess) {
+    return apiError("Forbidden", 403, "FORBIDDEN");
+  }
+  if (!canAccessAttendanceClass(scope, classId)) {
+    return apiError(
+      "Kamu tidak punya akses ke kelas attendance ini.",
+      403,
+      "ATTENDANCE_CLASS_FORBIDDEN",
+    );
+  }
+
   let studentResults: Awaited<
     ReturnType<typeof getAttendanceRosterStudents>
   >["students"] = [];
@@ -2184,8 +2206,32 @@ async function handleDesktopAttendanceBulk(body: unknown) {
     return apiError("Sesi user tidak valid", 401);
   }
 
+  const db = await getDb();
+  const scope = await resolveAttendanceAccessScope(db, getDesktopSessionUser());
+  if (!scope || !scope.hasRosterAccess) {
+    return apiError("Forbidden", 403, "FORBIDDEN");
+  }
+
+  const parsedBody = bulkAttendanceSchema
+    .omit({ recordedBy: true })
+    .safeParse(body);
+  if (!parsedBody.success) {
+    return apiError(
+      parsedBody.error.issues[0]?.message || "Payload attendance tidak valid",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+  if (!canAccessAttendanceClass(scope, parsedBody.data.classId)) {
+    return apiError(
+      "Kamu tidak punya akses ke kelas attendance ini.",
+      403,
+      "ATTENDANCE_CLASS_FORBIDDEN",
+    );
+  }
+
   const result = await recordBulkAttendance({
-    ...(body as Record<string, unknown>),
+    ...parsedBody.data,
     recordedBy: sessionUserId,
   } as never);
 
@@ -2264,7 +2310,7 @@ async function handleDesktopAttendanceHistory(
     sessionRole === "student" ? sessionUserId : requestedStudentId;
   const status = url.searchParams.get("status") || undefined;
   const searchQuery = url.searchParams.get("searchQuery") || undefined;
-  const className = url.searchParams.get("className") || undefined;
+  let className = url.searchParams.get("className") || undefined;
   const source = parseAttendanceSource(url.searchParams.get("source"));
   const exportMode = url.searchParams.get("export") === "true";
   const summaryMode = url.searchParams.get("summary") === "true";
@@ -2284,6 +2330,35 @@ async function handleDesktopAttendanceHistory(
   }
 
   try {
+    if (sessionRole !== "student") {
+      const db = await getDb();
+      const scope = await resolveAttendanceAccessScope(
+        db,
+        getDesktopSessionUser(),
+      );
+      if (!scope || !scope.hasRosterAccess) {
+        return apiError("Forbidden", 403, "FORBIDDEN");
+      }
+
+      const classNames = await getAuthorizedAttendanceClassNames(db, scope);
+      const resolvedClassFilter = resolveAttendanceClassNameFilter(
+        scope,
+        classNames,
+        className,
+      );
+      if (!resolvedClassFilter.ok) {
+        return apiError(
+          resolvedClassFilter.message,
+          resolvedClassFilter.code === "ATTENDANCE_CLASS_FILTER_REQUIRED"
+            ? 400
+            : 403,
+          resolvedClassFilter.code,
+        );
+      }
+
+      className = resolvedClassFilter.className;
+    }
+
     const filter = {
       startDate,
       endDate,
@@ -2471,7 +2546,7 @@ async function handleDesktopAttendanceRiskInsights(
 
   try {
     const { startDate, endDate } = getCurrentMonthRange();
-    const className = url.searchParams.get("className")?.trim() || undefined;
+    let className = url.searchParams.get("className")?.trim() || undefined;
     const requestedAssigneeId =
       url.searchParams.get("assigneeUserId")?.trim() || undefined;
     const includeStudents = !isDisabledParam(
@@ -2480,6 +2555,30 @@ async function handleDesktopAttendanceRiskInsights(
     const includeAssignmentSummary = !isDisabledParam(
       url.searchParams.get("includeAssignmentSummary"),
     );
+    const db = await getDb();
+    const scope = await resolveAttendanceAccessScope(
+      db,
+      getDesktopSessionUser(),
+    );
+    if (!scope || !scope.hasRosterAccess) {
+      return apiError("Forbidden", 403, "FORBIDDEN");
+    }
+    const classNames = await getAuthorizedAttendanceClassNames(db, scope);
+    const resolvedClassFilter = resolveAttendanceClassNameFilter(
+      scope,
+      classNames,
+      className,
+    );
+    if (!resolvedClassFilter.ok) {
+      return apiError(
+        resolvedClassFilter.message,
+        resolvedClassFilter.code === "ATTENDANCE_CLASS_FILTER_REQUIRED"
+          ? 400
+          : 403,
+        resolvedClassFilter.code,
+      );
+    }
+    className = resolvedClassFilter.className;
     const canViewAssignmentSummary =
       sessionRole === "admin" || sessionRole === "super_admin";
     const assigneeUserId =

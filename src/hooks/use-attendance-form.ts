@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   buildManualAttendanceSubmissionTargets,
@@ -114,6 +114,7 @@ export function useAttendanceForm(
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(25);
   const [searchQuery, setSearchQuery] = useState("");
+  const studentLoadRequestIdRef = useRef(0);
 
   const loadClasses = useCallback(async () => {
     try {
@@ -126,9 +127,13 @@ export function useAttendanceForm(
         initialState.initialClassName,
       );
       setClassList(options);
-      setSelectedClass(
-        (prev) => prev || initialClassId || data?.[0]?.id || "all",
-      );
+      setSelectedClass((prev) => {
+        if (prev && options.some((option) => option.id === prev)) {
+          return prev;
+        }
+
+        return initialClassId || data?.[0]?.id || "all";
+      });
     } catch (error) {
       setClassList([]);
       const message =
@@ -150,10 +155,13 @@ export function useAttendanceForm(
 
   const loadStudentsByClass = useCallback(
     async (classId: string, date: string, isAutoRefresh = false) => {
+      const requestId = ++studentLoadRequestIdRef.current;
       if (!isAutoRefresh) setLoading(true);
       try {
         setStudentLoadError(null);
-        setSubmitSummary(null);
+        if (!isAutoRefresh) {
+          setSubmitSummary(null);
+        }
         const params = new URLSearchParams({
           classId,
           date,
@@ -161,9 +169,17 @@ export function useAttendanceForm(
         const data = await apiGet<StudentRecord[]>(
           `/api/attendance/students?${params.toString()}`,
         );
+        if (requestId !== studentLoadRequestIdRef.current) {
+          return;
+        }
         setStudentList(data || []);
       } catch (error) {
-        setStudentList([]);
+        if (requestId !== studentLoadRequestIdRef.current) {
+          return;
+        }
+        if (!isAutoRefresh) {
+          setStudentList([]);
+        }
         const message =
           error instanceof Error
             ? error.message
@@ -171,7 +187,9 @@ export function useAttendanceForm(
         setStudentLoadError(message);
         toast.error(message);
       } finally {
-        if (!isAutoRefresh) setLoading(false);
+        if (requestId === studentLoadRequestIdRef.current && !isAutoRefresh) {
+          setLoading(false);
+        }
       }
     },
     [],

@@ -2,6 +2,10 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { getAttendanceRosterStudents } from "@/core/services/attendance-service";
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
+import {
+  canAccessAttendanceClass,
+  resolveAttendanceAccessScope,
+} from "@/lib/auth/attendance-access";
 import { auth } from "@/lib/auth/web/auth";
 import { getDb } from "@/lib/db";
 import { attendance, studentDailyAttendance } from "@/lib/db/schema";
@@ -24,6 +28,18 @@ export async function GET(request: Request) {
   }
 
   const db = await getDb();
+  const scope = await resolveAttendanceAccessScope(db, session?.user);
+  if (!scope || !scope.hasRosterAccess) {
+    return apiError("Forbidden", 403, "FORBIDDEN");
+  }
+  if (!canAccessAttendanceClass(scope, classId)) {
+    return apiError(
+      "Kamu tidak punya akses ke kelas attendance ini.",
+      403,
+      "ATTENDANCE_CLASS_FORBIDDEN",
+    );
+  }
+
   let studentResults: Awaited<
     ReturnType<typeof getAttendanceRosterStudents>
   >["students"] = [];

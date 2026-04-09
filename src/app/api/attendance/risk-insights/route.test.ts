@@ -7,6 +7,9 @@ const getAttendanceRiskNotificationSummaryMock = vi.hoisted(() => vi.fn());
 const getAttendanceRiskNotificationsMock = vi.hoisted(() => vi.fn());
 const getAttendanceRiskSettingsMock = vi.hoisted(() => vi.fn());
 const getAttendanceRiskStudentsMock = vi.hoisted(() => vi.fn());
+const getDbMock = vi.hoisted(() => vi.fn());
+const resolveAttendanceAccessScopeMock = vi.hoisted(() => vi.fn());
+const getAuthorizedAttendanceClassNamesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth/web/auth", () => ({
   auth: authMock,
@@ -25,12 +28,37 @@ vi.mock("@/core/services/attendance-service", () => ({
   getAttendanceRiskStudents: getAttendanceRiskStudentsMock,
 }));
 
+vi.mock("@/lib/db", () => ({
+  getDb: getDbMock,
+}));
+
+vi.mock("@/lib/auth/attendance-access", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/auth/attendance-access")
+  >("@/lib/auth/attendance-access");
+
+  return {
+    ...actual,
+    resolveAttendanceAccessScope: resolveAttendanceAccessScopeMock,
+    getAuthorizedAttendanceClassNames: getAuthorizedAttendanceClassNamesMock,
+  };
+});
+
 import { GET } from "./route";
 
 describe("GET /api/attendance/risk-insights", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getDbMock.mockResolvedValue({});
     requireRoleMock.mockReturnValue(null);
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "teacher-1",
+      role: "teacher",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: false,
+      classIds: ["class-a"],
+    });
+    getAuthorizedAttendanceClassNamesMock.mockResolvedValue(["XII TSM 1"]);
     getAttendanceRiskSettingsMock.mockResolvedValue({
       alphaThreshold: 3,
       lateThreshold: 5,
@@ -63,9 +91,7 @@ describe("GET /api/attendance/risk-insights", () => {
     expect(getAttendanceRiskNotificationsMock).toHaveBeenCalledWith(
       "teacher-1",
     );
-    expect(getAttendanceRiskNotificationSummaryMock).toHaveBeenCalledWith(
-      "teacher-1",
-    );
+    expect(getAttendanceRiskNotificationSummaryMock).not.toHaveBeenCalled();
     expect(getAttendanceRiskAssignmentSummaryMock).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
       data: {
@@ -79,6 +105,13 @@ describe("GET /api/attendance/risk-insights", () => {
   it("allows admin to inspect another assignee and receive assignment summary", async () => {
     authMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
+    });
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "admin-1",
+      role: "admin",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: true,
+      classIds: [],
     });
 
     const response = await GET(
@@ -156,9 +189,66 @@ describe("GET /api/attendance/risk-insights", () => {
     });
   });
 
+  it("auto-scopes a scoped teacher to their only authorized class", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-1", role: "teacher" },
+    });
+
+    const response = await GET(
+      new Request("http://localhost/api/attendance/risk-insights"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getAttendanceRiskStudentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        className: "XII TSM 1",
+      }),
+      expect.anything(),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        className: "XII TSM 1",
+      },
+    });
+  });
+
+  it("rejects scoped teacher risk insights without explicit class filter when multiple classes are authorized", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-1", role: "teacher" },
+    });
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "teacher-1",
+      role: "teacher",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: false,
+      classIds: ["class-a", "class-b"],
+    });
+    getAuthorizedAttendanceClassNamesMock.mockResolvedValue([
+      "XII TSM 1",
+      "XII TSM 2",
+    ]);
+
+    const response = await GET(
+      new Request("http://localhost/api/attendance/risk-insights"),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "ATTENDANCE_CLASS_FILTER_REQUIRED",
+    });
+    expect(getAttendanceRiskStudentsMock).not.toHaveBeenCalled();
+  });
+
   it("passes class filter into admin assignment summary scope", async () => {
     authMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
+    });
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "admin-1",
+      role: "admin",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: true,
+      classIds: [],
     });
 
     const response = await GET(

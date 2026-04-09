@@ -7,7 +7,13 @@ import {
 } from "@/core/services/attendance-service";
 import { requireRole } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
+import {
+  getAuthorizedAttendanceClassNames,
+  resolveAttendanceAccessScope,
+  resolveAttendanceClassNameFilter,
+} from "@/lib/auth/attendance-access";
 import { auth } from "@/lib/auth/web/auth";
+import { getDb } from "@/lib/db";
 
 type SessionUserLike = {
   id?: string;
@@ -52,7 +58,7 @@ export async function GET(request: Request) {
   try {
     const { startDate, endDate } = getCurrentMonthRange();
     const url = new URL(request.url);
-    const className = url.searchParams.get("className")?.trim() || undefined;
+    let className = url.searchParams.get("className")?.trim() || undefined;
     const requestedAssigneeId =
       url.searchParams.get("assigneeUserId")?.trim() || undefined;
     const includeStudents = !isDisabledParam(
@@ -61,6 +67,27 @@ export async function GET(request: Request) {
     const includeAssignmentSummary = !isDisabledParam(
       url.searchParams.get("includeAssignmentSummary"),
     );
+    const db = await getDb();
+    const scope = await resolveAttendanceAccessScope(db, session?.user);
+    if (!scope || !scope.hasRosterAccess) {
+      return apiError("Forbidden", 403, "FORBIDDEN");
+    }
+    const classNames = await getAuthorizedAttendanceClassNames(db, scope);
+    const resolvedClassFilter = resolveAttendanceClassNameFilter(
+      scope,
+      classNames,
+      className,
+    );
+    if (!resolvedClassFilter.ok) {
+      return apiError(
+        resolvedClassFilter.message,
+        resolvedClassFilter.code === "ATTENDANCE_CLASS_FILTER_REQUIRED"
+          ? 400
+          : 403,
+        resolvedClassFilter.code,
+      );
+    }
+    className = resolvedClassFilter.className;
     const canViewAssignmentSummary =
       sessionUser.role === "admin" || sessionUser.role === "super_admin";
     const assigneeUserId =

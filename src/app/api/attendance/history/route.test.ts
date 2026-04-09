@@ -11,6 +11,9 @@ const getAttendanceHistoryStudentSummaryMock = vi.hoisted(() => vi.fn());
 const getAttendanceHistoryTrendMock = vi.hoisted(() => vi.fn());
 const getAttendanceHistoryHeatmapMock = vi.hoisted(() => vi.fn());
 const getAttendanceHistoryAnalyticsBundleMock = vi.hoisted(() => vi.fn());
+const getDbMock = vi.hoisted(() => vi.fn());
+const resolveAttendanceAccessScopeMock = vi.hoisted(() => vi.fn());
+const getAuthorizedAttendanceClassNamesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth/web/auth", () => ({
   auth: authMock,
@@ -32,11 +35,36 @@ vi.mock("@/core/services/attendance-service", () => ({
   getAttendanceHistoryAnalyticsBundle: getAttendanceHistoryAnalyticsBundleMock,
 }));
 
+vi.mock("@/lib/db", () => ({
+  getDb: getDbMock,
+}));
+
+vi.mock("@/lib/auth/attendance-access", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/auth/attendance-access")
+  >("@/lib/auth/attendance-access");
+
+  return {
+    ...actual,
+    resolveAttendanceAccessScope: resolveAttendanceAccessScopeMock,
+    getAuthorizedAttendanceClassNames: getAuthorizedAttendanceClassNamesMock,
+  };
+});
+
 import { GET } from "./route";
 
 describe("GET /api/attendance/history", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getDbMock.mockResolvedValue({});
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "teacher-1",
+      role: "teacher",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: false,
+      classIds: ["class-a"],
+    });
+    getAuthorizedAttendanceClassNamesMock.mockResolvedValue(["X-A"]);
   });
 
   it("scopes student role to own history even when a different studentId is requested", async () => {
@@ -81,8 +109,55 @@ describe("GET /api/attendance/history", () => {
       expect.objectContaining({
         source: "qr",
         status: "late",
+        className: "X-A",
       }),
     );
+  });
+
+  it("auto-scopes scoped teacher history to the only authorized class", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    getAttendanceHistoryMock.mockResolvedValue([]);
+    getAttendanceHistoryCountMock.mockResolvedValue(0);
+
+    const response = await GET(
+      new Request("http://localhost/api/attendance/history?status=present"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getAttendanceHistoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        className: "X-A",
+        status: "present",
+      }),
+    );
+  });
+
+  it("rejects scoped teacher history requests without class filter when multiple classes are authorized", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "teacher-1", role: "teacher" },
+    });
+    requirePermissionMock.mockReturnValue(null);
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "teacher-1",
+      role: "teacher",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: false,
+      classIds: ["class-a", "class-b"],
+    });
+    getAuthorizedAttendanceClassNamesMock.mockResolvedValue(["X-A", "X-B"]);
+
+    const response = await GET(
+      new Request("http://localhost/api/attendance/history"),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "ATTENDANCE_CLASS_FILTER_REQUIRED",
+    });
+    expect(getAttendanceHistoryMock).not.toHaveBeenCalled();
   });
 
   it("forwards class name filter to default history and count paths", async () => {
@@ -90,6 +165,13 @@ describe("GET /api/attendance/history", () => {
       user: { id: "admin-1", role: "admin" },
     });
     requirePermissionMock.mockReturnValue(null);
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "admin-1",
+      role: "admin",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: true,
+      classIds: [],
+    });
     getAttendanceHistoryMock.mockResolvedValue([{ id: "row-1" }]);
     getAttendanceHistoryCountMock.mockResolvedValue(1);
 
@@ -117,6 +199,13 @@ describe("GET /api/attendance/history", () => {
       user: { id: "admin-1", role: "admin" },
     });
     requirePermissionMock.mockReturnValue(null);
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "admin-1",
+      role: "admin",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: true,
+      classIds: [],
+    });
     getAttendanceHistoryExportRowsMock.mockResolvedValue([{ id: "row-1" }]);
     getAttendanceHistoryCountMock.mockResolvedValue(1);
 
@@ -288,6 +377,13 @@ describe("GET /api/attendance/history", () => {
       user: { id: "admin-1", role: "admin" },
     });
     requirePermissionMock.mockReturnValue(null);
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "admin-1",
+      role: "admin",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: true,
+      classIds: [],
+    });
     getAttendanceHistoryTrendMock.mockResolvedValue([]);
 
     const response = await GET(
@@ -309,6 +405,13 @@ describe("GET /api/attendance/history", () => {
       user: { id: "admin-1", role: "admin" },
     });
     requirePermissionMock.mockReturnValue(null);
+    resolveAttendanceAccessScopeMock.mockResolvedValue({
+      userId: "admin-1",
+      role: "admin",
+      hasRosterAccess: true,
+      hasGlobalClassAccess: true,
+      classIds: [],
+    });
     getAttendanceHistoryHeatmapMock.mockResolvedValue([
       {
         date: "2026-03-01",

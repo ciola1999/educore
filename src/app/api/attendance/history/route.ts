@@ -1,6 +1,12 @@
 import { requirePermission } from "@/lib/api/authz";
 import { apiError, apiOk } from "@/lib/api/response";
+import {
+  getAuthorizedAttendanceClassNames,
+  resolveAttendanceAccessScope,
+  resolveAttendanceClassNameFilter,
+} from "@/lib/auth/attendance-access";
 import { auth } from "@/lib/auth/web/auth";
+import { getDb } from "@/lib/db";
 
 type SessionUserLike = {
   id?: string;
@@ -34,7 +40,7 @@ export async function GET(request: Request) {
     sessionRole === "student" ? sessionUserId : requestedStudentId;
   const status = searchParams.get("status") || undefined;
   const searchQuery = searchParams.get("searchQuery") || undefined;
-  const className = searchParams.get("className") || undefined;
+  let className = searchParams.get("className") || undefined;
   const sourceParam = searchParams.get("source");
   const exportMode = searchParams.get("export") === "true";
   const summaryMode = searchParams.get("summary") === "true";
@@ -54,6 +60,31 @@ export async function GET(request: Request) {
     requestedStudentId !== sessionUserId
   ) {
     return apiError("Forbidden", 403);
+  }
+
+  if (sessionRole !== "student") {
+    const db = await getDb();
+    const scope = await resolveAttendanceAccessScope(db, session?.user);
+    if (!scope || !scope.hasRosterAccess) {
+      return apiError("Forbidden", 403, "FORBIDDEN");
+    }
+
+    const classNames = await getAuthorizedAttendanceClassNames(db, scope);
+    const resolvedClassFilter = resolveAttendanceClassNameFilter(
+      scope,
+      classNames,
+      className,
+    );
+    if (!resolvedClassFilter.ok) {
+      return apiError(
+        resolvedClassFilter.message,
+        resolvedClassFilter.code === "ATTENDANCE_CLASS_FILTER_REQUIRED"
+          ? 400
+          : 403,
+        resolvedClassFilter.code,
+      );
+    }
+    className = resolvedClassFilter.className;
   }
 
   try {

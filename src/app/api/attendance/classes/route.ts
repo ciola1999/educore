@@ -1,5 +1,9 @@
 import { requirePermission } from "@/lib/api/authz";
-import { apiOk } from "@/lib/api/response";
+import { apiError, apiOk } from "@/lib/api/response";
+import {
+  getAuthorizedAttendanceClasses,
+  resolveAttendanceAccessScope,
+} from "@/lib/auth/attendance-access";
 import { auth } from "@/lib/auth/web/auth";
 import { dedupeCanonicalClassOptions } from "@/lib/utils/class-name";
 
@@ -12,16 +16,14 @@ export async function GET() {
     return guard;
   }
 
-  const [{ isNull }, { getDb }, { classes }] = await Promise.all([
-    import("drizzle-orm"),
-    import("@/lib/db"),
-    import("@/lib/db/schema"),
-  ]);
+  const [{ getDb }] = await Promise.all([import("@/lib/db")]);
   const db = await getDb();
-  const data = await db
-    .select({ id: classes.id, name: classes.name })
-    .from(classes)
-    .where(isNull(classes.deletedAt));
+  const scope = await resolveAttendanceAccessScope(db, session?.user);
+  if (!scope || !scope.hasRosterAccess) {
+    return apiError("Forbidden", 403, "FORBIDDEN");
+  }
+
+  const data = await getAuthorizedAttendanceClasses(db, scope);
 
   return apiOk(dedupeCanonicalClassOptions(data));
 }
