@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Banknote,
   ClipboardList,
   GraduationCap,
   LayoutDashboard,
@@ -68,6 +69,13 @@ const menuItems: DashboardMenuItem[] = [
     href: "/dashboard/courses",
     color: "text-orange-500",
     phaseTag: "P1",
+  },
+  {
+    label: "Finance",
+    icon: Banknote,
+    href: "/dashboard/finance",
+    color: "text-finance-teal",
+    phaseTag: "P2",
   },
   {
     label: "Settings",

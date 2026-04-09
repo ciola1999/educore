@@ -2,6 +2,7 @@
 
 import {
   ArrowRight,
+  Banknote,
   ClipboardList,
   LayoutDashboard,
   LibraryBig,
@@ -73,6 +74,12 @@ const quickLinks: QuickLink[] = [
     label: "Academic",
     description: "Kelas dan mata pelajaran yang bisa dibaca role aktif.",
     icon: LibraryBig,
+  },
+  {
+    href: "/dashboard/finance",
+    label: "Finance",
+    description: "Billing, payment allocation, audit log, dan general ledger.",
+    icon: Banknote,
   },
   {
     href: "/dashboard/teachers",

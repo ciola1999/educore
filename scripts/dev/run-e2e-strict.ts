@@ -13,6 +13,35 @@ const requiredE2EEnv = [
   "E2E_SETTINGS_PASSWORD",
 ] as const;
 
+function readOptionalCredential(params: {
+  identifier: string;
+  password: string;
+  label: string;
+}) {
+  const identifier = process.env[params.identifier]?.trim() ?? "";
+  const password = process.env[params.password]?.trim() ?? "";
+
+  if (!identifier && !password) {
+    return null;
+  }
+
+  if (!identifier || !password) {
+    throw new Error(
+      [
+        `[E2E STRICT] Incomplete optional credentials for ${params.label}.`,
+        `- missing identifier: ${identifier ? "no" : "yes"} (${params.identifier})`,
+        `- missing password: ${password ? "no" : "yes"} (${params.password})`,
+      ].join("\n"),
+    );
+  }
+
+  return {
+    label: params.label,
+    identifier,
+    password,
+  };
+}
+
 function readMissingEnv() {
   return requiredE2EEnv.filter((name) => {
     const value = process.env[name];
@@ -338,7 +367,7 @@ async function clearE2EAuthRateLimits(identifiers: string[]) {
     }
   }
 
-  const client = createAuthDbClient();
+  const client = await createAuthDbClient();
   for (const key of emailKeys) {
     await client.execute({
       sql: "DELETE FROM auth_rate_limits WHERE scope = ? AND key = ?",
@@ -464,6 +493,15 @@ async function run() {
       password: process.env.E2E_SETTINGS_PASSWORD?.trim() ?? "",
     },
   ];
+
+  const optionalFinanceCredential = readOptionalCredential({
+    label: "finance",
+    identifier: "E2E_FINANCE_IDENTIFIER",
+    password: "E2E_FINANCE_PASSWORD",
+  });
+  if (optionalFinanceCredential) {
+    credentialSet.push(optionalFinanceCredential);
+  }
 
   await clearE2EAuthRateLimits(
     credentialSet.map((credential) => credential.identifier),
