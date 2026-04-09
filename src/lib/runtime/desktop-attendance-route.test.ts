@@ -2,6 +2,97 @@ import { describe, expect, it, vi } from "vitest";
 import { handleDesktopAttendanceRoute } from "./desktop-attendance-route";
 
 describe("desktop attendance route", () => {
+  it("delegates attendance class roster requests through the desktop path", async () => {
+    const handleAttendance = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+    const url = new URL("http://desktop.local/api/attendance/classes");
+    const pathSegments = ["api", "attendance", "classes"];
+
+    const response = await handleDesktopAttendanceRoute(
+      url,
+      "GET",
+      pathSegments,
+      null,
+      {
+        handleAttendance,
+      },
+    );
+
+    expect(handleAttendance).toHaveBeenCalledWith(
+      url,
+      "GET",
+      pathSegments,
+      null,
+    );
+    expect(response?.status).toBe(200);
+  });
+
+  it("delegates attendance student roster requests through the desktop path", async () => {
+    const handleAttendance = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+    const url = new URL(
+      "http://desktop.local/api/attendance/students?classId=class-a&date=2026-04-09",
+    );
+    const pathSegments = ["api", "attendance", "students"];
+
+    const response = await handleDesktopAttendanceRoute(
+      url,
+      "GET",
+      pathSegments,
+      null,
+      {
+        handleAttendance,
+      },
+    );
+
+    expect(handleAttendance).toHaveBeenCalledWith(
+      url,
+      "GET",
+      pathSegments,
+      null,
+    );
+    expect(response?.status).toBe(200);
+  });
+
+  it("delegates attendance bulk mutation requests through the desktop path", async () => {
+    const handleAttendance = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+    const url = new URL("http://desktop.local/api/attendance/bulk");
+    const pathSegments = ["api", "attendance", "bulk"];
+    const payload = {
+      classId: "class-a",
+      date: "2026-04-09",
+      records: [],
+    };
+
+    const response = await handleDesktopAttendanceRoute(
+      url,
+      "POST",
+      pathSegments,
+      payload,
+      {
+        handleAttendance,
+      },
+    );
+
+    expect(handleAttendance).toHaveBeenCalledWith(
+      url,
+      "POST",
+      pathSegments,
+      payload,
+    );
+    expect(response?.status).toBe(200);
+  });
+
   it("delegates attendance request to the local attendance handler", async () => {
     const handleAttendance = vi
       .fn()

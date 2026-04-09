@@ -88,7 +88,9 @@ export function extractClientIp(request: unknown): string {
 }
 
 async function ensureRateLimitTable(client: Client) {
-  if (rateLimitTableReady) return;
+  if (rateLimitTableReady) {
+    return;
+  }
 
   await client.execute(`
     CREATE TABLE IF NOT EXISTS auth_rate_limits (
@@ -188,6 +190,7 @@ export async function resetRateLimit(
   key: string,
 ) {
   await ensureRateLimitTable(client);
+
   await client.execute({
     sql: "DELETE FROM auth_rate_limits WHERE scope = ? AND key = ?",
     args: [scope, key],

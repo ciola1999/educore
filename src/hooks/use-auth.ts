@@ -316,7 +316,15 @@ export function useAuth() {
   const status = runtimeSession.status;
   const sessionUser = session?.user ? buildUserSession(session.user) : null;
   const isLoading = !hasMounted || (!desktopRuntime && status === "loading");
-  const resolvedUser = hasMounted ? (sessionUser ?? user) : null;
+  const resolvedUser = hasMounted
+    ? desktopRuntime
+      ? (sessionUser ?? user)
+      : status === "authenticated"
+        ? sessionUser
+        : status === "unauthenticated"
+          ? null
+          : (sessionUser ?? user)
+    : null;
   const isAuthenticated = resolvedUser !== null;
   const authSource: AuthSource =
     hasMounted && sessionUser
@@ -357,12 +365,7 @@ export function useAuth() {
       return;
     }
 
-    if (
-      user &&
-      !desktopRuntime &&
-      status === "unauthenticated" &&
-      authSource !== "desktop-store"
-    ) {
+    if (user && !desktopRuntime && status === "unauthenticated") {
       clearUser();
     }
   }, [
@@ -373,7 +376,6 @@ export function useAuth() {
     clearUser,
     desktopRuntime,
     hasMounted,
-    authSource,
   ]);
 
   /**

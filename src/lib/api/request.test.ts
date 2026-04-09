@@ -11,12 +11,16 @@ vi.mock("@/lib/runtime/desktop-local-api", () => ({
   handleDesktopLocalApiRequest: handleDesktopLocalApiRequestMock,
 }));
 
-import { apiGet, isDesktopLocalOnlyApiRoute } from "./request";
+import { apiGet, apiPost, isDesktopLocalOnlyApiRoute } from "./request";
 
 describe("api request desktop boundary", () => {
   const desktopCoreRoutes = [
     "/api/academic-years",
+    "/api/attendance/bulk",
+    "/api/attendance/classes",
     "/api/attendance/history",
+    "/api/attendance/risk-insights",
+    "/api/attendance/students",
     "/api/auth/login",
     "/api/auth/logout",
     "/api/classes",
@@ -84,5 +88,17 @@ describe("api request desktop boundary", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     fetchMock.mockRestore();
+  });
+
+  it("fails secure for desktop-local attendance mutations when no local handler exists", async () => {
+    handleDesktopLocalApiRequestMock.mockResolvedValue(null);
+
+    await expect(
+      apiPost("/api/attendance/bulk", {
+        classId: "class-a",
+        date: "2026-04-09",
+        records: [],
+      }),
+    ).rejects.toThrow("Runtime desktop tidak menemukan handler API lokal");
   });
 });
