@@ -1,5 +1,3 @@
-import { createClient } from "@libsql/client";
-
 const LIBSQL_SCHEMES = ["libsql:", "https:", "http:", "ws:", "wss:", "file:"];
 
 const AUTH_DATABASE_TOKEN_ENV_KEYS = [
@@ -53,9 +51,23 @@ export function resolveAuthDatabaseToken(
   return undefined;
 }
 
-export function createAuthDbClient() {
-  return createClient({
-    url: resolveAuthDatabaseUrl(),
-    authToken: resolveAuthDatabaseToken(),
-  });
+export async function createAuthDbClient() {
+  const url = resolveAuthDatabaseUrl();
+  const authToken = resolveAuthDatabaseToken();
+
+  // Edge/Web safety:
+  // Next.js middleware (Edge) cannot use the native '@libsql/client'
+  const isEdge =
+    typeof (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime !==
+    "undefined";
+
+  if (isEdge) {
+    const { createClient: createWebClient } = await import(
+      "@libsql/client/web"
+    );
+    return createWebClient({ url, authToken });
+  }
+
+  const { createClient: createNodeClient } = await import("@libsql/client");
+  return createNodeClient({ url, authToken });
 }

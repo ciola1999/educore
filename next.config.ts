@@ -9,8 +9,7 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   reactStrictMode: true,
-
-  reactCompiler: true,
+  reactCompiler: process.env.NEXT_REACT_COMPILER !== "0",
 };
 
 export default nextConfig;

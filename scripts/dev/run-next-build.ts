@@ -57,11 +57,17 @@ function resetNextBuildOutput() {
   });
 }
 
+function shouldResetNextBuildOutput() {
+  return process.env.EDUCORE_FORCE_CLEAN_NEXT_BUILD === "1";
+}
+
 function run() {
   const nodeMajor = getNodeMajorVersion();
   const env = { ...process.env };
 
-  resetNextBuildOutput();
+  if (shouldResetNextBuildOutput()) {
+    resetNextBuildOutput();
+  }
 
   // Node >= 22 may warn when localStorage flag is malformed/empty.
   // Normalize once so Next worker processes get a valid path.
@@ -83,7 +89,14 @@ function run() {
   const runtimeBinary = basename(process.execPath).toLowerCase().includes("bun")
     ? "node"
     : process.execPath;
-  const result = spawnSync(runtimeBinary, [nextBin, "build", "--webpack"], {
+  const useWebpack = env.EDUCORE_NEXT_BUILD_WEBPACK !== "0";
+  const args = [
+    nextBin,
+    "build",
+    ...(useWebpack ? ["--webpack"] : []),
+    ...(env.EDUCORE_NEXT_BUILD_PROFILE === "1" ? ["--profile"] : []),
+  ];
+  const result = spawnSync(runtimeBinary, args, {
     stdio: "inherit",
     env,
   });

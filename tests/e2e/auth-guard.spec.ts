@@ -48,6 +48,7 @@ test.describe("Auth guard", () => {
   for (const protectedPath of [
     "/dashboard",
     "/dashboard/attendance",
+    "/dashboard/finance",
     "/dashboard/students",
     "/dashboard/settings",
   ]) {
