@@ -13,6 +13,7 @@ function getArg(name: string, fallback: string): string {
 }
 
 async function main() {
+  const client = await createAuthDbClient();
   const email = getArg("--email", "admin@educore.school").toLowerCase();
   const password = getArg("--password", "admin123");
 
@@ -20,7 +21,6 @@ async function main() {
     throw new Error("Password minimal 8 karakter.");
   }
 
-  const client = createAuthDbClient();
   const passwordHash = await hashPassword(password);
 
   const updateResult = await client.execute({

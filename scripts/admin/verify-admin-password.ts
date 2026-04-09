@@ -5,7 +5,7 @@ async function main() {
   const email = (process.argv[2] || "admin@educore.school").toLowerCase();
   const plainPassword = process.argv[3] || "admin123";
 
-  const client = createAuthDbClient();
+  const client = await createAuthDbClient();
   const result = await client.execute({
     sql: "SELECT email, password_hash FROM users WHERE lower(email)=lower(?) LIMIT 1",
     args: [email],

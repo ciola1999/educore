@@ -1,8 +1,9 @@
 // @ts-nocheck
-import { createClient } from "@libsql/client";
+
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { createClient } from "@libsql/client";
 
 function resolveDesktopDbPath() {
   const appData = process.env.APPDATA;
@@ -60,7 +61,9 @@ async function queryCloudAll(client, sql, args = []) {
 const recordId = process.argv[2];
 
 if (!recordId) {
-  throw new Error("Usage: bun run scripts/debug-guru-mapel-sync-record.ts <guru_mapel_id>");
+  throw new Error(
+    "Usage: bun run scripts/debug-guru-mapel-sync-record.ts <guru_mapel_id>",
+  );
 }
 
 const dbPath = resolveDesktopDbPath();

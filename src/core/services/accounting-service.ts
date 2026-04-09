@@ -1,0 +1,174 @@
+import { eq } from "drizzle-orm";
+import type { getDb } from "@/lib/db";
+import { accounts, journalEntries, journalLines } from "@/lib/db/schema";
+
+type DbClient = Awaited<ReturnType<typeof getDb>>;
+type DbWithJournalQuery = Pick<DbClient, "query" | "select">;
+type AccountingTx = Pick<DbClient, "select" | "insert">;
+
+/**
+ * AccountingService (Auto-Posting Engine Phase 4.0)
+ * Handles automatic generation of double-entry ledger entries.
+ */
+export const AccountingService = {
+  /**
+   * Internal helper to find account by name or code.
+   * This handles standard accounting mappings for the EduCore platform.
+   */
+  async findAccount(db: AccountingTx, nameOrCode: string) {
+    const [account] = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.code, nameOrCode))
+      .limit(1);
+
+    if (account) return account;
+
+    // Fallback: search by name
+    const [byName] = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.name, nameOrCode))
+      .limit(1);
+
+    return byName;
+  },
+
+  /**
+   * Posts GL entries for an Invoice.
+   * Standard: Debit [AR (Accounts Receivable)], Credit [Revenue].
+   */
+  async postInvoice(
+    tx: AccountingTx,
+    data: {
+      id: string;
+      no: string;
+      amount: number;
+      description: string;
+    },
+  ) {
+    const arAccount = await AccountingService.findAccount(tx, "10200"); // Standard AR Code
+    const revAccount = await AccountingService.findAccount(tx, "40000"); // Standard Revenue Code
+
+    if (!arAccount || !revAccount) {
+      console.warn(
+        "Unable to find standard accounts (10200/40000) for auto-posting. Skipping Ledger.",
+      );
+      return;
+    }
+
+    const journalId = crypto.randomUUID();
+
+    // 1. Header
+    await tx.insert(journalEntries).values({
+      id: journalId,
+      date: new Date(),
+      description: `Auto-post Invoice: ${data.no} - ${data.description}`,
+      referenceId: data.id,
+      referenceType: "INVOICE",
+      isAutoPost: true,
+      createdAt: new Date(),
+    });
+
+    // 2. Debit AR
+    await tx.insert(journalLines).values({
+      id: crypto.randomUUID(),
+      journalId,
+      accountId: arAccount.id,
+      debit: data.amount,
+      credit: 0,
+      createdAt: new Date(),
+    });
+
+    // 3. Credit Revenue
+    await tx.insert(journalLines).values({
+      id: crypto.randomUUID(),
+      journalId,
+      accountId: revAccount.id,
+      debit: 0,
+      credit: data.amount,
+      createdAt: new Date(),
+    });
+  },
+
+  /**
+   * Posts GL entries for a Payment.
+   * Standard: Debit [Cash/Bank], Credit [AR (Accounts Receivable)].
+   */
+  async postPayment(
+    tx: AccountingTx,
+    data: {
+      id: string;
+      no: string;
+      amount: number;
+      methodName: string;
+    },
+  ) {
+    const cashAccount = await AccountingService.findAccount(tx, "10100"); // Standard Cash Code
+    const arAccount = await AccountingService.findAccount(tx, "10200"); // Standard AR Code
+
+    if (!cashAccount || !arAccount) {
+      console.warn(
+        "Unable to find standard accounts (10100/10200) for auto-posting. Skipping Ledger.",
+      );
+      return;
+    }
+
+    const journalId = crypto.randomUUID();
+
+    // 1. Header
+    await tx.insert(journalEntries).values({
+      id: journalId,
+      date: new Date(),
+      description: `Auto-post Payment: ${data.no} - ${data.methodName}`,
+      referenceId: data.id,
+      referenceType: "PAYMENT",
+      isAutoPost: true,
+      createdAt: new Date(),
+    });
+
+    // 2. Debit Cash
+    await tx.insert(journalLines).values({
+      id: crypto.randomUUID(),
+      journalId,
+      accountId: cashAccount.id,
+      debit: data.amount,
+      credit: 0,
+      createdAt: new Date(),
+    });
+
+    // 3. Credit AR
+    await tx.insert(journalLines).values({
+      id: crypto.randomUUID(),
+      journalId,
+      accountId: arAccount.id,
+      debit: 0,
+      credit: data.amount,
+      createdAt: new Date(),
+    });
+  },
+
+  /**
+   * Fetches all journal entries with their lines and account details.
+   */
+  async getJournalEntries(db: DbWithJournalQuery) {
+    const entries = await db.query.journalEntries.findMany({
+      with: {
+        lines: {
+          with: {
+            account: true,
+          },
+        },
+      },
+      orderBy: (journal, { desc }) => [desc(journal.date)],
+    });
+    return entries;
+  },
+
+  /**
+   * Fetches full Chart of Accounts (COA).
+   */
+  async getAccounts(db: DbClient) {
+    return await db.select().from(accounts).orderBy(accounts.code);
+  },
+};

@@ -54,14 +54,15 @@ describe("getApiErrorMessage", () => {
     });
   });
 
-  it("returns a friendly failure payload for invalid json responses", async () => {
+  it("returns a desktop-boundary specific failure payload for html responses", async () => {
     const response = new Response("<html>oops</html>", { status: 500 });
     const payload = await readApiResponse(response);
 
     expect(payload).toEqual({
       success: false,
-      error: "Server mengembalikan respons yang tidak valid.",
-      code: "INVALID_RESPONSE_FORMAT",
+      error:
+        "Runtime desktop tidak mengembalikan JSON API. Jalur /api kemungkinan belum terhubung ke server lokal.",
+      code: "INVALID_RESPONSE_HTML",
     });
   });
 });

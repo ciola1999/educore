@@ -1,7 +1,7 @@
 import { createAuthDbClient } from "@/lib/auth/web/db";
 
 async function main() {
-  const client = createAuthDbClient();
+  const client = await createAuthDbClient();
   const result = await client.execute({
     sql: `SELECT scope, key, attempts, first_attempt_at, blocked_until, updated_at
           FROM auth_rate_limits
