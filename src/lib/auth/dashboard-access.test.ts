@@ -45,4 +45,33 @@ describe("dashboard access policy", () => {
     );
     expect(isAllowedDashboardPath("student", "/dashboard/courses")).toBe(false);
   });
+
+  it("allows finance nested routes for roles that have finance dashboard access", () => {
+    expect(isAllowedDashboardPath("admin", "/dashboard/finance/payments")).toBe(
+      true,
+    );
+    expect(isAllowedDashboardPath("staff", "/dashboard/finance/invoices")).toBe(
+      true,
+    );
+    expect(
+      isAllowedDashboardPath("teacher", "/dashboard/finance/payments"),
+    ).toBe(false);
+  });
+
+  it("grants expected dashboard access for headmaster and auditor", () => {
+    expect(isAllowedDashboardPath("headmaster", "/dashboard/teachers")).toBe(
+      true,
+    );
+    expect(isAllowedDashboardPath("headmaster", "/dashboard/finance")).toBe(
+      true,
+    );
+    expect(isAllowedDashboardPath("auditor", "/dashboard/finance/audit")).toBe(
+      true,
+    );
+    expect(isAllowedDashboardPath("auditor", "/dashboard/teachers")).toBe(
+      false,
+    );
+    expect(DASHBOARD_ROLE_DEFAULT_PATH.headmaster).toBe("/dashboard");
+    expect(DASHBOARD_ROLE_DEFAULT_PATH.auditor).toBe("/dashboard");
+  });
 });

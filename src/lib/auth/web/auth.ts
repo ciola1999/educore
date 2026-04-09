@@ -52,7 +52,7 @@ async function verifyAndUpgradeLegacyPassword(params: {
   }
 
   try {
-    const client = createAuthDbClient();
+    const client = await createAuthDbClient();
     const nextHash = await hashPassword(password);
     await client.execute({
       sql: "UPDATE users SET password_hash = ?, updated_at = CAST(strftime('%s', 'now') AS INTEGER), sync_status = 'pending' WHERE id = ?",
@@ -115,7 +115,7 @@ function getAuthBundle(): AuthBundle {
           const password = credentials.password as string;
 
           try {
-            const client = createAuthDbClient();
+            const client = await createAuthDbClient();
             const clientIp = extractClientIp(request);
             const identifier = normalizeLoginIdentifier(email);
             const emailCandidates = buildLoginEmailCandidates(identifier);
@@ -225,7 +225,7 @@ function getAuthBundle(): AuthBundle {
           return token;
         }
 
-        const client = createAuthDbClient();
+        const client = await createAuthDbClient();
         const userState = await getUserSessionState(client, token.id as string);
 
         if (

@@ -59,7 +59,7 @@ type SessionUserLike = {
 };
 
 async function ensureTelemetryTable() {
-  const client = createAuthDbClient();
+  const client = await createAuthDbClient();
   await client.execute({
     sql: `CREATE TABLE IF NOT EXISTS ${TELEMETRY_TABLE} (
       id TEXT PRIMARY KEY,
@@ -81,7 +81,7 @@ async function ensureTelemetryTable() {
 
 async function enforceTelemetryRetention() {
   const cutoff = Math.floor(Date.now() / 1000) - TELEMETRY_RETENTION_SECONDS;
-  const client = createAuthDbClient();
+  const client = await createAuthDbClient();
   await client.execute({
     sql: `DELETE FROM ${TELEMETRY_TABLE} WHERE created_at < ?`,
     args: [cutoff],
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
 
   try {
     await ensureTelemetryTable();
-    const client = createAuthDbClient();
+    const client = await createAuthDbClient();
     await enforceTelemetryRetention();
 
     for (const entry of events) {
@@ -193,7 +193,7 @@ export async function GET(request: Request) {
   try {
     await ensureTelemetryTable();
     await enforceTelemetryRetention();
-    const client = createAuthDbClient();
+    const client = await createAuthDbClient();
 
     const windowStart =
       Math.floor(Date.now() / 1000) - queryValidation.data.hours * 60 * 60;

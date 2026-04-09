@@ -76,6 +76,22 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   student: ["attendance:read"],
   parent: ["academic:read", "attendance:read", "finance:read"],
+  headmaster: [
+    "users:read",
+    "academic:read",
+    "academic:write",
+    "attendance:read",
+    "attendance:write",
+    "finance:read",
+    "reports:generate",
+  ],
+  auditor: [
+    "users:read",
+    "academic:read",
+    "attendance:read",
+    "finance:read",
+    "reports:generate",
+  ],
 };
 
 /**

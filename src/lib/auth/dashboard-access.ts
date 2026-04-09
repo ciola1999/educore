@@ -5,6 +5,7 @@ export const DASHBOARD_ROLE_ALLOWED_PATHS: Record<AuthRole, string[]> = {
     "/dashboard",
     "/dashboard/students",
     "/dashboard/attendance",
+    "/dashboard/finance",
     "/dashboard/teachers",
     "/dashboard/courses",
     "/dashboard/settings",
@@ -13,6 +14,7 @@ export const DASHBOARD_ROLE_ALLOWED_PATHS: Record<AuthRole, string[]> = {
     "/dashboard",
     "/dashboard/students",
     "/dashboard/attendance",
+    "/dashboard/finance",
     "/dashboard/teachers",
     "/dashboard/courses",
     "/dashboard/settings",
@@ -26,12 +28,29 @@ export const DASHBOARD_ROLE_ALLOWED_PATHS: Record<AuthRole, string[]> = {
   staff: [
     "/dashboard",
     "/dashboard/attendance",
+    "/dashboard/finance",
     "/dashboard/courses",
     "/dashboard/settings",
   ],
   parent: [
     "/dashboard",
     "/dashboard/attendance",
+    "/dashboard/courses",
+    "/dashboard/settings",
+  ],
+  headmaster: [
+    "/dashboard",
+    "/dashboard/students",
+    "/dashboard/attendance",
+    "/dashboard/finance",
+    "/dashboard/teachers",
+    "/dashboard/courses",
+    "/dashboard/settings",
+  ],
+  auditor: [
+    "/dashboard",
+    "/dashboard/attendance",
+    "/dashboard/finance",
     "/dashboard/courses",
     "/dashboard/settings",
   ],
@@ -44,6 +63,8 @@ export const DASHBOARD_ROLE_DEFAULT_PATH: Record<AuthRole, string> = {
   teacher: "/dashboard",
   staff: "/dashboard",
   parent: "/dashboard",
+  headmaster: "/dashboard",
+  auditor: "/dashboard",
   student: "/dashboard/students",
 };
 
@@ -52,5 +73,15 @@ export function isAllowedDashboardPath(
   pathname: string,
 ): boolean {
   const allowedPaths = DASHBOARD_ROLE_ALLOWED_PATHS[role];
-  return allowedPaths.includes(pathname);
+  return allowedPaths.some((allowedPath) => {
+    if (pathname === allowedPath) {
+      return true;
+    }
+
+    if (allowedPath === "/dashboard") {
+      return false;
+    }
+
+    return pathname.startsWith(`${allowedPath}/`);
+  });
 }

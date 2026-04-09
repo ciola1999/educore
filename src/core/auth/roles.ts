@@ -1,6 +1,8 @@
 export const AUTH_ROLES = [
   "super_admin",
   "admin",
+  "headmaster",
+  "auditor",
   "teacher",
   "staff",
   "student",
