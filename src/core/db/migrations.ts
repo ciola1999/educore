@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { getDefaultAdminHash } from "@/lib/auth/hash";
 
 /**
@@ -252,6 +253,84 @@ async function retireLegacyScheduleTableIfEmpty(
     }
     throw error;
   }
+}
+
+async function consolidateCreditBalancesByStudent(
+  db: DatabaseLike,
+): Promise<void> {
+  await db.execute(`
+    WITH ranked AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY student_id
+          ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(created_at, 0) DESC, id DESC
+        ) AS row_rank,
+        SUM(amount) OVER (PARTITION BY student_id) AS merged_amount,
+        MAX(last_used_at) OVER (PARTITION BY student_id) AS merged_last_used_at,
+        MAX(updated_at) OVER (PARTITION BY student_id) AS merged_updated_at
+      FROM credit_balances
+      WHERE deleted_at IS NULL
+    )
+    UPDATE credit_balances
+    SET
+      amount = COALESCE(
+        (SELECT merged_amount FROM ranked WHERE ranked.id = credit_balances.id),
+        amount
+      ),
+      last_used_at = COALESCE(
+        (SELECT merged_last_used_at FROM ranked WHERE ranked.id = credit_balances.id),
+        last_used_at
+      ),
+      updated_at = COALESCE(
+        (SELECT merged_updated_at FROM ranked WHERE ranked.id = credit_balances.id),
+        updated_at
+      ),
+      sync_status = 'pending'
+    WHERE id IN (SELECT id FROM ranked WHERE row_rank = 1)
+  `);
+
+  await db.execute(`
+    WITH ranked AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY student_id
+          ORDER BY COALESCE(updated_at, 0) DESC, COALESCE(created_at, 0) DESC, id DESC
+        ) AS row_rank
+      FROM credit_balances
+      WHERE deleted_at IS NULL
+    )
+    DELETE FROM credit_balances
+    WHERE id IN (SELECT id FROM ranked WHERE row_rank > 1)
+  `);
+}
+
+async function consolidateFinancePeriodsByWindow(
+  db: DatabaseLike,
+): Promise<void> {
+  await db.execute(`
+    WITH ranked AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (
+          PARTITION BY start_date, end_date
+          ORDER BY
+            CASE status
+              WHEN 'OPEN' THEN 0
+              WHEN 'SOFT_CLOSED' THEN 1
+              ELSE 2
+            END,
+            COALESCE(updated_at, 0) DESC,
+            COALESCE(created_at, 0) DESC,
+            id DESC
+        ) AS row_rank
+      FROM finance_periods
+      WHERE deleted_at IS NULL
+    )
+    DELETE FROM finance_periods
+    WHERE id IN (SELECT id FROM ranked WHERE row_rank > 1)
+  `);
 }
 
 async function seedClassesFromLegacyData(db: DatabaseLike): Promise<void> {
@@ -761,6 +840,97 @@ async function ensureUserStudentProjectionTriggers(
       WHERE id = OLD.id OR nis = OLD.nis;
     END;
   `);
+}
+
+async function seedFinanceMasterData(db: DatabaseLike): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+
+  // 1. Default Accounts (COA)
+  const defaultAccounts = [
+    { code: "10100", name: "Cash on Hand", type: "ASSET" },
+    { code: "10200", name: "Accounts Receivable", type: "ASSET" },
+    { code: "40000", name: "Education Revenue", type: "REVENUE" },
+    { code: "50000", name: "Operational Expenses", type: "EXPENSE" },
+  ];
+
+  for (const acc of defaultAccounts) {
+    const existing = await db.select(
+      "SELECT id FROM accounts WHERE code = ? LIMIT 1",
+      [acc.code],
+    );
+    if (existing.length === 0) {
+      await db.execute(
+        `INSERT INTO accounts (id, code, name, type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), acc.code, acc.name, acc.type, now, now],
+      );
+    }
+  }
+
+  // 2. Default Payment Methods
+  const defaultMethods = [
+    { name: "Cash", code: "CASH", isElectronic: 0 },
+    { name: "Bank Transfer", code: "TRANSFER", isElectronic: 1 },
+  ];
+
+  for (const method of defaultMethods) {
+    const existing = await db.select(
+      "SELECT id FROM payment_methods WHERE code = ? LIMIT 1",
+      [method.code],
+    );
+    if (existing.length === 0) {
+      await db.execute(
+        `INSERT INTO payment_methods (id, name, code, is_electronic, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          method.name,
+          method.code,
+          method.isElectronic,
+          now,
+          now,
+        ],
+      );
+    }
+  }
+
+  // 3. Default Active Period (Start of Current Month)
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const endOfMonth = new Date(
+    startOfMonth.getFullYear(),
+    startOfMonth.getMonth() + 1,
+    0,
+  );
+  endOfMonth.setHours(23, 59, 59, 999);
+
+  const startEpoch = Math.floor(startOfMonth.getTime() / 1000);
+  const endEpoch = Math.floor(endOfMonth.getTime() / 1000);
+  const existingPeriod = await db.select(
+    `SELECT id
+     FROM finance_periods
+     WHERE start_date = ?
+       AND end_date = ?
+       AND deleted_at IS NULL
+     LIMIT 1`,
+    [startEpoch, endEpoch],
+  );
+  if (existingPeriod.length === 0) {
+    await db.execute(
+      `INSERT INTO finance_periods (id, name, start_date, end_date, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        crypto.randomUUID(),
+        format(startOfMonth, "MMMM yyyy").toUpperCase(),
+        startEpoch,
+        endEpoch,
+        "OPEN",
+        now,
+        now,
+      ],
+    );
+  }
 }
 
 async function seedDefaultAdmin(
@@ -1696,13 +1866,13 @@ export async function runMigrations(
     )
   `);
 
-  // --- FINANCE ---
+  // --- PHASE 2.4 - 5.0: NEW FINANCIAL SYSTEM ---
   await db.execute(`
-    CREATE TABLE IF NOT EXISTS "kategori_biaya" (
+    CREATE TABLE IF NOT EXISTS "billing_categories" (
       "id" TEXT PRIMARY KEY NOT NULL,
-      "nama" TEXT NOT NULL,
-      "deskripsi" TEXT,
-      "tipe" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "is_active" INTEGER NOT NULL DEFAULT 1,
       "version" INTEGER NOT NULL DEFAULT 1,
       "hlc" TEXT,
       "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
@@ -1713,20 +1883,12 @@ export async function runMigrations(
   `);
 
   await db.execute(`
-    CREATE TABLE IF NOT EXISTS "tagihan" (
+    CREATE TABLE IF NOT EXISTS "payment_methods" (
       "id" TEXT PRIMARY KEY NOT NULL,
-      "siswa_id" TEXT NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
-      "kategori_id" TEXT NOT NULL REFERENCES "kategori_biaya"("id"),
-      "nomor_tagihan" TEXT UNIQUE NOT NULL,
-      "bulan" INTEGER,
-      "tahun" INTEGER,
-      "deskripsi" TEXT,
-      "jumlah" INTEGER NOT NULL,
-      "jatuh_tempo" INTEGER NOT NULL,
-      "status" TEXT NOT NULL DEFAULT 'belum_lunas',
-      "tanggal_lunas" INTEGER,
-      "metode_pembayaran" TEXT,
-      "bukti_pembayaran" TEXT,
+      "name" TEXT NOT NULL,
+      "code" TEXT UNIQUE,
+      "is_electronic" INTEGER NOT NULL DEFAULT 0,
+      "is_active" INTEGER NOT NULL DEFAULT 1,
       "version" INTEGER NOT NULL DEFAULT 1,
       "hlc" TEXT,
       "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
@@ -1737,14 +1899,11 @@ export async function runMigrations(
   `);
 
   await db.execute(`
-    CREATE TABLE IF NOT EXISTS "pembayaran" (
+    CREATE TABLE IF NOT EXISTS "accounts" (
       "id" TEXT PRIMARY KEY NOT NULL,
-      "tagihan_id" TEXT NOT NULL REFERENCES "tagihan"("id") ON DELETE CASCADE,
-      "jumlah" INTEGER NOT NULL,
-      "tanggal_bayar" INTEGER NOT NULL,
-      "metode" TEXT NOT NULL,
-      "referensi" TEXT,
-      "catatan" TEXT,
+      "code" TEXT UNIQUE NOT NULL,
+      "name" TEXT NOT NULL,
+      "type" TEXT NOT NULL,
       "version" INTEGER NOT NULL DEFAULT 1,
       "hlc" TEXT,
       "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
@@ -1753,6 +1912,289 @@ export async function runMigrations(
       "sync_status" TEXT NOT NULL DEFAULT 'pending'
     )
   `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "billing_batches" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'DRAFT',
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "invoices" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "invoice_no" TEXT UNIQUE NOT NULL,
+      "student_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "batch_id" TEXT REFERENCES "billing_batches"("id"),
+      "category_id" TEXT NOT NULL REFERENCES "billing_categories"("id"),
+      "due_date" INTEGER NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'OPEN',
+      "total_amount" INTEGER NOT NULL,
+      "total_paid" INTEGER NOT NULL DEFAULT 0,
+      "outstanding" INTEGER NOT NULL,
+      "discount_total" INTEGER NOT NULL DEFAULT 0,
+      "penalty_total" INTEGER NOT NULL DEFAULT 0,
+      "student_snapshot" TEXT,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "invoice_items" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "invoice_id" TEXT NOT NULL REFERENCES "invoices"("id") ON DELETE CASCADE,
+      "description" TEXT NOT NULL,
+      "amount" INTEGER NOT NULL,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "invoice_discounts" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "invoice_id" TEXT NOT NULL REFERENCES "invoices"("id") ON DELETE CASCADE,
+      "description" TEXT NOT NULL,
+      "amount" INTEGER NOT NULL,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "invoice_penalties" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "invoice_id" TEXT NOT NULL REFERENCES "invoices"("id") ON DELETE CASCADE,
+      "description" TEXT NOT NULL,
+      "amount" INTEGER NOT NULL,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "payments" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "payment_no" TEXT UNIQUE NOT NULL,
+      "student_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "method_id" TEXT NOT NULL REFERENCES "payment_methods"("id"),
+      "amount" INTEGER NOT NULL,
+      "date" INTEGER NOT NULL,
+      "is_confirmed" INTEGER NOT NULL DEFAULT 0,
+      "confirmed_at" INTEGER,
+      "confirmed_by" TEXT REFERENCES "users"("id"),
+      "reference_no" TEXT,
+      "notes" TEXT,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "payment_allocations" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "payment_id" TEXT NOT NULL REFERENCES "payments"("id") ON DELETE CASCADE,
+      "invoice_id" TEXT NOT NULL REFERENCES "invoices"("id") ON DELETE CASCADE,
+      "amount" INTEGER NOT NULL,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "receipts" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "payment_id" TEXT NOT NULL REFERENCES "payments"("id") ON DELETE CASCADE,
+      "receipt_no" TEXT UNIQUE NOT NULL,
+      "snapshot" TEXT NOT NULL,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "credit_balances" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "student_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "amount" INTEGER NOT NULL,
+      "last_used_at" INTEGER,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "journal_entries" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "date" INTEGER NOT NULL,
+      "description" TEXT NOT NULL,
+      "reference_id" TEXT,
+      "reference_type" TEXT,
+      "is_auto_post" INTEGER NOT NULL DEFAULT 1,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "journal_lines" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "journal_id" TEXT NOT NULL REFERENCES "journal_entries"("id") ON DELETE CASCADE,
+      "account_id" TEXT NOT NULL REFERENCES "accounts"("id"),
+      "debit" INTEGER NOT NULL DEFAULT 0,
+      "credit" INTEGER NOT NULL DEFAULT 0,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "finance_periods" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "name" TEXT NOT NULL,
+      "start_date" INTEGER NOT NULL,
+      "end_date" INTEGER NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'OPEN',
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "approval_requests" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "type" TEXT NOT NULL,
+      "requested_by" TEXT NOT NULL REFERENCES "users"("id"),
+      "target_id" TEXT NOT NULL,
+      "target_type" TEXT NOT NULL,
+      "payload" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "handled_by" TEXT REFERENCES "users"("id"),
+      "handled_at" INTEGER,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "finance_logs" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "action" TEXT NOT NULL,
+      "actor_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "old_data" TEXT,
+      "new_data" TEXT,
+      "ip_address" TEXT,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "hlc" TEXT,
+      "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      "deleted_at" INTEGER,
+      "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  try {
+    await consolidateCreditBalancesByStudent(db);
+  } catch {
+    // no-op
+  }
+
+  try {
+    await consolidateFinancePeriodsByWindow(db);
+  } catch {
+    // no-op
+  }
+
+  try {
+    await db.execute(
+      `CREATE INDEX IF NOT EXISTS "invoice_student_id_idx" ON "invoices" ("student_id")`,
+    );
+  } catch {
+    // no-op
+  }
+
+  try {
+    await db.execute(
+      `CREATE INDEX IF NOT EXISTS "payment_student_id_idx" ON "payments" ("student_id")`,
+    );
+  } catch {
+    // no-op
+  }
+
+  try {
+    await db.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "credit_balance_student_id_unique" ON "credit_balances" ("student_id")`,
+    );
+  } catch {
+    // no-op
+  }
+
+  try {
+    await db.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "finance_period_window_unique" ON "finance_periods" ("start_date", "end_date")`,
+    );
+  } catch {
+    // no-op
+  }
+
+  // --- LEGACY FINANCE (To be deprecated) ---
 
   // --- COMMUNICATION ---
   await db.execute(`
@@ -1771,6 +2213,19 @@ export async function runMigrations(
       "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
       "deleted_at" INTEGER,
       "sync_status" TEXT NOT NULL DEFAULT 'pending'
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS "auth_rate_limits" (
+      "scope" TEXT NOT NULL,
+      "key" TEXT NOT NULL,
+      "attempts" INTEGER NOT NULL DEFAULT 0,
+      "first_attempt_at" INTEGER NOT NULL,
+      "blocked_until" INTEGER,
+      "created_at" INTEGER NOT NULL,
+      "updated_at" INTEGER NOT NULL,
+      PRIMARY KEY ("scope", "key")
     )
   `);
 
@@ -2093,6 +2548,7 @@ export async function runMigrations(
     await seedClassesFromLegacyData(db);
     await syncStudentsFromUsers(db);
     await seedDefaultAttendanceSettings(db);
+    await seedFinanceMasterData(db);
   } else {
     console.info("ℹ️ [Migration] Seed phase skipped for read-only inspection.");
   }

@@ -135,9 +135,15 @@ export async function createBatchInvoicesAction(
         ? input.studentIds
         : (
             await db
-              .select({ id: students.id })
-              .from(students)
-              .where(and(isNull(students.deletedAt)))
+              .select({ id: users.id })
+              .from(users)
+              .where(
+                and(
+                  eq(users.role, "student"),
+                  eq(users.isActive, true),
+                  isNull(users.deletedAt),
+                ),
+              )
           ).map((student) => student.id);
 
     if (resolvedStudentIds.length === 0) {
@@ -204,16 +210,22 @@ export async function searchStudentsAction(query: string) {
     const db = await getDb();
     const result = await db
       .select({
-        id: students.id,
-        nis: students.nis,
-        fullName: students.fullName,
+        id: users.id,
+        nis: users.nis,
+        fullName: users.fullName,
         grade: students.grade,
       })
-      .from(students)
+      .from(users)
+      .leftJoin(
+        students,
+        and(eq(students.nis, users.nis), isNull(students.deletedAt)),
+      )
       .where(
-        or(
-          like(students.fullName, `%${query}%`),
-          like(students.nis, `%${query}%`),
+        and(
+          eq(users.role, "student"),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+          or(like(users.fullName, `%${query}%`), like(users.nis, `%${query}%`)),
         ),
       )
       .limit(10);

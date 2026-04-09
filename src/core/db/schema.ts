@@ -381,7 +381,262 @@ export const raport = sqliteTable("raport", {
   ...syncMetadata,
 });
 
-// --- 5. FINANCE ---
+// --- 5. FINANCE (PHASE 2.4 - NEW FINANCIAL SYSTEM) ---
+// Transition Note: These tables replace the minimal legacy payment tables below.
+// All financial transactions should target this modular system for audit compliance.
+
+export const billingCategories = sqliteTable("billing_categories", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  ...syncMetadata,
+});
+
+export const paymentMethods = sqliteTable("payment_methods", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  name: text("name").notNull(),
+  code: text("code").unique(),
+  isElectronic: integer("is_electronic", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  ...syncMetadata,
+});
+
+export const accounts = sqliteTable("accounts", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  code: text("code").unique().notNull(),
+  name: text("name").notNull(),
+  type: text("type", {
+    enum: ["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"],
+  }).notNull(),
+  ...syncMetadata,
+});
+
+export const billingBatches = sqliteTable("billing_batches", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status", { enum: ["DRAFT", "PROCESSED", "CANCELLED"] })
+    .notNull()
+    .default("DRAFT"),
+  ...syncMetadata,
+});
+
+export const invoices = sqliteTable(
+  "invoices",
+  {
+    id: text("id").primaryKey().$defaultFn(generateId),
+    invoiceNo: text("invoice_no").unique().notNull(),
+    studentId: text("student_id")
+      .notNull()
+      .references(() => users.id),
+    batchId: text("batch_id").references(() => billingBatches.id),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => billingCategories.id),
+    dueDate: integer("due_date", { mode: "timestamp" }).notNull(),
+    status: text("status", {
+      enum: [
+        "DRAFT",
+        "OPEN",
+        "PARTIAL",
+        "PAID",
+        "OVERPAID",
+        "VOID",
+        "WRITEOFF",
+      ],
+    })
+      .notNull()
+      .default("OPEN"),
+    totalAmount: integer("total_amount").notNull(),
+    totalPaid: integer("total_paid").notNull().default(0),
+    outstanding: integer("outstanding").notNull(),
+    discountTotal: integer("discount_total").notNull().default(0),
+    penaltyTotal: integer("penalty_total").notNull().default(0),
+    studentSnapshot: text("student_snapshot"), // JSON snapshot of student data at billing time
+    ...syncMetadata,
+  },
+  (table) => ({
+    invoiceNoIdx: uniqueIndex("invoice_no_idx").on(table.invoiceNo),
+    studentIdIdx: index("invoice_student_id_idx").on(table.studentId),
+  }),
+);
+
+export const invoiceItems = sqliteTable("invoice_items", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  invoiceId: text("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  amount: integer("amount").notNull(),
+  ...syncMetadata,
+});
+
+export const invoiceDiscounts = sqliteTable("invoice_discounts", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  invoiceId: text("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  amount: integer("amount").notNull(),
+  ...syncMetadata,
+});
+
+export const invoicePenalties = sqliteTable("invoice_penalties", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  invoiceId: text("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  amount: integer("amount").notNull(),
+  ...syncMetadata,
+});
+
+export const payments = sqliteTable(
+  "payments",
+  {
+    id: text("id").primaryKey().$defaultFn(generateId),
+    paymentNo: text("payment_no").unique().notNull(),
+    studentId: text("student_id")
+      .notNull()
+      .references(() => users.id),
+    methodId: text("method_id")
+      .notNull()
+      .references(() => paymentMethods.id),
+    amount: integer("amount").notNull(),
+    date: integer("date", { mode: "timestamp" }).notNull(),
+    isConfirmed: integer("is_confirmed", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp" }),
+    confirmedBy: text("confirmed_by").references(() => users.id),
+    referenceNo: text("reference_no"),
+    notes: text("notes"),
+    ...syncMetadata,
+  },
+  (table) => ({
+    paymentNoIdx: uniqueIndex("payment_no_idx").on(table.paymentNo),
+    studentIdIdx: index("payment_student_id_idx").on(table.studentId),
+  }),
+);
+
+export const paymentAllocations = sqliteTable("payment_allocations", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  paymentId: text("payment_id")
+    .notNull()
+    .references(() => payments.id, { onDelete: "cascade" }),
+  invoiceId: text("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  ...syncMetadata,
+});
+
+export const receipts = sqliteTable("receipts", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  paymentId: text("payment_id")
+    .notNull()
+    .references(() => payments.id, { onDelete: "cascade" }),
+  receiptNo: text("receipt_no").unique().notNull(),
+  snapshot: text("snapshot").notNull(), // JSON detailed snapshot for audit
+  ...syncMetadata,
+});
+
+export const creditBalances = sqliteTable(
+  "credit_balances",
+  {
+    id: text("id").primaryKey().$defaultFn(generateId),
+    studentId: text("student_id")
+      .notNull()
+      .references(() => users.id),
+    amount: integer("amount").notNull(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp" }),
+    ...syncMetadata,
+  },
+  (table) => ({
+    studentIdUnique: uniqueIndex("credit_balance_student_id_unique").on(
+      table.studentId,
+    ),
+  }),
+);
+
+export const journalEntries = sqliteTable("journal_entries", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  date: integer("date", { mode: "timestamp" }).notNull(),
+  description: text("description").notNull(),
+  referenceId: text("reference_id"), // link to invoice_id or payment_id
+  referenceType: text("reference_type"),
+  isAutoPost: integer("is_auto_post", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  ...syncMetadata,
+});
+
+export const journalLines = sqliteTable("journal_lines", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  journalId: text("journal_id")
+    .notNull()
+    .references(() => journalEntries.id, { onDelete: "cascade" }),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => accounts.id),
+  debit: integer("debit").notNull().default(0),
+  credit: integer("credit").notNull().default(0),
+  ...syncMetadata,
+});
+
+export const financePeriods = sqliteTable(
+  "finance_periods",
+  {
+    id: text("id").primaryKey().$defaultFn(generateId),
+    name: text("name").notNull(),
+    startDate: integer("start_date", { mode: "timestamp" }).notNull(),
+    endDate: integer("end_date", { mode: "timestamp" }).notNull(),
+    status: text("status", { enum: ["OPEN", "SOFT_CLOSED", "CLOSED"] })
+      .notNull()
+      .default("OPEN"),
+    ...syncMetadata,
+  },
+  (table) => ({
+    periodWindowUnique: uniqueIndex("finance_period_window_unique").on(
+      table.startDate,
+      table.endDate,
+    ),
+  }),
+);
+
+export const approvalRequests = sqliteTable("approval_requests", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  type: text("type").notNull(), // e.g., REFUND, VOID, WRITEOFF
+  requestedBy: text("requested_by")
+    .notNull()
+    .references(() => users.id),
+  targetId: text("target_id").notNull(),
+  targetType: text("target_type").notNull(),
+  payload: text("payload"), // JSON details of change
+  status: text("status", { enum: ["PENDING", "APPROVED", "REJECTED"] })
+    .notNull()
+    .default("PENDING"),
+  handledBy: text("handled_by").references(() => users.id),
+  handledAt: integer("handled_at", { mode: "timestamp" }),
+  ...syncMetadata,
+});
+
+export const financeLogs = sqliteTable("finance_logs", {
+  id: text("id").primaryKey().$defaultFn(generateId),
+  action: text("action").notNull(),
+  actorId: text("actor_id")
+    .notNull()
+    .references(() => users.id),
+  oldData: text("old_data"), // JSON
+  newData: text("new_data"), // JSON
+  ipAddress: text("ip_address"),
+  ...syncMetadata,
+});
+
+// --- LEGACY FINANCE (To be deprecated) ---
 
 export const kategoriBiaya = sqliteTable("kategori_biaya", {
   id: text("id").primaryKey().$defaultFn(generateId),
@@ -688,6 +943,154 @@ export const classesRelations = relations(classes, ({ many, one }) => ({
   }),
 }));
 
+// --- FINANCE RELATIONS (PHASE 2.4) ---
+
+export const billingCategoriesRelations = relations(
+  billingCategories,
+  ({ many }) => ({
+    invoices: many(invoices),
+  }),
+);
+
+export const paymentMethodsRelations = relations(
+  paymentMethods,
+  ({ many }) => ({
+    payments: many(payments),
+  }),
+);
+
+export const accountsRelations = relations(accounts, ({ many }) => ({
+  journalLines: many(journalLines),
+}));
+
+export const billingBatchesRelations = relations(
+  billingBatches,
+  ({ many }) => ({
+    invoices: many(invoices),
+  }),
+);
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  student: one(users, { fields: [invoices.studentId], references: [users.id] }),
+  batch: one(billingBatches, {
+    fields: [invoices.batchId],
+    references: [billingBatches.id],
+  }),
+  category: one(billingCategories, {
+    fields: [invoices.categoryId],
+    references: [billingCategories.id],
+  }),
+  items: many(invoiceItems),
+  discounts: many(invoiceDiscounts),
+  penalties: many(invoicePenalties),
+  allocations: many(paymentAllocations),
+}));
+
+export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [invoiceItems.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const invoiceDiscountsRelations = relations(
+  invoiceDiscounts,
+  ({ one }) => ({
+    invoice: one(invoices, {
+      fields: [invoiceDiscounts.invoiceId],
+      references: [invoices.id],
+    }),
+  }),
+);
+
+export const invoicePenaltiesRelations = relations(
+  invoicePenalties,
+  ({ one }) => ({
+    invoice: one(invoices, {
+      fields: [invoicePenalties.invoiceId],
+      references: [invoices.id],
+    }),
+  }),
+);
+
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  student: one(users, { fields: [payments.studentId], references: [users.id] }),
+  method: one(paymentMethods, {
+    fields: [payments.methodId],
+    references: [paymentMethods.id],
+  }),
+  confirmedBy: one(users, {
+    fields: [payments.confirmedBy],
+    references: [users.id],
+  }),
+  allocations: many(paymentAllocations),
+  receipts: many(receipts),
+}));
+
+export const paymentAllocationsRelations = relations(
+  paymentAllocations,
+  ({ one }) => ({
+    payment: one(payments, {
+      fields: [paymentAllocations.paymentId],
+      references: [payments.id],
+    }),
+    invoice: one(invoices, {
+      fields: [paymentAllocations.invoiceId],
+      references: [invoices.id],
+    }),
+  }),
+);
+
+export const receiptsRelations = relations(receipts, ({ one }) => ({
+  payment: one(payments, {
+    fields: [receipts.paymentId],
+    references: [payments.id],
+  }),
+}));
+
+export const creditBalancesRelations = relations(creditBalances, ({ one }) => ({
+  student: one(users, {
+    fields: [creditBalances.studentId],
+    references: [users.id],
+  }),
+}));
+
+export const journalEntriesRelations = relations(
+  journalEntries,
+  ({ many }) => ({
+    lines: many(journalLines),
+  }),
+);
+
+export const journalLinesRelations = relations(journalLines, ({ one }) => ({
+  journal: one(journalEntries, {
+    fields: [journalLines.journalId],
+    references: [journalEntries.id],
+  }),
+  account: one(accounts, {
+    fields: [journalLines.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const approvalRequestsRelations = relations(
+  approvalRequests,
+  ({ one }) => ({
+    requestedBy: one(users, {
+      fields: [approvalRequests.requestedBy],
+      references: [users.id],
+    }),
+    handledBy: one(users, {
+      fields: [approvalRequests.handledBy],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const financeLogsRelations = relations(financeLogs, ({ one }) => ({
+  actor: one(users, { fields: [financeLogs.actorId], references: [users.id] }),
+}));
+
 // --- TYPE EXPORTS ---
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -710,3 +1113,39 @@ export type StudentDailyAttendanceEntry =
 export type NewStudentDailyAttendanceEntry =
   typeof studentDailyAttendance.$inferInsert;
 export type StudentIdCard = typeof studentIdCards.$inferSelect;
+
+// --- FINANCE TYPE EXPORTS (PHASE 2.4) ---
+export type BillingCategory = typeof billingCategories.$inferSelect;
+export type NewBillingCategory = typeof billingCategories.$inferInsert;
+export type PaymentMethod = typeof paymentMethods.$inferSelect;
+export type NewPaymentMethod = typeof paymentMethods.$inferInsert;
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;
+export type BillingBatch = typeof billingBatches.$inferSelect;
+export type NewBillingBatch = typeof billingBatches.$inferInsert;
+export type Invoice = typeof invoices.$inferSelect;
+export type NewInvoice = typeof invoices.$inferInsert;
+export type InvoiceItem = typeof invoiceItems.$inferSelect;
+export type NewInvoiceItem = typeof invoiceItems.$inferInsert;
+export type InvoiceDiscount = typeof invoiceDiscounts.$inferSelect;
+export type NewInvoiceDiscount = typeof invoiceDiscounts.$inferInsert;
+export type InvoicePenalty = typeof invoicePenalties.$inferSelect;
+export type NewInvoicePenalty = typeof invoicePenalties.$inferInsert;
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
+export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
+export type NewPaymentAllocation = typeof paymentAllocations.$inferInsert;
+export type Receipt = typeof receipts.$inferSelect;
+export type NewReceipt = typeof receipts.$inferInsert;
+export type CreditBalance = typeof creditBalances.$inferSelect;
+export type NewCreditBalance = typeof creditBalances.$inferInsert;
+export type JournalEntry = typeof journalEntries.$inferSelect;
+export type NewJournalEntry = typeof journalEntries.$inferInsert;
+export type JournalLine = typeof journalLines.$inferSelect;
+export type NewJournalLine = typeof journalLines.$inferInsert;
+export type FinancePeriod = typeof financePeriods.$inferSelect;
+export type NewFinancePeriod = typeof financePeriods.$inferInsert;
+export type ApprovalRequest = typeof approvalRequests.$inferSelect;
+export type NewApprovalRequest = typeof approvalRequests.$inferInsert;
+export type FinanceLog = typeof financeLogs.$inferSelect;
+export type NewFinanceLog = typeof financeLogs.$inferInsert;

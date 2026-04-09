@@ -82,7 +82,7 @@ describe("finance actions", () => {
     const actorFromMock = vi.fn().mockReturnValue({ where: actorWhereMock });
     const studentWhereMock = vi
       .fn()
-      .mockResolvedValue([{ id: "student-1" }, { id: "student-2" }]);
+      .mockResolvedValue([{ id: "user-student-1" }, { id: "user-student-2" }]);
     const studentFromMock = vi.fn().mockReturnValue({
       where: studentWhereMock,
     });
@@ -111,7 +111,7 @@ describe("finance actions", () => {
     expect(financeServiceMock.createBatchInvoices).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({
-        studentIds: ["student-1", "student-2"],
+        studentIds: ["user-student-1", "user-student-2"],
       }),
     );
     expect(result).toEqual({

@@ -4,14 +4,31 @@ import { isWeb } from "@/core/env";
 import { getDb } from "../db";
 
 import {
+  accounts,
+  approvalRequests,
   attendance,
   attendanceSettings,
+  billingBatches,
+  billingCategories,
   classes,
+  creditBalances,
+  financeLogs,
+  financePeriods,
   guruMapel,
   holidays,
+  invoiceDiscounts,
+  invoiceItems,
+  invoicePenalties,
+  invoices,
   jadwal,
+  journalEntries,
+  journalLines,
   notifikasi,
+  paymentAllocations,
+  paymentMethods,
+  payments,
   permissions,
+  receipts,
   rolePermissions,
   roles,
   semester,
@@ -145,6 +162,12 @@ export const snakeToCamel = (obj: SnakeRecord): SnakeRecord => {
     "tanggal_masuk",
     "tanggal_keluar",
     "tanggal_perolehan",
+    // New Finance Columns (Phase 2.4+)
+    "due_date",
+    "confirmed_at",
+    "handled_at",
+    "start_date",
+    "end_date",
   ]);
   const result: SnakeRecord = {};
   for (const key of Object.keys(obj)) {
@@ -211,14 +234,13 @@ export function generateUpsertSql(
 }
 
 const SYNC_TABLES: SyncTableConfig[] = [
+  // --- CORE IDENTITY ---
   {
     name: "users",
     table: users,
     conflictKey: "email",
     logicalKey: "email",
-    foreignKeyRemaps: {
-      kelasId: "classes",
-    },
+    foreignKeyRemaps: { kelasId: "classes" },
   },
   { name: "roles", table: roles, conflictKey: "id", logicalKey: "name" },
   {
@@ -231,20 +253,16 @@ const SYNC_TABLES: SyncTableConfig[] = [
     name: "user_roles",
     table: userRoles,
     conflictKey: "id",
-    foreignKeyRemaps: {
-      userId: "users",
-      roleId: "roles",
-    },
+    foreignKeyRemaps: { userId: "users", roleId: "roles" },
   },
   {
     name: "role_permissions",
     table: rolePermissions,
     conflictKey: "id",
-    foreignKeyRemaps: {
-      roleId: "roles",
-      permissionId: "permissions",
-    },
+    foreignKeyRemaps: { roleId: "roles", permissionId: "permissions" },
   },
+
+  // --- ACADEMIC ---
   {
     name: "tahun_ajaran",
     table: tahunAjaran,
@@ -256,9 +274,7 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: semester,
     conflictKey: "id",
     logicalKey: ["tahunAjaranId", "nama"],
-    foreignKeyRemaps: {
-      tahunAjaranId: "tahun_ajaran",
-    },
+    foreignKeyRemaps: { tahunAjaranId: "tahun_ajaran" },
   },
   { name: "subjects", table: subjects, conflictKey: "id", logicalKey: "code" },
   {
@@ -284,19 +300,16 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: jadwal,
     conflictKey: "id",
     logicalKey: ["guruMapelId", "hari", "jamMulai", "jamSelesai"],
-    foreignKeyRemaps: {
-      guruMapelId: "guru_mapel",
-    },
+    foreignKeyRemaps: { guruMapelId: "guru_mapel" },
   },
   { name: "students", table: students, conflictKey: "id", logicalKey: "nis" },
+
+  // --- ATTENDANCE ---
   {
     name: "attendance",
     table: attendance,
     conflictKey: "id",
-    foreignKeyRemaps: {
-      studentId: "students",
-      classId: "classes",
-    },
+    foreignKeyRemaps: { studentId: "students", classId: "classes" },
   },
   {
     name: "attendance_settings",
@@ -309,17 +322,115 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: studentDailyAttendance,
     conflictKey: "id",
     logicalKey: ["studentId", "date"],
+    foreignKeyRemaps: { studentId: "students" },
+  },
+
+  // --- FINANCE PHASE 2.4 - 5.0 (NEW REPLICATION GRAPH) ---
+  { name: "billing_categories", table: billingCategories, conflictKey: "id" },
+  {
+    name: "payment_methods",
+    table: paymentMethods,
+    conflictKey: "id",
+    logicalKey: "code",
+  },
+  { name: "accounts", table: accounts, conflictKey: "id", logicalKey: "code" },
+  {
+    name: "finance_periods",
+    table: financePeriods,
+    conflictKey: "id",
+    logicalKey: ["startDate", "endDate"],
+  },
+  { name: "billing_batches", table: billingBatches, conflictKey: "id" },
+  {
+    name: "invoices",
+    table: invoices,
+    conflictKey: "id",
+    logicalKey: "invoiceNo",
     foreignKeyRemaps: {
-      studentId: "students",
+      studentId: "users",
+      batchId: "billing_batches",
+      categoryId: "billing_categories",
     },
   },
+  {
+    name: "invoice_items",
+    table: invoiceItems,
+    conflictKey: "id",
+    foreignKeyRemaps: { invoiceId: "invoices" },
+  },
+  {
+    name: "invoice_discounts",
+    table: invoiceDiscounts,
+    conflictKey: "id",
+    foreignKeyRemaps: { invoiceId: "invoices" },
+  },
+  {
+    name: "invoice_penalties",
+    table: invoicePenalties,
+    conflictKey: "id",
+    foreignKeyRemaps: { invoiceId: "invoices" },
+  },
+  {
+    name: "payments",
+    table: payments,
+    conflictKey: "id",
+    logicalKey: "paymentNo",
+    foreignKeyRemaps: {
+      studentId: "users",
+      methodId: "payment_methods",
+      confirmedBy: "users",
+    },
+  },
+  {
+    name: "payment_allocations",
+    table: paymentAllocations,
+    conflictKey: "id",
+    foreignKeyRemaps: { paymentId: "payments", invoiceId: "invoices" },
+  },
+  {
+    name: "receipts",
+    table: receipts,
+    conflictKey: "id",
+    logicalKey: "receiptNo",
+    foreignKeyRemaps: { paymentId: "payments" },
+  },
+  {
+    name: "credit_balances",
+    table: creditBalances,
+    conflictKey: "id",
+    logicalKey: "studentId",
+    foreignKeyRemaps: { studentId: "users" },
+  },
+  {
+    name: "journal_entries",
+    table: journalEntries,
+    conflictKey: "id",
+  },
+  {
+    name: "journal_lines",
+    table: journalLines,
+    conflictKey: "id",
+    foreignKeyRemaps: { journalId: "journal_entries", accountId: "accounts" },
+  },
+  {
+    name: "approval_requests",
+    table: approvalRequests,
+    conflictKey: "id",
+    foreignKeyRemaps: { requestedBy: "users", handledBy: "users" },
+  },
+  {
+    name: "finance_logs",
+    table: financeLogs,
+    conflictKey: "id",
+    foreignKeyRemaps: { actorId: "users" },
+  },
+
+  // --- COMMUNICATION ---
   {
     name: "notifikasi",
     table: notifikasi,
     conflictKey: "id",
-    foreignKeyRemaps: {
-      userId: "users",
-    },
+    foreignKeyRemaps: { userId: "users" },
   },
 ];
 

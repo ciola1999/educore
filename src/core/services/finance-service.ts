@@ -1,5 +1,15 @@
 import { format } from "date-fns";
-import { and, asc, desc, eq, gte, inArray, isNull, like } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  like,
+  or,
+} from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   billingBatches,
@@ -27,6 +37,38 @@ import {
 import { AccountingService } from "./accounting-service";
 import { FinanceControlService } from "./finance-control-service";
 
+const DOC_NO_SEQUENCE_WIDTH = 4;
+const DOC_NO_SUFFIX_LENGTH = 6;
+
+function buildDocNoPattern(prefix: string, year: string, month: string) {
+  return new RegExp(
+    `^${prefix}/${year}/${month}/(\\d{${DOC_NO_SEQUENCE_WIDTH}})(?:/[A-Z0-9]+)?$`,
+  );
+}
+
+function extractDocSequence(
+  value: string,
+  prefix: string,
+  year: string,
+  month: string,
+) {
+  const match = buildDocNoPattern(prefix, year, month).exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(match[1] ?? "", 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function buildDocNoSuffix() {
+  return crypto
+    .randomUUID()
+    .replace(/-/g, "")
+    .slice(0, DOC_NO_SUFFIX_LENGTH)
+    .toUpperCase();
+}
+
 /**
  * FinanceService (Core Unified Engine Phase 2.4 - 5.0)
  * The heart of EduCore Financials: Handling Billing, Payments, Ledger Posting, and Control.
@@ -35,7 +77,8 @@ import { FinanceControlService } from "./finance-control-service";
 export const FinanceService = {
   /**
    * Generates a unique document number (Invoice, Payment, Receipt)
-   * Pattern: PREFIX/YYYY/MM/SEQUENCE (e.g., INV/2026/04/0001)
+   * Pattern: PREFIX/YYYY/MM/SEQUENCE/SUFFIX (e.g., INV/2026/04/0001/ABC123)
+   * Sequence remains human-readable while the suffix reduces cross-device sync collisions.
    */
   async generateNo(
     // biome-ignore lint/suspicious/noExplicitAny: Generic DB or TX object
@@ -60,12 +103,18 @@ export const FinanceService = {
 
     let seq = 1;
     if (last[0]) {
-      const parts = (last[0].no as string).split("/");
-      const lastSeq = Number.parseInt(parts[parts.length - 1], 10);
-      if (!Number.isNaN(lastSeq)) seq = lastSeq + 1;
+      const lastSeq = extractDocSequence(
+        last[0].no as string,
+        prefix,
+        year,
+        month,
+      );
+      if (lastSeq !== null) seq = lastSeq + 1;
     }
 
-    return `${base}/${seq.toString().padStart(4, "0")}`;
+    return `${base}/${seq
+      .toString()
+      .padStart(DOC_NO_SEQUENCE_WIDTH, "0")}/${buildDocNoSuffix()}`;
   },
 
   /**
@@ -78,8 +127,36 @@ export const FinanceService = {
   ) {
     const [studentData] = await db
       .select({
-        id: students.id,
-        fullName: students.fullName,
+        id: users.id,
+        fullName: users.fullName,
+        nis: users.nis,
+        nisn: students.nisn,
+        grade: students.grade,
+        parentName: students.parentName,
+        photo: users.foto,
+      })
+      .from(users)
+      .leftJoin(
+        students,
+        and(eq(students.nis, users.nis), isNull(students.deletedAt)),
+      )
+      .where(
+        and(
+          eq(users.id, studentId),
+          eq(users.role, "student"),
+          isNull(users.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (studentData) {
+      return JSON.stringify(studentData);
+    }
+
+    const [legacyStudentData] = await db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
         nis: students.nis,
         nisn: students.nisn,
         grade: students.grade,
@@ -87,12 +164,18 @@ export const FinanceService = {
         photo: users.foto,
       })
       .from(students)
-      .leftJoin(users, eq(students.id, users.id))
+      .leftJoin(
+        users,
+        and(
+          isNull(users.deletedAt),
+          or(eq(users.id, students.id), eq(users.nis, students.nis)),
+        ),
+      )
       .where(and(eq(students.id, studentId), isNull(students.deletedAt)))
       .limit(1);
 
-    if (!studentData) return null;
-    return JSON.stringify(studentData);
+    if (!legacyStudentData?.id) return null;
+    return JSON.stringify(legacyStudentData);
   },
 
   /**
