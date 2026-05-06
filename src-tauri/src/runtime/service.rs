@@ -1,8 +1,9 @@
 use crate::desktop_config::resolve_provisioned_runtime_env;
 use std::{
     fs,
+    fs::OpenOptions,
     net::TcpListener,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread::sleep,
@@ -148,6 +149,44 @@ fn generate_desktop_session_token() -> String {
         .collect()
 }
 
+fn sanitize_node_options(input: Option<&str>, storage_file: &Path) -> String {
+    let mut sanitized_tokens: Vec<String> = Vec::new();
+    let mut has_localstorage_option = false;
+
+    for token in input
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        if token == "--localstorage-file" {
+            has_localstorage_option = true;
+            continue;
+        }
+
+        if let Some(raw_value) = token.strip_prefix("--localstorage-file=") {
+            has_localstorage_option = true;
+            if !raw_value.trim().is_empty() {
+                sanitized_tokens.push(token.to_string());
+            }
+            continue;
+        }
+
+        sanitized_tokens.push(token.to_string());
+    }
+
+    let storage_token = format!("--localstorage-file={}", storage_file.display());
+    if !has_localstorage_option
+        || !sanitized_tokens
+            .iter()
+            .any(|token| token.starts_with("--localstorage-file="))
+    {
+        sanitized_tokens.push(storage_token);
+    }
+
+    sanitized_tokens.join(" ")
+}
+
 fn desktop_runtime_resource_dir<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
     let resource_dir = app_handle
         .path()
@@ -159,6 +198,24 @@ fn desktop_runtime_resource_dir<R: Runtime>(app_handle: &AppHandle<R>) -> Result
 
 fn runtime_bundle_config_path<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
     Ok(desktop_runtime_resource_dir(app_handle)?.join("runtime-config.json"))
+}
+
+fn runtime_log_dir<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
+    let dir = app_handle
+        .path()
+        .app_log_dir()
+        .map_err(|error| format!("Gagal membaca app_log_dir desktop runtime: {error}"))?;
+
+    if !dir.exists() {
+        fs::create_dir_all(&dir).map_err(|error| {
+            format!(
+                "Gagal membuat app_log_dir desktop runtime di {}: {error}",
+                dir.display()
+            )
+        })?;
+    }
+
+    Ok(dir)
 }
 
 fn runtime_bundle_archive_path<R: Runtime>(
@@ -298,6 +355,26 @@ fn resolve_runtime_paths<R: Runtime>(
     Ok((node_path, app_dir, server_path))
 }
 
+fn resolve_runtime_localstorage_file(app_dir: &Path) -> Result<PathBuf, String> {
+    let next_dir = app_dir.join(".next");
+    fs::create_dir_all(&next_dir).map_err(|error| {
+        format!(
+            "Gagal menyiapkan direktori .next embedded runtime di {}: {error}",
+            next_dir.display()
+        )
+    })?;
+
+    Ok(next_dir.join("node-localstorage"))
+}
+
+fn open_runtime_log_file(path: &Path) -> Result<fs::File, String> {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("Gagal membuka file log runtime di {}: {error}", path.display()))
+}
+
 fn extracted_runtime_root<R: Runtime>(
     app_handle: &AppHandle<R>,
     bundle_config: &EmbeddedRuntimeBundleConfig,
@@ -384,6 +461,10 @@ fn spawn_embedded_runtime<R: Runtime>(
     let bundle_config = load_embedded_runtime_bundle_config(app_handle)?;
     let provisioned_env = resolve_provisioned_runtime_env(app_handle)?;
     let (node_path, app_dir, server_path) = resolve_runtime_paths(app_handle, &bundle_config)?;
+    let localstorage_file = resolve_runtime_localstorage_file(&app_dir)?;
+    let log_dir = runtime_log_dir(app_handle)?;
+    let stdout_log_path = log_dir.join("embedded-runtime.stdout.log");
+    let stderr_log_path = log_dir.join("embedded-runtime.stderr.log");
     let selected_port = select_loopback_port(&config.loopback_host, bundle_config.port)?;
     let desktop_session_token = generate_desktop_session_token();
 
@@ -391,14 +472,19 @@ fn spawn_embedded_runtime<R: Runtime>(
     command.arg(&server_path);
     command.current_dir(&app_dir);
     command.stdin(Stdio::null());
-    command.stdout(Stdio::null());
-    command.stderr(Stdio::null());
+    command.stdout(Stdio::from(open_runtime_log_file(&stdout_log_path)?));
+    command.stderr(Stdio::from(open_runtime_log_file(&stderr_log_path)?));
     #[cfg(target_os = "windows")]
     command.creation_flags(CREATE_NO_WINDOW);
 
     for (key, value) in &bundle_config.env {
         command.env(key, value);
     }
+    let sanitized_node_options = sanitize_node_options(
+        std::env::var("NODE_OPTIONS").ok().as_deref(),
+        &localstorage_file,
+    );
+    command.env("NODE_OPTIONS", sanitized_node_options);
     command.env("AUTH_DATABASE_URL", &provisioned_env.auth_database_url);
     command.env(
         "AUTH_DATABASE_AUTH_TOKEN",
@@ -423,6 +509,16 @@ fn spawn_embedded_runtime<R: Runtime>(
         format!("http://{}:{}", config.loopback_host, selected_port),
     );
     command.env(DESKTOP_LOOPBACK_ENV_TOKEN, &desktop_session_token);
+
+    log::info!(
+        "[DesktopRuntime] Spawning embedded runtime: node={} server={} cwd={} stdout_log={} stderr_log={} port={}",
+        node_path.display(),
+        server_path.display(),
+        app_dir.display(),
+        stdout_log_path.display(),
+        stderr_log_path.display(),
+        selected_port
+    );
 
     let child = command.spawn().map_err(|error| {
         format!(
@@ -493,6 +589,7 @@ fn check_child_exited(state: &DesktopRuntimeManagerState) -> Result<Option<Strin
         manager.active_port = None;
         manager.desktop_session_token = None;
         let message = format!("Embedded runtime berhenti lebih awal dengan status {status}.");
+        log::error!("[DesktopRuntime] {message}");
         manager.last_error = Some(message.clone());
         return Ok(Some(message));
     }
@@ -685,6 +782,12 @@ pub fn setup_desktop_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Result<()
         tauri::async_runtime::block_on(ensure_runtime_bootstrap_ready_internal(app_handle, &state, true))?;
 
     if !result.ok {
+        log::error!(
+            "[DesktopRuntime] Bootstrap failed. phase={} action={} message={}",
+            result.phase,
+            result.action,
+            result.message
+        );
         set_bootstrap_window_state(app_handle, "error", "Bootstrap desktop gagal.", &result.message);
         let _ = window.show();
         return Err(result.message);

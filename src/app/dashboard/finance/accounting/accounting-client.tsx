@@ -20,16 +20,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { FinanceJournalEntryView } from "../types";
+import type { FinanceAccountView, FinanceJournalEntryView } from "../types";
+import { ManualAdjustmentDialog } from "./manual-adjustment-dialog";
 
 export function AccountingClient({
   entries,
+  accounts,
+  desktopRuntime = false,
 }: {
   entries: FinanceJournalEntryView[];
+  accounts: FinanceAccountView[];
+  desktopRuntime?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
+  const { user } = useAuth();
+  const canManageAdjustments =
+    user?.role === "admin" || user?.role === "super_admin";
 
   const filteredEntries = entries.filter(
     (e) =>
@@ -43,6 +52,21 @@ export function AccountingClient({
 
   return (
     <div className="space-y-8 pb-20">
+      {desktopRuntime && !canManageAdjustments ? (
+        <Card className="border-amber-500/20 bg-amber-500/10 p-5 text-amber-50 backdrop-blur-xl">
+          <div className="space-y-1.5">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-amber-100">
+              Adjustment Admin-Only
+            </h3>
+            <p className="text-sm text-amber-100/90">
+              Manual adjustment di desktop hanya tersedia untuk admin finance
+              dan super admin. Role lain tetap memiliki akses audit/read-only ke
+              ledger.
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
       {/* Search & Filter Header */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-96 group">
@@ -61,9 +85,20 @@ export function AccountingClient({
           >
             <Filter className="h-4 w-4" /> Filter
           </Button>
-          <Button className="flex-1 md:flex-none h-12 rounded-xl bg-finance-teal hover:bg-finance-teal/90 font-black gap-2">
-            <Layers className="h-4 w-4" /> New Adjustment
-          </Button>
+          {canManageAdjustments && user?.id ? (
+            <ManualAdjustmentDialog actorId={user.id} accounts={accounts}>
+              <Button className="flex-1 md:flex-none h-12 rounded-xl bg-finance-teal hover:bg-finance-teal/90 font-black gap-2">
+                <Layers className="h-4 w-4" /> New Adjustment
+              </Button>
+            </ManualAdjustmentDialog>
+          ) : (
+            <Button
+              className="flex-1 md:flex-none h-12 rounded-xl bg-finance-teal hover:bg-finance-teal/90 font-black gap-2"
+              disabled
+            >
+              <Layers className="h-4 w-4" /> New Adjustment
+            </Button>
+          )}
         </div>
       </div>
 

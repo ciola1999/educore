@@ -36,6 +36,13 @@ export type FinancePaymentMethodView = {
   isElectronic: boolean;
 };
 
+export type FinanceAccountView = {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+};
+
 export type FinanceInvoiceStatusView =
   | "DRAFT"
   | "OPEN"
@@ -49,6 +56,7 @@ export type FinanceInvoiceStatusView =
 export type FinanceInvoiceListItemView = {
   id: string;
   invoiceNo: string;
+  studentId: string;
   status: FinanceInvoiceStatusView;
   baseStatus:
     | "DRAFT"
@@ -62,4 +70,28 @@ export type FinanceInvoiceListItemView = {
   outstanding: number;
   dueDate: Date | string;
   studentSnapshot: string | null;
+  studentName?: string | null;
+  studentNis?: string | null;
+  studentNisn?: string | null;
+  studentClassName?: string | null;
+  studentCreditBalance?: number;
+};
+
+export type FinanceRevenueTrendPointView = {
+  label: string;
+  amount: number;
+};
+
+export type FinanceSummaryView = {
+  revenue: number;
+  receivables: number;
+  collectionRate: number;
+  invoiceCount: number;
+  paymentCount: number;
+  activePeriodLabel: string | null;
+  activePeriodStatus: "OPEN" | "SOFT_CLOSED" | "CLOSED" | null;
+  revenueTrend: FinanceRevenueTrendPointView[];
+  dataState: "seeded" | "live";
+  pendingSync: boolean;
+  canManageSync?: boolean;
 };

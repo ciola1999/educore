@@ -2,10 +2,10 @@ import { ShieldCheck } from "lucide-react";
 import { Suspense } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinanceRuntimeNotice } from "../finance-runtime-notice";
+import { auth } from "@/lib/auth/web/auth";
 import { getFinanceLogsAction } from "../queries";
-import { isFinanceDesktopEmbeddedRuntime } from "../runtime-policy";
-import { AuditClient } from "./audit-client";
+import { isFinanceDesktopRequestRuntime } from "../runtime-policy";
+import { AuditRuntimeClient } from "./audit-runtime-client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +17,11 @@ export const dynamic = "force-dynamic";
  */
 
 export default async function AuditPage() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    return <FinanceRuntimeNotice />;
-  }
-
-  const logs = await getFinanceLogsAction();
+  const desktopRuntime = await isFinanceDesktopRequestRuntime();
+  const session = desktopRuntime ? null : await auth();
+  const hasWebSession = Boolean(session?.user?.id);
+  const logs =
+    desktopRuntime || !hasWebSession ? [] : await getFinanceLogsAction();
 
   return (
     <div className="space-y-10">
@@ -54,7 +54,7 @@ export default async function AuditPage() {
       </Card>
 
       <Suspense fallback={<AuditSkeleton />}>
-        <AuditClient logs={logs} />
+        <AuditRuntimeClient initialLogs={logs} />
       </Suspense>
     </div>
   );

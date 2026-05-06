@@ -12,9 +12,12 @@ const financeServiceMock = vi.hoisted(() => ({
 }));
 const financeControlServiceMock = vi.hoisted(() => ({
   approveRequest: vi.fn(),
+  createPeriod: vi.fn(),
   rejectRequest: vi.fn(),
+  updatePeriodStatus: vi.fn(),
 }));
 const accountingServiceMock = vi.hoisted(() => ({
+  createManualAdjustment: vi.fn(),
   getJournalEntries: vi.fn(),
   getAccounts: vi.fn(),
 }));
@@ -46,8 +49,11 @@ vi.mock("@/core/services/accounting-service", () => ({
 import {
   approveFinanceRequestAction,
   createBatchInvoicesAction,
+  createFinancePeriodAction,
+  createManualJournalAdjustmentAction,
   processPaymentAction,
   rejectFinanceRequestAction,
+  updateFinancePeriodStatusAction,
   updateInvoiceStatusAction,
 } from "./actions";
 
@@ -73,7 +79,7 @@ describe("finance actions", () => {
     });
   });
 
-  it("uses the authenticated actor id and expands empty student selection to all students", async () => {
+  it("uses the authenticated actor id and delegates all-students resolution to the finance service", async () => {
     const actorWhereMock = vi.fn().mockReturnValue({
       limit: vi
         .fn()
@@ -111,7 +117,8 @@ describe("finance actions", () => {
     expect(financeServiceMock.createBatchInvoices).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({
-        studentIds: ["user-student-1", "user-student-2"],
+        targetMode: "ALL_STUDENTS",
+        studentIds: [],
       }),
     );
     expect(result).toEqual({
@@ -311,7 +318,11 @@ describe("finance actions", () => {
     });
 
     await expect(
-      approveFinanceRequestAction("approver-1", "approval-1"),
+      approveFinanceRequestAction(
+        "approver-1",
+        "approval-1",
+        "Investigasi selesai dan request valid.",
+      ),
     ).resolves.toEqual({
       success: true,
       status: "APPROVED",
@@ -323,6 +334,7 @@ describe("finance actions", () => {
     expect(financeControlServiceMock.approveRequest).toHaveBeenCalledWith(
       "approver-1",
       "approval-1",
+      "Investigasi selesai dan request valid.",
     );
   });
 
@@ -352,7 +364,11 @@ describe("finance actions", () => {
     });
 
     await expect(
-      rejectFinanceRequestAction("approver-1", "approval-2"),
+      rejectFinanceRequestAction(
+        "approver-1",
+        "approval-2",
+        "Dokumen pendukung tidak lengkap.",
+      ),
     ).resolves.toEqual({
       success: true,
       status: "REJECTED",
@@ -364,6 +380,145 @@ describe("finance actions", () => {
     expect(financeControlServiceMock.rejectRequest).toHaveBeenCalledWith(
       "approver-1",
       "approval-2",
+      "Dokumen pendukung tidak lengkap.",
+    );
+  });
+
+  it("creates finance periods through the control service for finance approvers", async () => {
+    const whereMock = vi.fn().mockReturnValue({
+      limit: vi
+        .fn()
+        .mockResolvedValue([{ id: "admin-1", role: "admin", isActive: true }]),
+    });
+    const fromMock = vi.fn().mockReturnValue({ where: whereMock });
+    const selectMock = vi.fn().mockReturnValue({ from: fromMock });
+    getDbMock.mockResolvedValue({
+      select: selectMock,
+    });
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+
+    financeControlServiceMock.createPeriod.mockResolvedValue({
+      id: "period-1",
+      name: "Q3 2026",
+      status: "OPEN",
+    });
+
+    await expect(
+      createFinancePeriodAction("admin-1", {
+        name: "Q3 2026",
+        startDate: new Date("2026-07-01T00:00:00.000Z"),
+        endDate: new Date("2026-09-30T00:00:00.000Z"),
+      }),
+    ).resolves.toEqual({
+      id: "period-1",
+      name: "Q3 2026",
+      status: "OPEN",
+    });
+
+    expect(financeControlServiceMock.createPeriod).toHaveBeenCalledWith(
+      "admin-1",
+      expect.objectContaining({
+        name: "Q3 2026",
+      }),
+    );
+  });
+
+  it("updates finance period status through the control service", async () => {
+    const whereMock = vi.fn().mockReturnValue({
+      limit: vi
+        .fn()
+        .mockResolvedValue([{ id: "admin-1", role: "admin", isActive: true }]),
+    });
+    const fromMock = vi.fn().mockReturnValue({ where: whereMock });
+    const selectMock = vi.fn().mockReturnValue({ from: fromMock });
+    getDbMock.mockResolvedValue({
+      select: selectMock,
+    });
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+
+    financeControlServiceMock.updatePeriodStatus.mockResolvedValue({
+      success: true,
+      periodId: "period-1",
+      previousStatus: "OPEN",
+      nextStatus: "SOFT_CLOSED",
+    });
+
+    await expect(
+      updateFinancePeriodStatusAction(
+        "admin-1",
+        "period-1",
+        "SOFT_CLOSED",
+        "Mulai fase rekonsiliasi.",
+      ),
+    ).resolves.toEqual({
+      success: true,
+      periodId: "period-1",
+      previousStatus: "OPEN",
+      nextStatus: "SOFT_CLOSED",
+    });
+
+    expect(financeControlServiceMock.updatePeriodStatus).toHaveBeenCalledWith(
+      "admin-1",
+      "period-1",
+      {
+        status: "SOFT_CLOSED",
+        reason: "Mulai fase rekonsiliasi.",
+      },
+    );
+  });
+
+  it("creates manual journal adjustment through the accounting service", async () => {
+    const whereMock = vi.fn().mockReturnValue({
+      limit: vi
+        .fn()
+        .mockResolvedValue([{ id: "admin-1", role: "admin", isActive: true }]),
+    });
+    const fromMock = vi.fn().mockReturnValue({ where: whereMock });
+    const selectMock = vi.fn().mockReturnValue({ from: fromMock });
+    getDbMock.mockResolvedValue({
+      select: selectMock,
+    });
+    authMock.mockResolvedValue({
+      user: { id: "admin-1", role: "admin" },
+    });
+
+    accountingServiceMock.createManualAdjustment.mockResolvedValue({
+      journalId: "journal-1",
+      lineCount: 2,
+    });
+
+    await expect(
+      createManualJournalAdjustmentAction("admin-1", {
+        date: new Date("2026-04-13T00:00:00.000Z"),
+        description: "Koreksi saldo",
+        reason: "Audit kas harian.",
+        lines: [
+          {
+            accountId: "550e8400-e29b-41d4-a716-446655440000",
+            debit: 150000,
+            credit: 0,
+          },
+          {
+            accountId: "550e8400-e29b-41d4-a716-446655440001",
+            debit: 0,
+            credit: 150000,
+          },
+        ],
+      }),
+    ).resolves.toEqual({
+      journalId: "journal-1",
+      lineCount: 2,
+    });
+
+    expect(accountingServiceMock.createManualAdjustment).toHaveBeenCalledWith(
+      "admin-1",
+      expect.objectContaining({
+        description: "Koreksi saldo",
+      }),
     );
   });
 

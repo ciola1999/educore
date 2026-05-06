@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinanceRuntimeNotice } from "../finance-runtime-notice";
+import { auth } from "@/lib/auth/web/auth";
 import { getInvoices } from "../queries";
-import { isFinanceDesktopEmbeddedRuntime } from "../runtime-policy";
-import { InvoicesClient } from "./invoices-client";
+import { isFinanceDesktopRequestRuntime } from "../runtime-policy";
+import { InvoicesRuntimeClient } from "./invoices-runtime-client";
 
 export const dynamic = "force-dynamic";
 
@@ -19,21 +19,26 @@ export default async function InvoicesPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    return <FinanceRuntimeNotice />;
-  }
-
   const params = await searchParams;
   const status = typeof params.status === "string" ? params.status : undefined;
   const search = typeof params.search === "string" ? params.search : undefined;
+  const autoOpenBatchGeneration = params.action === "generate-batch";
+  const desktopRuntime = await isFinanceDesktopRequestRuntime();
+  const session = desktopRuntime ? null : await auth();
+  const hasWebSession = Boolean(session?.user?.id);
 
-  // Fetch real-time data from Unified Finance Engine
-  const invoices = await getInvoices({ status, search });
+  const invoices =
+    desktopRuntime || !hasWebSession
+      ? []
+      : await getInvoices({ status, search });
 
   return (
     <div className="space-y-6">
       <Suspense fallback={<InvoicesSkeleton />}>
-        <InvoicesClient initialInvoices={invoices} />
+        <InvoicesRuntimeClient
+          initialInvoices={invoices}
+          autoOpenBatchGeneration={autoOpenBatchGeneration}
+        />
       </Suspense>
     </div>
   );

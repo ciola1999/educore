@@ -83,8 +83,20 @@ Desktop hanya boleh disebut mendekati release-ready jika:
 - [ ] full sync offline gagal dengan pesan jujur
 
 Status jujur saat ini:
-- desktop MSI: production final setelah smoke artifact nyata lulus
+- desktop MSI: artifact kandidat 6 Mei 2026 berhasil dibuat, production final setelah installed smoke artifact nyata lulus
 - desktop NSIS: belum disignoff, masuk backlog hardening terpisah
+
+Artifact kandidat terbaru:
+- `src-tauri/target/release/bundle/msi/educore_0.1.0_x64_en-US.msi`
+- ukuran: 69,869,568 bytes
+
+Automated gate 6 Mei 2026:
+- [x] Finance unit/runtime/sync guard tests lulus
+- [x] `bunx biome check .` lulus
+- [x] `bun run typecheck` lulus
+- [x] `bun run build` lulus
+- [x] `bun run build:desktop` lulus
+- [x] `bun tauri build` lulus untuk target `MSI`
 
 Referensi:
 - lihat [desktop-production-runtime-plan.md](/e:/Freelance/Project/educore/docs/desktop-production-runtime-plan.md) untuk blocker arsitektur yang masih menahan `build:desktop`
@@ -97,14 +109,23 @@ Route yang saat ini layak diretest di desktop:
 - [ ] `/dashboard`
 - [ ] `/dashboard/attendance`
 - [ ] `/dashboard/courses`
+- [ ] `/dashboard/finance`
+- [ ] `/dashboard/finance/invoices`
+- [ ] `/dashboard/finance/payments`
+- [ ] `/dashboard/finance/periods`
+- [ ] `/dashboard/finance/accounting`
+- [ ] `/dashboard/finance/audit`
 - [ ] `/dashboard/settings`
 - [ ] `/dashboard/students`
 - [ ] `/dashboard/teachers`
 
 Yang harus tetap fail-secure jika belum siap:
-- [ ] finance / phase 2.4
 - [ ] route lain yang belum punya local-safe adapter
 - [ ] flow yang masih bergantung ke web-only runtime
+
+Catatan Finance desktop:
+- governance action (`approve/reject`, `create/open/soft-close/final-close period`, `manual adjustment`) hanya boleh lolos untuk `admin` / `super_admin`
+- role non-admin harus tetap melihat state read-only yang jujur pada area governance
 
 ---
 
@@ -155,6 +176,26 @@ Command:
 - [ ] `holidays`
 - [ ] `risk insights`
 - [ ] `risk follow-up`
+
+### Finance
+- [ ] buka `overview`
+- [ ] buka `invoices`
+- [ ] buka `payments`
+- [ ] buka `periods`
+- [ ] buka `accounting`
+- [ ] buka `audit`
+- [ ] `Generate Batch` berhasil
+- [ ] `Payment Entry` berhasil
+- [ ] `approve/reject` berhasil untuk `admin` / `super_admin`
+- [ ] `NEW PERIOD` berhasil untuk `admin` / `super_admin`
+- [ ] `SOFT CLOSE / REOPEN / FINAL CLOSE` berhasil sesuai state machine
+- [ ] `New Adjustment` berhasil untuk `admin` / `super_admin`
+- [ ] audit log finance tampil setelah aksi sensitif
+- [ ] restart app mempertahankan state finance terakhir
+- [ ] full sync tidak menggandakan `approval_requests`, `journal_entries`, `payments`, atau `invoices`
+
+Referensi:
+- lihat [finance-desktop-smoke-checklist.md](/e:/Freelance/Project/educore/docs/finance-desktop-smoke-checklist.md) untuk smoke pass manual detail Finance desktop
 
 ---
 

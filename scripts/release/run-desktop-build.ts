@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -34,6 +35,8 @@ const DESKTOP_RUNTIME_STAGING_ROOT = resolve(
   process.cwd(),
   ".desktop-runtime-staging",
 );
+const tsconfigPath = resolve(process.cwd(), "tsconfig.json");
+const nextEnvPath = resolve(process.cwd(), "next-env.d.ts");
 const SHOULD_SKIP_NEXT_BUILD = (() => {
   const value = process.env.EDUCORE_SKIP_NEXT_BUILD?.trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes";
@@ -103,6 +106,88 @@ function resetNextBuildOutput() {
   });
 }
 
+function formatTsconfigJson(tsconfig: unknown) {
+  return `${JSON.stringify(tsconfig, null, 2)
+    .replace(
+      /"lib": \[\n\s+"dom",\n\s+"dom\.iterable",\n\s+"esnext"\n\s+\]/,
+      '"lib": ["dom", "dom.iterable", "esnext"]',
+    )
+    .replace(/"@\/\*": \[\n\s+"\.\/src\/\*"\n\s+\]/, '"@/*": ["./src/*"]')
+    .replace(
+      /"exclude": \[\n\s+"node_modules",\n\s+"src-tauri",\n\s+"\.next\/dev\/types"\n\s+\]/,
+      '"exclude": ["node_modules", "src-tauri", ".next/dev/types"]',
+    )}\n`;
+}
+
+function normalizeNextTypegenConfig() {
+  const tsconfig = JSON.parse(readFileSync(tsconfigPath, "utf8")) as {
+    include?: string[];
+    exclude?: string[];
+  };
+
+  tsconfig.include = (tsconfig.include ?? []).filter(
+    (entry) => entry !== ".next/dev/types/**/*.ts",
+  );
+
+  const exclude = new Set(tsconfig.exclude ?? []);
+  exclude.add(".next/dev/types");
+  tsconfig.exclude = [...exclude];
+
+  writeFileSync(tsconfigPath, formatTsconfigJson(tsconfig));
+
+  const currentNextEnv = readFileSync(nextEnvPath, "utf8");
+  const normalizedNextEnv = currentNextEnv.replace(
+    /import\s+["']\.\/\.next\/dev\/types\/routes\.d\.ts["'];?/,
+    'import "./.next/types/routes.d.ts";',
+  );
+
+  if (normalizedNextEnv !== currentNextEnv) {
+    writeFileSync(nextEnvPath, normalizedNextEnv);
+  }
+}
+
+function waitForPath(path: string, timeoutMs: number, stepMs = 1_000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (existsSync(path)) {
+      return true;
+    }
+
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, stepMs);
+  }
+
+  return existsSync(path);
+}
+
+function waitForStandaloneArtifacts(timeoutMs = 180_000) {
+  const standaloneDir = resolve(process.cwd(), ".next", "standalone");
+  const standaloneServer = resolve(standaloneDir, "server.js");
+  const requiredServerFiles = resolve(
+    process.cwd(),
+    ".next",
+    "required-server-files.json",
+  );
+  const staticDir = resolve(process.cwd(), ".next", "static");
+
+  const ready =
+    waitForPath(requiredServerFiles, timeoutMs) &&
+    waitForPath(staticDir, timeoutMs) &&
+    waitForPath(standaloneDir, timeoutMs) &&
+    waitForPath(standaloneServer, timeoutMs);
+
+  if (!ready) {
+    failSecure(
+      [
+        "[EDUCORE_DESKTOP_BUILD_BLOCKED]",
+        "Artefak standalone Next.js tidak muncul tepat waktu setelah build selesai.",
+        "Build web tampak selesai, tetapi file wajib desktop runtime belum stabil di .next.",
+        "Coba ulangi build desktop setelah memastikan tidak ada proses lain yang mereset .next.",
+      ].join("\n"),
+    );
+  }
+}
+
 function runNextBuild() {
   if (SHOULD_SKIP_NEXT_BUILD) {
     console.log(
@@ -141,6 +226,9 @@ function runNextBuild() {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+
+  normalizeNextTypegenConfig();
+  waitForStandaloneArtifacts();
 }
 
 function readPackageVersion() {
@@ -375,8 +463,7 @@ function prepareDesktopRuntimeBundle(config: DesktopRuntimeConfig) {
   cpSync(process.execPath, join(stagingDir, config.nodeBinary));
 
   runTarArchive(stagingDir, archiveTempPath);
-  cpSync(archiveTempPath, archivePath, { force: true });
-  rmSync(archiveTempPath, { force: true, maxRetries: 3 });
+  replaceRuntimeArchive(archiveTempPath, archivePath);
   config.bundleVersion = buildDesktopBundleVersion(config, archivePath);
   try {
     rmSync(stagingDir, { recursive: true, force: true, maxRetries: 3 });
@@ -396,6 +483,47 @@ function prepareDesktopRuntimeBundle(config: DesktopRuntimeConfig) {
 function stabilizeRuntimeBundle(delayMs = 1_500) {
   // Windows can briefly keep fresh native addon copies busy right after cpSync.
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+}
+
+function waitBriefly(delayMs = 1_000) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+}
+
+function isWindowsLockError(error: unknown) {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+
+  const code = String(error.code);
+  return code === "EBUSY" || code === "EPERM";
+}
+
+function replaceRuntimeArchive(tempPath: string, targetPath: string) {
+  const maxAttempts = 5;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      rmSync(targetPath, { force: true, maxRetries: 3 });
+      renameSync(tempPath, targetPath);
+      return;
+    } catch (error) {
+      if (!isWindowsLockError(error) || attempt === maxAttempts) {
+        failSecure(
+          [
+            "[EDUCORE_DESKTOP_BUILD_BLOCKED]",
+            `Gagal mengganti artefak runtime desktop stabil di ${targetPath}.`,
+            "File kemungkinan masih dikunci oleh Explorer, antivirus, atau proses build/installer lain.",
+            "Tutup proses yang memakai artefak runtime/MSI lama, lalu jalankan ulang `bun run build:desktop`.",
+          ].join("\n"),
+        );
+      }
+
+      console.warn(
+        `[EDUCORE_DESKTOP_BUILD] Artefak runtime masih terkunci, retry ${attempt}/${maxAttempts}...`,
+      );
+      waitBriefly(1_500);
+    }
+  }
 }
 
 function assertBootstrapShellExists() {
@@ -421,16 +549,16 @@ function validateTauriConfig() {
   const usesBootstrapShell = tauriConfigText.includes(
     '"frontendDist": "bootstrap"',
   );
-  const bundlesDesktopRuntime = tauriConfigText.includes(
-    "desktop-runtime/**/*",
-  );
+  const bundlesStableRuntimeArtifacts =
+    tauriConfigText.includes("desktop-runtime/runtime-bundle.tar") &&
+    tauriConfigText.includes("desktop-runtime/runtime-config.json");
 
-  if (!usesBootstrapShell || !bundlesDesktopRuntime) {
+  if (!usesBootstrapShell || !bundlesStableRuntimeArtifacts) {
     failSecure(
       [
         "[EDUCORE_DESKTOP_BUILD_BLOCKED]",
         "src-tauri/tauri.conf.json belum menunjuk bootstrap shell dan resource desktop-runtime yang benar.",
-        'Expected frontendDist "bootstrap" and bundle.resources entry for "desktop-runtime/**/*".',
+        'Expected frontendDist "bootstrap" and stable bundle.resources entries for "desktop-runtime/runtime-bundle.tar" and "desktop-runtime/runtime-config.json".',
       ].join("\n"),
     );
   }

@@ -10,10 +10,29 @@ use crate::runtime::service::{
     ensure_runtime_bootstrap_ready, get_runtime_bootstrap_config, probe_runtime_bootstrap_health,
     setup_desktop_runtime, shutdown_desktop_runtime, DesktopRuntimeManagerState,
 };
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(log::LevelFilter::Info)
+                .rotation_strategy(RotationStrategy::KeepSome(10))
+                .clear_targets()
+                .targets([
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("rust".into()),
+                    }),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("webview".into()),
+                    })
+                    .filter(|metadata| {
+                        metadata.target().starts_with(tauri_plugin_log::WEBVIEW_TARGET)
+                    }),
+                ])
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
@@ -30,16 +49,10 @@ pub fn run() {
             ensure_runtime_bootstrap_ready
         ])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
-
+            log::info!("[DesktopRuntime] Starting Tauri setup.");
             setup_desktop_runtime(&app.handle())
                 .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+            log::info!("[DesktopRuntime] Tauri setup completed.");
 
             Ok(())
         })

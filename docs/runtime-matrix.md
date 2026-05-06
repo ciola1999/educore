@@ -120,12 +120,15 @@ Catatan:
 ## 6. Phase 2.4 Finance
 
 ### Billing / Payment
-- Web: `needs-audit`
-- Desktop dev: `needs-audit`
-- Desktop release: `needs-audit`
+- Web: `web-ready`
+- Desktop dev: `desktop-dev-ready`
+- Desktop release: `guarded`
 
 Catatan:
-- area ini harus dianggap sensitif sampai audit trail, model transaksi, dan sync-nya rapi
+- desktop local runtime sekarang sudah mencakup overview, invoices, payments, approvals, period control, dan manual adjustment
+- approval, period control, dan manual adjustment di desktop dibatasi untuk `admin` / `super_admin`
+- automated gate 6 Mei 2026 lulus untuk Finance tests, sync guard tests, web build, desktop runtime build, dan MSI bundle generation
+- desktop release tetap guarded sampai smoke MSI, restart app, dan full sync finance lulus tanpa drift transaksi / jurnal
 
 ---
 

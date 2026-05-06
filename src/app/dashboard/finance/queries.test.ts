@@ -62,6 +62,12 @@ describe("finance queries", () => {
       receivables: 750000,
       collectionRate: 0.82,
       invoiceCount: 12,
+      paymentCount: 8,
+      activePeriodLabel: "APRIL 2026",
+      activePeriodStatus: "OPEN",
+      revenueTrend: [{ label: "APR", amount: 2500000 }],
+      dataState: "live",
+      pendingSync: false,
     });
 
     await expect(getFinanceDashboardSummary()).resolves.toEqual({
@@ -69,6 +75,12 @@ describe("finance queries", () => {
       receivables: 750000,
       collectionRate: 0.82,
       invoiceCount: 12,
+      paymentCount: 8,
+      activePeriodLabel: "APRIL 2026",
+      activePeriodStatus: "OPEN",
+      revenueTrend: [{ label: "APR", amount: 2500000 }],
+      dataState: "live",
+      pendingSync: false,
     });
   });
 
@@ -111,14 +123,20 @@ describe("finance queries", () => {
     ]);
   });
 
-  it("fails secure in embedded desktop runtime for finance reads", async () => {
+  it("returns a safe empty dashboard summary when invoked in embedded desktop runtime", async () => {
     process.env.EDUCORE_DESKTOP_RUNTIME = "embedded-local-web-server";
 
     await expect(getFinanceDashboardSummary()).resolves.toEqual({
       revenue: 0,
       receivables: 0,
-      collectionRate: 1.0,
+      collectionRate: 0,
       invoiceCount: 0,
+      paymentCount: 0,
+      activePeriodLabel: null,
+      activePeriodStatus: null,
+      revenueTrend: [],
+      dataState: "seeded",
+      pendingSync: false,
     });
 
     expect(financeServiceMock.getDashboardSummary).not.toHaveBeenCalled();

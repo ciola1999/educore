@@ -18,6 +18,19 @@ function runCommand(command: string, args: string[]) {
   }
 }
 
+function formatTsconfigJson(tsconfig: unknown) {
+  return `${JSON.stringify(tsconfig, null, 2)
+    .replace(
+      /"lib": \[\n\s+"dom",\n\s+"dom\.iterable",\n\s+"esnext"\n\s+\]/,
+      '"lib": ["dom", "dom.iterable", "esnext"]',
+    )
+    .replace(/"@\/\*": \[\n\s+"\.\/src\/\*"\n\s+\]/, '"@/*": ["./src/*"]')
+    .replace(
+      /"exclude": \[\n\s+"node_modules",\n\s+"src-tauri",\n\s+"\.next\/dev\/types"\n\s+\]/,
+      '"exclude": ["node_modules", "src-tauri", ".next/dev/types"]',
+    )}\n`;
+}
+
 function normalizeTsconfig() {
   const tsconfig = JSON.parse(readFileSync(tsconfigPath, "utf8")) as {
     include?: string[];
@@ -32,7 +45,7 @@ function normalizeTsconfig() {
   exclude.add(".next/dev/types");
   tsconfig.exclude = [...exclude];
 
-  writeFileSync(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`);
+  writeFileSync(tsconfigPath, formatTsconfigJson(tsconfig));
 }
 
 function normalizeNextEnv() {

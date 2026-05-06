@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinanceOverviewClient } from "./finance-overview-client";
-import { FinanceRuntimeNotice } from "./finance-runtime-notice";
+import { auth } from "@/lib/auth/web/auth";
+import { FinanceOverviewRuntimeClient } from "./finance-overview-runtime-client";
 import { getFinanceDashboardSummary } from "./queries";
-import { isFinanceDesktopEmbeddedRuntime } from "./runtime-policy";
+import { isFinanceDesktopRequestRuntime } from "./runtime-policy";
+import type { FinanceSummaryView } from "./types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +16,30 @@ export const dynamic = "force-dynamic";
  */
 
 export default async function FinanceOverviewPage() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    return <FinanceRuntimeNotice />;
-  }
-
-  // Fetch dynamic summary from the Unified Finance Engine
-  const summary = await getFinanceDashboardSummary();
+  const desktopRuntime = await isFinanceDesktopRequestRuntime();
+  const session = desktopRuntime ? null : await auth();
+  const hasWebSession = Boolean(session?.user?.id);
+  const emptySummary: FinanceSummaryView = {
+    revenue: 0,
+    receivables: 0,
+    collectionRate: 0,
+    invoiceCount: 0,
+    paymentCount: 0,
+    activePeriodLabel: null,
+    activePeriodStatus: null,
+    revenueTrend: [],
+    dataState: "seeded",
+    pendingSync: false,
+  };
+  const summary = desktopRuntime
+    ? emptySummary
+    : !hasWebSession
+      ? emptySummary
+      : await getFinanceDashboardSummary();
 
   return (
     <Suspense fallback={<FinanceOverviewSkeleton />}>
-      <FinanceOverviewClient summary={summary} />
+      <FinanceOverviewRuntimeClient initialSummary={summary} />
     </Suspense>
   );
 }

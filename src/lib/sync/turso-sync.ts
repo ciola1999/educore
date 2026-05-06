@@ -326,7 +326,12 @@ const SYNC_TABLES: SyncTableConfig[] = [
   },
 
   // --- FINANCE PHASE 2.4 - 5.0 (NEW REPLICATION GRAPH) ---
-  { name: "billing_categories", table: billingCategories, conflictKey: "id" },
+  {
+    name: "billing_categories",
+    table: billingCategories,
+    conflictKey: "id",
+    logicalKey: "name",
+  },
   {
     name: "payment_methods",
     table: paymentMethods,
@@ -385,6 +390,7 @@ const SYNC_TABLES: SyncTableConfig[] = [
     name: "payment_allocations",
     table: paymentAllocations,
     conflictKey: "id",
+    logicalKey: ["paymentId", "invoiceId"],
     foreignKeyRemaps: { paymentId: "payments", invoiceId: "invoices" },
   },
   {
@@ -405,17 +411,20 @@ const SYNC_TABLES: SyncTableConfig[] = [
     name: "journal_entries",
     table: journalEntries,
     conflictKey: "id",
+    logicalKey: ["referenceType", "referenceId", "description"],
   },
   {
     name: "journal_lines",
     table: journalLines,
     conflictKey: "id",
+    logicalKey: ["journalId", "accountId", "debit", "credit"],
     foreignKeyRemaps: { journalId: "journal_entries", accountId: "accounts" },
   },
   {
     name: "approval_requests",
     table: approvalRequests,
     conflictKey: "id",
+    logicalKey: ["type", "targetId", "targetType", "requestedBy", "status"],
     foreignKeyRemaps: { requestedBy: "users", handledBy: "users" },
   },
   {
@@ -437,6 +446,17 @@ const SYNC_TABLES: SyncTableConfig[] = [
 const SYNC_TABLE_CONFIG_MAP = new Map(
   SYNC_TABLES.map((tableConfig) => [tableConfig.name, tableConfig]),
 );
+const FINANCE_SENSITIVE_SYNC_TABLES = new Set([
+  "billing_batches",
+  "invoices",
+  "payments",
+  "payment_allocations",
+  "receipts",
+  "credit_balances",
+  "journal_entries",
+  "journal_lines",
+  "approval_requests",
+]);
 const AUTHORITATIVE_PULL_PRUNE_TABLES = new Set([
   "users",
   "students",
@@ -1162,6 +1182,13 @@ export async function pullFromCloud(
             const shouldReviveDeletedRow =
               localItem.deletedAt instanceof Date &&
               mappedData.deletedAt === null;
+            const protectLocalPendingFinanceRow =
+              FINANCE_SENSITIVE_SYNC_TABLES.has(tableName) &&
+              localItem.syncStatus === "pending";
+
+            if (protectLocalPendingFinanceRow) {
+              continue;
+            }
 
             if (remoteTime > localTime || shouldReviveDeletedRow) {
               await db
@@ -1214,6 +1241,13 @@ export async function pullFromCloud(
               const shouldReviveDeletedRow =
                 localRecord.deletedAt instanceof Date &&
                 mappedData.deletedAt === null;
+              const protectLocalPendingFinanceRow =
+                FINANCE_SENSITIVE_SYNC_TABLES.has(tableName) &&
+                localRecord.syncStatus === "pending";
+
+              if (protectLocalPendingFinanceRow) {
+                continue;
+              }
 
               if (remoteTime > localTime || shouldReviveDeletedRow) {
                 await db

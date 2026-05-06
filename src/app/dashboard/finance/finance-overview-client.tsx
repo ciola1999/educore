@@ -6,30 +6,31 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CircleDollarSign,
+  DatabaseZap,
   History,
   Receipt,
+  RefreshCcw,
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { cn, formatCurrency } from "@/lib/utils";
-
-type FinanceSummary = {
-  revenue: number;
-  receivables: number;
-  collectionRate: number;
-  invoiceCount: number;
-};
+import type { FinanceSummaryView } from "./types";
 
 export function FinanceOverviewClient({
   summary,
+  syncNotice,
 }: {
-  summary: FinanceSummary;
+  summary: FinanceSummaryView;
+  syncNotice?: string | null;
 }) {
+  const router = useRouter();
   const stats = [
     {
       name: "Revenue (Month)",
       value: summary.revenue,
+      valueType: "currency",
       change: "+0.0%", // Change logic can be added later
       trend: "up",
       icon: CircleDollarSign,
@@ -38,6 +39,7 @@ export function FinanceOverviewClient({
     {
       name: "Total Receivables",
       value: summary.receivables,
+      valueType: "currency",
       change: "Stable",
       trend: "up",
       icon: Receipt,
@@ -46,6 +48,7 @@ export function FinanceOverviewClient({
     {
       name: "Collection Rate",
       value: `${(summary.collectionRate * 100).toFixed(1)}%`,
+      valueType: "text",
       change: "Active",
       trend: "up",
       icon: TrendingUp,
@@ -54,15 +57,77 @@ export function FinanceOverviewClient({
     {
       name: "Open Invoices",
       value: summary.invoiceCount,
+      valueType: "count",
       change: "Live",
       trend: "up",
       icon: AlertCircle,
       color: "text-rose-400",
     },
   ];
+  const maxTrendAmount = Math.max(
+    1,
+    ...summary.revenueTrend.map((point) => point.amount),
+  );
+  const hasTrendData = summary.revenueTrend.some((point) => point.amount > 0);
+  const activePeriodTone =
+    summary.activePeriodStatus === "CLOSED"
+      ? "text-rose-400"
+      : summary.activePeriodStatus === "SOFT_CLOSED"
+        ? "text-amber-400"
+        : "text-emerald-400";
+  const activePeriodDot =
+    summary.activePeriodStatus === "CLOSED"
+      ? "bg-rose-400"
+      : summary.activePeriodStatus === "SOFT_CLOSED"
+        ? "bg-amber-400"
+        : "bg-emerald-400";
+  const seededStateMessage =
+    summary.dataState === "seeded"
+      ? summary.canManageSync
+        ? "Desktop Finance baru berisi master data lokal awal. Jika sekolah ini sudah punya data cloud, buka Settings atau tunggu hydrasi awal selesai agar transaksi real ikut masuk."
+        : "Desktop Finance baru berisi master data lokal awal. Minta admin menjalankan sinkronisasi agar transaksi real ikut masuk ke perangkat ini."
+      : null;
+  const pendingSyncMessage = summary.pendingSync
+    ? "Ada perubahan Finance lokal yang masih menunggu sinkronisasi cloud."
+    : null;
 
   return (
     <div className="space-y-10">
+      {seededStateMessage || pendingSyncMessage || syncNotice ? (
+        <div className="space-y-3">
+          {seededStateMessage ? (
+            <Card className="border-amber-500/20 bg-amber-500/10 p-5 text-amber-50">
+              <div className="flex items-start gap-3">
+                <DatabaseZap className="mt-0.5 h-5 w-5 text-amber-300" />
+                <p className="text-sm leading-6 text-amber-100/95">
+                  {seededStateMessage}
+                </p>
+              </div>
+            </Card>
+          ) : null}
+          {pendingSyncMessage ? (
+            <Card className="border-sky-500/20 bg-sky-500/10 p-5 text-sky-50">
+              <div className="flex items-start gap-3">
+                <RefreshCcw className="mt-0.5 h-5 w-5 text-sky-300" />
+                <p className="text-sm leading-6 text-sky-100/95">
+                  {pendingSyncMessage}
+                </p>
+              </div>
+            </Card>
+          ) : null}
+          {syncNotice ? (
+            <Card className="border-emerald-500/20 bg-emerald-500/10 p-5 text-emerald-50">
+              <div className="flex items-start gap-3">
+                <RefreshCcw className="mt-0.5 h-5 w-5 text-emerald-300" />
+                <p className="text-sm leading-6 text-emerald-100/95">
+                  {syncNotice}
+                </p>
+              </div>
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Metrics Bento Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, idx) => (
@@ -97,9 +162,13 @@ export function FinanceOverviewClient({
               <div className="mt-4 space-y-1">
                 <p className="text-sm font-medium text-zinc-400">{stat.name}</p>
                 <p className="font-mono text-2xl font-bold text-white">
-                  {typeof stat.value === "number"
+                  {stat.valueType === "currency" &&
+                  typeof stat.value === "number"
                     ? formatCurrency(stat.value)
-                    : stat.value}
+                    : stat.valueType === "count" &&
+                        typeof stat.value === "number"
+                      ? stat.value.toLocaleString("id-ID")
+                      : stat.value}
                 </p>
               </div>
             </Card>
@@ -115,37 +184,54 @@ export function FinanceOverviewClient({
             <h3 className="font-mono text-lg font-bold text-white">
               Collection Trend
             </h3>
-            <div className="flex gap-2">
-              <div className="h-2 w-8 rounded-full bg-finance-teal/40" />
-              <div className="h-2 w-8 rounded-full bg-zinc-700" />
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
+              {hasTrendData ? "6 Bulan Terakhir" : "Menunggu transaksi"}
+            </p>
+          </div>
+          {hasTrendData ? (
+            <>
+              <div className="mt-12 flex h-64 items-end justify-between gap-4">
+                {summary.revenueTrend.map((point, i) => {
+                  const height = Math.max(
+                    10,
+                    Math.round((point.amount / maxTrendAmount) * 100),
+                  );
+
+                  return (
+                    <motion.div
+                      key={`collection-bar-${point.label}`}
+                      initial={{ height: 0 }}
+                      animate={{ height: `${height}%` }}
+                      transition={{
+                        delay: 0.5 + i * 0.05,
+                        duration: 0.8,
+                        ease: "easeOut",
+                      }}
+                      className="relative w-full rounded-t-lg bg-linear-to-t from-finance-teal/40 to-finance-teal/10 group cursor-pointer"
+                    >
+                      <div className="absolute inset-0 bg-finance-teal opacity-0 blur-md transition-opacity group-hover:opacity-20" />
+                      <div className="absolute -top-8 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-zinc-950/90 px-2 py-1 text-[10px] font-semibold text-zinc-100 group-hover:block">
+                        {formatCurrency(point.amount)}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex justify-between text-xs font-medium text-zinc-500">
+                {summary.revenueTrend.map((point) => (
+                  <span key={`collection-label-${point.label}`}>
+                    {point.label}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="mt-10 rounded-2xl border border-dashed border-white/10 bg-black/10 p-8 text-sm leading-6 text-zinc-400">
+              Tren pembayaran akan muncul setelah desktop ini memiliki transaksi
+              Finance yang nyata. Saat ini sistem hanya bisa menampilkan
+              ringkasan dari data lokal yang tersedia.
             </div>
-          </div>
-          <div className="mt-12 flex h-64 items-end justify-between gap-4">
-            {[45, 62, 58, 85, 72, 90, 82].map((height, i) => (
-              <motion.div
-                key={`collection-bar-${i}-${height}`}
-                initial={{ height: 0 }}
-                animate={{ height: `${height}%` }}
-                transition={{
-                  delay: 0.5 + i * 0.05,
-                  duration: 0.8,
-                  ease: "easeOut",
-                }}
-                className="relative w-full rounded-t-lg bg-linear-to-t from-finance-teal/40 to-finance-teal/10 group cursor-pointer"
-              >
-                <div className="absolute inset-0 bg-finance-teal opacity-0 blur-md transition-opacity group-hover:opacity-20" />
-              </motion.div>
-            ))}
-          </div>
-          <div className="mt-4 flex justify-between text-xs font-medium text-zinc-500">
-            <span>OCT</span>
-            <span>NOV</span>
-            <span>DEC</span>
-            <span>JAN</span>
-            <span>FEB</span>
-            <span>MAR</span>
-            <span>APR</span>
-          </div>
+          )}
         </Card>
 
         {/* Quick Actions Side Bento */}
@@ -157,6 +243,7 @@ export function FinanceOverviewClient({
             <div className="mt-6 space-y-3">
               <button
                 type="button"
+                onClick={() => router.push("/dashboard/finance/payments")}
                 className="flex w-full cursor-pointer items-center justify-between rounded-xl bg-finance-teal px-5 py-4 font-semibold text-white transition-all hover:brightness-110 active:scale-95"
               >
                 New Payment
@@ -164,6 +251,11 @@ export function FinanceOverviewClient({
               </button>
               <button
                 type="button"
+                onClick={() =>
+                  router.push(
+                    "/dashboard/finance/invoices?action=generate-batch",
+                  )
+                }
                 className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/5 px-5 py-4 font-semibold text-white transition-all hover:bg-white/10 active:scale-95"
               >
                 Generate Invoices
@@ -177,11 +269,29 @@ export function FinanceOverviewClient({
             <p className="text-sm font-medium text-zinc-500 uppercase tracking-widest">
               Active Period
             </p>
-            <h4 className="mt-2 text-2xl font-bold text-white">APRIL 2026</h4>
+            <h4 className="mt-2 text-2xl font-bold text-white">
+              {summary.activePeriodLabel ?? "Belum ada periode aktif"}
+            </h4>
             <div className="mt-4 flex items-center gap-2">
-              <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              <span className="text-xs font-semibold text-emerald-400 uppercase">
-                Live & Unlocked
+              <div
+                className={cn(
+                  "h-2 w-2 animate-pulse rounded-full",
+                  activePeriodDot,
+                )}
+              />
+              <span
+                className={cn(
+                  "text-xs font-semibold uppercase",
+                  activePeriodTone,
+                )}
+              >
+                {summary.activePeriodStatus === "SOFT_CLOSED"
+                  ? "Soft Closed"
+                  : summary.activePeriodStatus === "CLOSED"
+                    ? "Closed"
+                    : summary.activePeriodStatus === "OPEN"
+                      ? "Open"
+                      : "No Active Period"}
               </span>
             </div>
           </Card>

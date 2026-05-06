@@ -66,6 +66,7 @@ import {
 import { handleDesktopAcademicRoute } from "@/lib/runtime/desktop-academic-route";
 import { handleDesktopAttendanceRoute } from "@/lib/runtime/desktop-attendance-route";
 import { handleDesktopAuthRoute } from "@/lib/runtime/desktop-auth-route";
+import { handleDesktopFinanceRoute } from "@/lib/runtime/desktop-finance-route";
 import {
   handleDesktopStudentImportRequest,
   toDesktopRouteErrorResponse,
@@ -1128,6 +1129,14 @@ type DesktopStudentStatsSummary = {
   female: number;
   activeGrades: number;
 };
+
+function buildDesktopStudentDisplayNameExpression() {
+  return sql<string>`coalesce(${users.fullName}, ${students.fullName})`;
+}
+
+function buildDesktopStudentDisplayGradeExpression() {
+  return sql<string>`coalesce(${classes.name}, ${students.grade})`;
+}
 
 type DesktopStudentRowWithAccountClass = {
   id: string;
@@ -3918,12 +3927,16 @@ async function handleDesktopStudentsList(url: URL) {
   }
 
   let conditions = isNull(students.deletedAt);
+  const displayNameExpression = buildDesktopStudentDisplayNameExpression();
+  const displayGradeExpression = buildDesktopStudentDisplayGradeExpression();
   if (search) {
     const query = `%${search}%`;
     const searchCondition = or(
       like(students.fullName, query),
+      like(displayNameExpression, query),
       like(students.nis, query),
       like(students.grade, query),
+      like(displayGradeExpression, query),
       like(students.nisn, query),
     );
 
@@ -3970,16 +3983,16 @@ async function handleDesktopStudentsList(url: URL) {
       .orderBy(
         sortBy === "fullName"
           ? sortDir === "asc"
-            ? students.fullName
-            : desc(students.fullName)
+            ? displayNameExpression
+            : desc(displayNameExpression)
           : sortBy === "nis"
             ? sortDir === "asc"
               ? students.nis
               : desc(students.nis)
             : sortBy === "grade"
               ? sortDir === "asc"
-                ? students.grade
-                : desc(students.grade)
+                ? displayGradeExpression
+                : desc(displayGradeExpression)
               : sortDir === "asc"
                 ? students.createdAt
                 : desc(students.createdAt),
@@ -5174,6 +5187,12 @@ export async function handleDesktopLocalApiRequest(
 
   if (pathSegments[1] === "dashboard") {
     return handleDashboard(method, pathSegments);
+  }
+
+  if (pathSegments[1] === "finance") {
+    return handleDesktopFinanceRoute(url, method, pathSegments, init?.body, {
+      ensurePermission,
+    });
   }
 
   if (pathSegments[1] === "students") {

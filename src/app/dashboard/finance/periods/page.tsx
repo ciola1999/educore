@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinanceRuntimeNotice } from "../finance-runtime-notice";
+import { auth } from "@/lib/auth/web/auth";
 import { getApprovalRequestsAction, getFinancePeriodsAction } from "../queries";
-import { isFinanceDesktopEmbeddedRuntime } from "../runtime-policy";
-import { PeriodsClient } from "./periods-client";
+import { isFinanceDesktopRequestRuntime } from "../runtime-policy";
+import { PeriodsRuntimeClient } from "./periods-runtime-client";
 
 export const dynamic = "force-dynamic";
 
@@ -34,21 +34,25 @@ interface ApprovalRequest {
  */
 
 export default async function PeriodsPage() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    return <FinanceRuntimeNotice />;
-  }
-
-  const [periods, approvals] = await Promise.all([
-    getFinancePeriodsAction(),
-    getApprovalRequestsAction(),
-  ]);
+  const desktopRuntime = await isFinanceDesktopRequestRuntime();
+  const session = desktopRuntime ? null : await auth();
+  const hasWebSession = Boolean(session?.user?.id);
+  const [periods, approvals] =
+    desktopRuntime || !hasWebSession
+      ? [[], []]
+      : await Promise.all([
+          getFinancePeriodsAction(),
+          getApprovalRequestsAction(),
+        ]);
 
   return (
     <div className="space-y-10">
       <Suspense fallback={<ControlCenterSkeleton />}>
-        <PeriodsClient
-          initialPeriods={periods as unknown as Period[]}
-          initialApprovals={approvals as unknown as ApprovalRequest[]}
+        <PeriodsRuntimeClient
+          initialPayload={{
+            periods: periods as unknown as Period[],
+            approvals: approvals as unknown as ApprovalRequest[],
+          }}
         />
       </Suspense>
     </div>

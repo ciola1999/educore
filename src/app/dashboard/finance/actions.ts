@@ -4,34 +4,31 @@ import { and, eq, isNull, like, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { AuthRole } from "@/core/auth/roles";
 import { getDb } from "@/core/db/connection";
-import { students, users } from "@/core/db/schema";
+import { classes, creditBalances, students, users } from "@/core/db/schema";
+import { AccountingService } from "@/core/services/accounting-service";
 import { FinanceControlService } from "@/core/services/finance-control-service";
 import { FinanceService } from "@/core/services/finance-service";
 import { auth } from "@/lib/auth/web/auth";
+import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import type {
+  ApplyCreditToInvoicesInput,
   CreateBillingBatchInput,
+  CreateFinancePeriodInput,
+  ManualJournalAdjustmentInput,
   ProcessPaymentInput,
 } from "@/lib/validations/finance";
-import {
-  getFinanceDesktopGuardMessage,
-  isFinanceDesktopEmbeddedRuntime,
-} from "./runtime-policy";
+import { assertFinanceWebServerOnlyRuntime } from "./runtime-policy";
 
 type CreateBatchInvoicesActionInput = Omit<
   CreateBillingBatchInput,
-  "studentIds"
+  "studentIds" | "targetMode"
 > & {
+  targetMode?: "ALL_STUDENTS" | "SELECTED_STUDENTS";
   studentIds?: string[];
 };
 
 const FINANCE_APPROVER_ROLES: AuthRole[] = ["super_admin", "admin"];
 const FINANCE_OPERATOR_ROLES: AuthRole[] = ["super_admin", "admin", "staff"];
-
-function assertFinanceRuntimeSupported() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    throw new Error(getFinanceDesktopGuardMessage());
-  }
-}
 
 function revalidateFinancePath(path: string) {
   try {
@@ -72,7 +69,7 @@ async function resolveFinanceActorById(actorId: string) {
 }
 
 async function resolveSessionFinanceActor() {
-  assertFinanceRuntimeSupported();
+  assertFinanceWebServerOnlyRuntime();
   const session = await auth();
   const sessionUser = session?.user;
 
@@ -129,36 +126,32 @@ export async function createBatchInvoicesAction(
 ) {
   try {
     const actor = await requireFinanceOperatorAuthority(actorId);
-    const db = await getDb();
-    const resolvedStudentIds =
-      input.studentIds && input.studentIds.length > 0
-        ? input.studentIds
-        : (
-            await db
-              .select({ id: users.id })
-              .from(users)
-              .where(
-                and(
-                  eq(users.role, "student"),
-                  eq(users.isActive, true),
-                  isNull(users.deletedAt),
-                ),
-              )
-          ).map((student) => student.id);
-
-    if (resolvedStudentIds.length === 0) {
-      throw new Error("Tidak ada siswa target untuk batch invoice.");
-    }
-
     const result = await FinanceService.createBatchInvoices(actor.id, {
       ...input,
-      studentIds: resolvedStudentIds,
+      targetMode: input.targetMode ?? "ALL_STUDENTS",
+      studentIds: input.studentIds ?? [],
     } satisfies CreateBillingBatchInput);
     revalidateFinancePath("/dashboard/finance/invoices");
     return result;
   } catch (error) {
     console.error("[FINANCE_ACTION] Batch generation failed:", error);
     throw error;
+  }
+}
+
+export async function getBatchStudentCandidatesAction(input?: {
+  query?: string;
+  classId?: string;
+  limit?: number;
+  categoryId?: string;
+  dueDate?: Date;
+}) {
+  try {
+    await requireFinanceOperatorAuthority();
+    return await FinanceService.getBatchStudentCandidates(input);
+  } catch (error) {
+    console.error("[FINANCE_ACTION] Failed to fetch batch students:", error);
+    return [];
   }
 }
 
@@ -187,6 +180,25 @@ export async function updateInvoiceStatusAction(
   }
 }
 
+export async function bulkVoidInvoicesAction(
+  actorId: string,
+  input: { invoiceIds: string[]; reason: string },
+) {
+  try {
+    const actor = await requireFinanceApprovalAuthority(actorId);
+    const result = await FinanceService.bulkUpdateInvoiceStatus(actor.id, {
+      invoiceIds: input.invoiceIds,
+      status: "VOID",
+      reason: input.reason,
+    });
+    revalidateFinancePath("/dashboard/finance/invoices");
+    return result;
+  } catch (error) {
+    console.error("[FINANCE_ACTION] Bulk void invoices failed:", error);
+    throw error;
+  }
+}
+
 export async function processPaymentAction(
   userId: string,
   input: ProcessPaymentInput,
@@ -204,33 +216,70 @@ export async function processPaymentAction(
   }
 }
 
+export async function applyCreditToInvoicesAction(
+  userId: string,
+  input: ApplyCreditToInvoicesInput,
+) {
+  try {
+    const actor = await requireFinanceOperatorAuthority(userId);
+    const result = await FinanceService.applyCreditToInvoices(actor.id, input);
+    revalidateFinancePath("/dashboard/finance/payments");
+    revalidateFinancePath("/dashboard/finance/invoices");
+    revalidateFinancePath("/dashboard/finance");
+    revalidateFinancePath("/dashboard/finance/audit");
+    return result;
+  } catch (error) {
+    console.error("[FINANCE_ACTION] Apply credit failed:", error);
+    throw error;
+  }
+}
+
 export async function searchStudentsAction(query: string) {
   try {
     await requireFinanceOperatorAuthority();
     const db = await getDb();
     const result = await db
       .select({
-        id: users.id,
-        nis: users.nis,
-        fullName: users.fullName,
+        id: students.id,
+        nis: students.nis,
+        fullName: students.fullName,
         grade: students.grade,
+        className: classes.name,
+        creditBalance: creditBalances.amount,
       })
-      .from(users)
+      .from(students)
       .leftJoin(
-        students,
-        and(eq(students.nis, users.nis), isNull(students.deletedAt)),
+        classes,
+        and(eq(classes.id, students.grade), isNull(classes.deletedAt)),
+      )
+      .leftJoin(
+        creditBalances,
+        and(
+          eq(creditBalances.studentId, students.id),
+          isNull(creditBalances.deletedAt),
+        ),
       )
       .where(
         and(
-          eq(users.role, "student"),
-          eq(users.isActive, true),
-          isNull(users.deletedAt),
-          or(like(users.fullName, `%${query}%`), like(users.nis, `%${query}%`)),
+          isNull(students.deletedAt),
+          or(
+            like(students.fullName, `%${query}%`),
+            like(students.nis, `%${query}%`),
+            like(students.nisn, `%${query}%`),
+            like(students.grade, `%${query}%`),
+            like(classes.name, `%${query}%`),
+          ),
         ),
       )
-      .limit(10);
+      .limit(100);
 
-    return result;
+    return result.map((student) => ({
+      id: student.id,
+      nis: student.nis,
+      fullName: student.fullName,
+      grade: sanitizeClassDisplayName(student.className, student.grade),
+      creditBalance: student.creditBalance ?? 0,
+    }));
   } catch (error) {
     console.error("[FINANCE_ACTION] Failed to search students:", error);
     return [];
@@ -247,15 +296,30 @@ export async function getStudentInvoicesAction(studentId: string) {
   }
 }
 
+export async function getStudentsWithOutstandingInvoicesAction() {
+  try {
+    await requireFinanceOperatorAuthority();
+    return await FinanceService.getStudentsWithOutstandingInvoices(250);
+  } catch (error) {
+    console.error(
+      "[FINANCE_ACTION] Failed to fetch students with outstanding invoices:",
+      error,
+    );
+    return [];
+  }
+}
+
 export async function approveFinanceRequestAction(
   actorId: string,
   requestId: string,
+  reason?: string,
 ) {
   try {
     const actor = await requireFinanceApprovalAuthority(actorId);
     const result = await FinanceControlService.approveRequest(
       actor.id,
       requestId,
+      reason,
     );
     revalidateFinancePath("/dashboard/finance/periods");
     revalidateFinancePath("/dashboard/finance/invoices");
@@ -270,18 +334,82 @@ export async function approveFinanceRequestAction(
 export async function rejectFinanceRequestAction(
   actorId: string,
   requestId: string,
+  reason?: string,
 ) {
   try {
     const actor = await requireFinanceApprovalAuthority(actorId);
     const result = await FinanceControlService.rejectRequest(
       actor.id,
       requestId,
+      reason,
     );
     revalidateFinancePath("/dashboard/finance/periods");
     revalidateFinancePath("/dashboard/finance/audit");
     return result;
   } catch (error) {
     console.error("[FINANCE_ACTION] Failed to reject finance request:", error);
+    throw error;
+  }
+}
+
+export async function createFinancePeriodAction(
+  actorId: string,
+  input: CreateFinancePeriodInput,
+) {
+  try {
+    const actor = await requireFinanceApprovalAuthority(actorId);
+    const result = await FinanceControlService.createPeriod(actor.id, input);
+    revalidateFinancePath("/dashboard/finance/periods");
+    return result;
+  } catch (error) {
+    console.error("[FINANCE_ACTION] Failed to create finance period:", error);
+    throw error;
+  }
+}
+
+export async function updateFinancePeriodStatusAction(
+  actorId: string,
+  periodId: string,
+  status: "OPEN" | "SOFT_CLOSED" | "CLOSED",
+  reason: string,
+) {
+  try {
+    const actor = await requireFinanceApprovalAuthority(actorId);
+    const result = await FinanceControlService.updatePeriodStatus(
+      actor.id,
+      periodId,
+      { status, reason },
+    );
+    revalidateFinancePath("/dashboard/finance/periods");
+    revalidateFinancePath("/dashboard/finance/audit");
+    return result;
+  } catch (error) {
+    console.error(
+      "[FINANCE_ACTION] Failed to update finance period status:",
+      error,
+    );
+    throw error;
+  }
+}
+
+export async function createManualJournalAdjustmentAction(
+  actorId: string,
+  input: ManualJournalAdjustmentInput,
+) {
+  try {
+    const actor = await requireFinanceApprovalAuthority(actorId);
+    const result = await AccountingService.createManualAdjustment(
+      actor.id,
+      input,
+    );
+    revalidateFinancePath("/dashboard/finance/accounting");
+    revalidateFinancePath("/dashboard/finance/audit");
+    return result;
+  } catch (error) {
+    console.error(
+      "[FINANCE_ACTION] Failed to create manual journal adjustment:",
+      error,
+    );
     throw error;
   }
 }

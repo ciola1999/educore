@@ -6,16 +6,18 @@ import { users } from "@/core/db/schema";
 import { AccountingService } from "@/core/services/accounting-service";
 import { FinanceService } from "@/core/services/finance-service";
 import { auth } from "@/lib/auth/web/auth";
+import { sanitizeClassDisplayName } from "@/lib/utils/class-name";
 import {
+  assertFinanceWebServerOnlyRuntime,
   FINANCE_VIEWER_ROLES,
-  getFinanceDesktopGuardMessage,
-  isFinanceDesktopEmbeddedRuntime,
 } from "./runtime-policy";
 import type {
+  FinanceAccountView,
   FinanceAuditLogView,
   FinanceInvoiceListItemView,
   FinanceJournalEntryView,
   FinancePaymentMethodView,
+  FinanceSummaryView,
 } from "./types";
 
 type RawJournalEntry = {
@@ -37,14 +39,8 @@ type RawJournalEntry = {
   }>;
 };
 
-function assertFinanceRuntimeSupported() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    throw new Error(getFinanceDesktopGuardMessage());
-  }
-}
-
 async function requireFinanceViewerAuthority() {
-  assertFinanceRuntimeSupported();
+  assertFinanceWebServerOnlyRuntime();
   const session = await auth();
   const sessionUser = session?.user;
 
@@ -87,9 +83,15 @@ export async function getFinanceDashboardSummary() {
     return {
       revenue: 0,
       receivables: 0,
-      collectionRate: 1.0,
+      collectionRate: 0,
       invoiceCount: 0,
-    };
+      paymentCount: 0,
+      activePeriodLabel: null,
+      activePeriodStatus: null,
+      revenueTrend: [],
+      dataState: "seeded",
+      pendingSync: false,
+    } satisfies FinanceSummaryView;
   }
 }
 
@@ -192,12 +194,21 @@ export async function getInvoices(filters: {
       return {
         id: invoice.id,
         invoiceNo: invoice.invoiceNo,
+        studentId: invoice.studentId,
         status: effectiveStatus,
         baseStatus: invoice.status,
         totalAmount: invoice.totalAmount,
         outstanding: invoice.outstanding,
         dueDate: invoice.dueDate,
         studentSnapshot: invoice.studentSnapshot ?? null,
+        studentName: invoice.studentFullName ?? null,
+        studentNis: invoice.studentNis ?? null,
+        studentNisn: invoice.studentNisn ?? null,
+        studentClassName: sanitizeClassDisplayName(
+          invoice.studentClassName,
+          invoice.studentGrade,
+        ),
+        studentCreditBalance: invoice.studentCreditBalance ?? 0,
       } satisfies FinanceInvoiceListItemView;
     });
 
@@ -212,6 +223,9 @@ export async function getInvoices(filters: {
               return JSON.parse(invoice.studentSnapshot) as {
                 fullName?: string;
                 nis?: string;
+                nisn?: string;
+                className?: string;
+                grade?: string;
               };
             } catch {
               return null;
@@ -219,13 +233,34 @@ export async function getInvoices(filters: {
           })()
         : null;
 
-      const studentName = snapshot?.fullName?.toLowerCase() || "";
-      const studentNis = snapshot?.nis?.toLowerCase() || "";
+      const studentName = (
+        invoice.studentName ||
+        snapshot?.fullName ||
+        ""
+      ).toLowerCase();
+      const studentNis = (
+        invoice.studentNis ||
+        snapshot?.nis ||
+        ""
+      ).toLowerCase();
+      const studentNisn = (
+        invoice.studentNisn ||
+        snapshot?.nisn ||
+        ""
+      ).toLowerCase();
+      const studentClassName = (
+        invoice.studentClassName ||
+        snapshot?.className ||
+        snapshot?.grade ||
+        ""
+      ).toLowerCase();
 
       return (
         invoice.invoiceNo.toLowerCase().includes(normalizedSearch) ||
         studentName.includes(normalizedSearch) ||
-        studentNis.includes(normalizedSearch)
+        studentNis.includes(normalizedSearch) ||
+        studentNisn.includes(normalizedSearch) ||
+        studentClassName.includes(normalizedSearch)
       );
     });
   } catch (error) {
@@ -263,6 +298,25 @@ export async function getJournalEntriesAction(): Promise<
     }));
   } catch (error) {
     console.error("[FINANCE_QUERY] Failed to fetch journals:", error);
+    return [];
+  }
+}
+
+export async function getFinanceAccountsAction(): Promise<
+  FinanceAccountView[]
+> {
+  try {
+    await requireFinanceViewerAuthority();
+    const db = await getDb();
+    const accounts = await AccountingService.getAccounts(db);
+    return accounts.map((account) => ({
+      id: account.id,
+      code: account.code,
+      name: account.name,
+      type: account.type,
+    }));
+  } catch (error) {
+    console.error("[FINANCE_QUERY] Failed to fetch accounts:", error);
     return [];
   }
 }

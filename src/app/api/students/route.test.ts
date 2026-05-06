@@ -118,12 +118,15 @@ describe("/api/students route", () => {
       },
     });
 
-    selectResults.push([
-      {
-        id: "student-legacy",
-        deletedAt: new Date("2026-03-27T00:00:00.000Z"),
-      },
-    ]);
+    selectResults.push(
+      [{ id: "class-10-a" }],
+      [
+        {
+          id: "student-legacy",
+          deletedAt: new Date("2026-03-27T00:00:00.000Z"),
+        },
+      ],
+    );
 
     const { POST } = await import("./route");
     const request = new Request("http://localhost/api/students", {
@@ -291,6 +294,63 @@ describe("/api/students route", () => {
       source: "qr",
       checkInTime: "2026-03-27T07:01:00.000Z",
       checkOutTime: null,
+    });
+  });
+
+  it("keeps admin list available when search and sort target display name or class", async () => {
+    authMock.mockResolvedValue({
+      user: {
+        id: "admin-1",
+        role: "admin",
+      },
+    });
+
+    selectResults.push(
+      [
+        {
+          id: "student-1",
+          nis: "2324.10.001",
+          nisn: null,
+          fullName: "Aditya Putra",
+          gender: "L",
+          grade: "KELAS 12 TSM",
+          parentName: null,
+          parentPhone: null,
+          tempatLahir: null,
+          tanggalLahir: null,
+          alamat: null,
+          createdAt: new Date("2026-03-19T00:00:00.000Z"),
+          accountClassName: "KELAS 12 TSM",
+        },
+      ],
+      [{ value: 1 }],
+      [{ id: "student-1", email: "student1@example.com" }],
+    );
+
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request(
+        "http://localhost/api/students?search=Aditya&sortBy=grade&sortDir=desc",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      success: boolean;
+      data: {
+        data: Array<{ id: string; fullName: string; grade: string }>;
+        total: number;
+        totalPages: number;
+      };
+    };
+
+    expect(payload.success).toBe(true);
+    expect(payload.data.total).toBe(1);
+    expect(payload.data.totalPages).toBe(1);
+    expect(payload.data.data[0]).toMatchObject({
+      id: "student-1",
+      fullName: "Aditya Putra",
+      grade: "KELAS 12 TSM",
     });
   });
 });

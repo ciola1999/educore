@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinanceRuntimeNotice } from "../finance-runtime-notice";
+import { auth } from "@/lib/auth/web/auth";
 import { getPaymentMethodsAction } from "../queries";
-import { isFinanceDesktopEmbeddedRuntime } from "../runtime-policy";
-import { PaymentsClient } from "./payments-client";
+import { isFinanceDesktopRequestRuntime } from "../runtime-policy";
+import { PaymentsRuntimeClient } from "./payments-runtime-client";
 
 export const dynamic = "force-dynamic";
 
@@ -15,17 +15,16 @@ export const dynamic = "force-dynamic";
  */
 
 export default async function PaymentsPage() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    return <FinanceRuntimeNotice />;
-  }
-
-  // Pre-fetch supported methods on the server
-  const methods = await getPaymentMethodsAction();
+  const desktopRuntime = await isFinanceDesktopRequestRuntime();
+  const session = desktopRuntime ? null : await auth();
+  const hasWebSession = Boolean(session?.user?.id);
+  const methods =
+    desktopRuntime || !hasWebSession ? [] : await getPaymentMethodsAction();
 
   return (
     <div className="space-y-6">
       <Suspense fallback={<PaymentsSkeleton />}>
-        <PaymentsClient initialMethods={methods} />
+        <PaymentsRuntimeClient initialMethods={methods} />
       </Suspense>
     </div>
   );

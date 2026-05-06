@@ -431,7 +431,7 @@ export const invoices = sqliteTable(
     invoiceNo: text("invoice_no").unique().notNull(),
     studentId: text("student_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => students.id),
     batchId: text("batch_id").references(() => billingBatches.id),
     categoryId: text("category_id")
       .notNull()
@@ -501,7 +501,7 @@ export const payments = sqliteTable(
     paymentNo: text("payment_no").unique().notNull(),
     studentId: text("student_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => students.id),
     methodId: text("method_id")
       .notNull()
       .references(() => paymentMethods.id),
@@ -550,7 +550,7 @@ export const creditBalances = sqliteTable(
     id: text("id").primaryKey().$defaultFn(generateId),
     studentId: text("student_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => students.id),
     amount: integer("amount").notNull(),
     lastUsedAt: integer("last_used_at", { mode: "timestamp" }),
     ...syncMetadata,
@@ -971,7 +971,10 @@ export const billingBatchesRelations = relations(
 );
 
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
-  student: one(users, { fields: [invoices.studentId], references: [users.id] }),
+  student: one(students, {
+    fields: [invoices.studentId],
+    references: [students.id],
+  }),
   batch: one(billingBatches, {
     fields: [invoices.batchId],
     references: [billingBatches.id],
@@ -1014,7 +1017,10 @@ export const invoicePenaltiesRelations = relations(
 );
 
 export const paymentsRelations = relations(payments, ({ one, many }) => ({
-  student: one(users, { fields: [payments.studentId], references: [users.id] }),
+  student: one(students, {
+    fields: [payments.studentId],
+    references: [students.id],
+  }),
   method: one(paymentMethods, {
     fields: [payments.methodId],
     references: [paymentMethods.id],
@@ -1049,9 +1055,9 @@ export const receiptsRelations = relations(receipts, ({ one }) => ({
 }));
 
 export const creditBalancesRelations = relations(creditBalances, ({ one }) => ({
-  student: one(users, {
+  student: one(students, {
     fields: [creditBalances.studentId],
-    references: [users.id],
+    references: [students.id],
   }),
 }));
 

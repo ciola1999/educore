@@ -15,8 +15,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { createBatchInvoicesAction } from "@/app/dashboard/finance/actions";
-import { getBillingCategoriesAction } from "@/app/dashboard/finance/queries";
+import {
+  createBatchInvoicesRuntimeAction,
+  getBatchStudentCandidatesRuntimeAction,
+  getBillingCategoriesRuntimeAction,
+} from "@/app/dashboard/finance/client-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,43 +40,140 @@ const steps = [
   { id: 3, name: "Review & Generate", icon: HistoryIcon },
 ];
 
-export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
+type BatchInvoiceItem = {
+  id: string;
+  description: string;
+  amount: number;
+};
+
+type BatchStudentCandidate = {
+  id: string;
+  nis: string;
+  nisn: string | null;
+  fullName: string;
+  grade: string;
+  hasExistingInvoiceForPeriod: boolean;
+};
+
+type BatchTargetMode = "ALL_STUDENTS" | "SELECTED_STUDENTS";
+
+function createEmptyBatchInvoiceItem(): BatchInvoiceItem {
+  return {
+    id: crypto.randomUUID(),
+    description: "",
+    amount: 0,
+  };
+}
+
+function parseRupiahInput(value: string) {
+  const digitsOnly = value.replace(/\D/g, "");
+  return digitsOnly ? Number(digitsOnly) : 0;
+}
+
+export function BatchInvoiceModal({
+  children,
+  defaultOpen = false,
+}: {
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
   const [step, setStep] = useState(1);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [isPending, startTransition] = useTransition();
   const { user } = useAuth();
 
   // Selection State
-  const [selectedStudentIds, _setSelectedStudentIds] = useState<string[]>([]);
+  const [targetMode, setTargetMode] = useState<BatchTargetMode>("ALL_STUDENTS");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentCandidates, setStudentCandidates] = useState<
+    BatchStudentCandidate[]
+  >([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
   // Form State
   const [batchName, setBatchName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [items, setItems] = useState([{ description: "", amount: 0 }]);
+  const [items, setItems] = useState<BatchInvoiceItem[]>([
+    createEmptyBatchInvoiceItem(),
+  ]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
     [],
   );
 
   useEffect(() => {
     if (open) {
-      void getBillingCategoriesAction().then(setCategories);
+      void getBillingCategoriesRuntimeAction().then(setCategories);
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsLoadingStudents(true);
+      try {
+        const candidates = await getBatchStudentCandidatesRuntimeAction({
+          query: studentSearch,
+          limit: 100,
+          categoryId: categoryId || undefined,
+          dueDate: dueDate ? new Date(dueDate) : undefined,
+        });
+        if (!cancelled) {
+          setStudentCandidates(candidates);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          toast.error("Gagal memuat daftar peserta didik.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingStudents(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [categoryId, dueDate, open, studentSearch]);
+
   const next = () => {
-    if (step === 1 && selectedStudentIds.length === 0) {
-      // For now allowing "all" mode if none selected
-      // toast.error("Please select at least one student");
-      // return;
+    if (
+      step === 1 &&
+      targetMode === "SELECTED_STUDENTS" &&
+      selectedStudentIds.length === 0
+    ) {
+      toast.error("Minimal pilih 1 peserta didik.");
+      return;
     }
     setStep((s) => Math.min(s + 1, 3));
   };
   const prev = () => setStep((s) => Math.max(s - 1, 1));
 
-  const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+  const normalizedItems = items.map((item) => ({
+    ...item,
+    description: item.description.trim(),
+    amount: Math.trunc(item.amount),
+  }));
+  const totalAmount = normalizedItems.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
+  const isMassGenerationMode = targetMode === "ALL_STUDENTS";
+  const selectedStudents = studentCandidates.filter((student) =>
+    selectedStudentIds.includes(student.id),
+  );
+  const targetLabel =
+    targetMode === "ALL_STUDENTS"
+      ? "ALL"
+      : selectedStudentIds.length.toString();
 
-  const addItem = () => setItems([...items, { description: "", amount: 0 }]);
+  const addItem = () => setItems([...items, createEmptyBatchInvoiceItem()]);
   const removeItem = (idx: number) =>
     setItems(items.filter((_, i) => i !== idx));
   const updateItem = (
@@ -84,6 +184,13 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
     const newItems = [...items];
     newItems[idx] = { ...newItems[idx], [field]: value };
     setItems(newItems);
+  };
+  const toggleStudent = (studentId: string) => {
+    setSelectedStudentIds((current) =>
+      current.includes(studentId)
+        ? current.filter((id) => id !== studentId)
+        : [...current, studentId],
+    );
   };
 
   const handleFinalize = async () => {
@@ -96,28 +203,49 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
       !batchName ||
       !categoryId ||
       !dueDate ||
-      items.some((i) => !i.description || i.amount <= 0)
+      normalizedItems.some((i) => !i.description || i.amount < 1000)
     ) {
-      toast.error("Please complete all billing details.");
+      toast.error(
+        "Lengkapi detail billing. Nominal item invoice minimal Rp1.000.",
+      );
+      return;
+    }
+
+    if (
+      isMassGenerationMode &&
+      !window.confirm(
+        "Batch invoice ini akan diproses untuk semua siswa aktif. Di desktop proses ini bisa memakan waktu lebih lama. Lanjutkan?",
+      )
+    ) {
       return;
     }
 
     startTransition(async () => {
       try {
-        const result = await createBatchInvoicesAction(user.id, {
+        const result = await createBatchInvoicesRuntimeAction(user.id, {
           name: batchName,
           categoryId,
           dueDate: new Date(dueDate),
+          targetMode,
           studentIds: selectedStudentIds.length > 0 ? selectedStudentIds : [],
-          items: items.map((i) => ({
+          items: normalizedItems.map((i) => ({
             description: i.description,
             amount: i.amount,
           })),
         });
 
-        toast.success(`Generated ${result.processed} invoices successfully.`);
+        toast.success(
+          `Generated ${result.processed} invoices. Skipped ${result.skipped ?? 0}.`,
+        );
         setOpen(false);
         setStep(1);
+        setTargetMode("ALL_STUDENTS");
+        setSelectedStudentIds([]);
+        setStudentSearch("");
+        setBatchName("");
+        setCategoryId("");
+        setDueDate("");
+        setItems([createEmptyBatchInvoiceItem()]);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to generate batch",
@@ -129,15 +257,15 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-3xl overflow-hidden border-white/10 bg-zinc-950 p-0 text-white backdrop-blur-3xl shadow-2xl shadow-finance-teal/20">
-        <DialogHeader className="p-6 border-b border-white/5 space-y-4">
-          <div className="flex items-center justify-between">
+      <DialogContent className="flex max-h-[min(46rem,calc(100dvh-1rem))] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden border-white/10 bg-zinc-950 p-0 text-white backdrop-blur-3xl shadow-2xl shadow-finance-teal/20 sm:w-[calc(100vw-2rem)]">
+        <DialogHeader className="shrink-0 space-y-4 border-b border-white/5 p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <DialogTitle className="font-mono text-2xl font-bold tracking-tight">
+              <DialogTitle className="font-mono text-xl font-bold tracking-tight sm:text-2xl">
                 Batch <span className="text-finance-teal">Invoice</span>
               </DialogTitle>
-              <p className="text-sm text-zinc-500 mt-1 uppercase tracking-widest font-medium">
-                Generate mass billing in seconds
+              <p className="mt-1 text-xs font-medium uppercase tracking-widest text-zinc-500 sm:text-sm">
+                Generate batch billing for desktop finance runtime
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -154,7 +282,7 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
           </div>
         </DialogHeader>
 
-        <div className="p-8 min-h-[400px]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div
@@ -173,38 +301,117 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                     variant="outline"
                     className="border-white/10 text-white"
                   >
-                    482 Total Registered
+                    {targetMode === "ALL_STUDENTS"
+                      ? `${studentCandidates.length} shown`
+                      : `${selectedStudentIds.length} selected`}
                   </Badge>
                 </div>
 
-                <div className="rounded-xl border border-white/5 bg-white/5 p-8 text-center space-y-4">
-                  <div className="p-4 rounded-full bg-finance-teal/10 w-fit mx-auto">
-                    <Users className="h-10 w-10 text-finance-teal" />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-zinc-200 font-bold text-lg">
-                      Mass Generation Mode
-                    </p>
-                    <p className="text-zinc-500 text-sm max-w-sm mx-auto">
-                      By default, invoices will be created for ALL active
-                      students. You can use the selection tool for refined
-                      targeting.
-                    </p>
-                  </div>
-                  <div className="flex justify-center gap-3">
-                    <Button
-                      variant="outline"
-                      className="border-white/10 bg-white/5 text-white rounded-xl"
-                    >
-                      All Students
-                    </Button>
-                    <Button
-                      variant="outline"
-                      disabled
-                      className="border-white/5 bg-white/2 text-zinc-600 rounded-xl cursor-not-allowed"
-                    >
-                      Select by Class (Coming Soon)
-                    </Button>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-black/20 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setTargetMode("ALL_STUDENTS")}
+                    className={cn(
+                      "rounded-lg px-4 py-3 text-sm font-black transition-colors",
+                      targetMode === "ALL_STUDENTS"
+                        ? "bg-finance-teal text-black"
+                        : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                    )}
+                  >
+                    All Students
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetMode("SELECTED_STUDENTS")}
+                    className={cn(
+                      "rounded-lg px-4 py-3 text-sm font-black transition-colors",
+                      targetMode === "SELECTED_STUDENTS"
+                        ? "bg-finance-teal text-black"
+                        : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                    )}
+                  >
+                    Pilih Manual
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <Input
+                    value={studentSearch}
+                    onChange={(event) => setStudentSearch(event.target.value)}
+                    placeholder="Cari nama, NIS, NISN, atau kelas..."
+                    className="h-12 rounded-xl border-white/10 bg-white/5 text-white"
+                  />
+
+                  {selectedStudentIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedStudents.map((student) => (
+                        <button
+                          key={`selected-${student.id}`}
+                          type="button"
+                          onClick={() => toggleStudent(student.id)}
+                          className="rounded-full border border-finance-teal/30 bg-finance-teal/10 px-3 py-1 text-xs font-bold text-finance-teal"
+                        >
+                          {student.fullName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="max-h-[min(18rem,38dvh)] space-y-2 overflow-y-auto pr-1">
+                    {isLoadingStudents ? (
+                      <div className="flex h-40 items-center justify-center rounded-xl border border-white/5 bg-white/5">
+                        <Loader2 className="h-7 w-7 animate-spin text-finance-teal" />
+                      </div>
+                    ) : studentCandidates.length > 0 ? (
+                      studentCandidates.map((student) => {
+                        const isSelected = selectedStudentIds.includes(
+                          student.id,
+                        );
+                        return (
+                          <button
+                            key={student.id}
+                            type="button"
+                            onClick={() => {
+                              setTargetMode("SELECTED_STUDENTS");
+                              toggleStudent(student.id);
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left transition-colors",
+                              isSelected
+                                ? "border-finance-teal/40 bg-finance-teal/10"
+                                : "border-white/5 bg-white/5 hover:bg-white/8",
+                            )}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-white">
+                                {student.fullName}
+                              </p>
+                              <p className="truncate font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+                                {student.grade} | NIS: {student.nis}
+                                {student.nisn ? ` | NISN: ${student.nisn}` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {student.hasExistingInvoiceForPeriod && (
+                                <Badge variant="warning" className="text-[9px]">
+                                  EXISTING
+                                </Badge>
+                              )}
+                              <Badge
+                                variant={isSelected ? "success" : "outline"}
+                                className="font-mono text-[9px]"
+                              >
+                                {isSelected ? "SELECTED" : "ADD"}
+                              </Badge>
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-white/10 bg-white/3 p-8 text-center text-sm text-zinc-500">
+                        Peserta didik tidak ditemukan.
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -218,7 +425,7 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <label
                       htmlFor="batch-name"
@@ -289,11 +496,11 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                     </Button>
                   </div>
 
-                  <div className="space-y-3 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="max-h-[min(13rem,30dvh)] space-y-3 overflow-y-auto pr-2 custom-scrollbar">
                     {items.map((item, idx) => (
                       <div
-                        key={`item-${item.description}-${idx}`}
-                        className="flex gap-3 items-center group"
+                        key={item.id}
+                        className="group flex flex-col gap-3 sm:flex-row sm:items-center"
                       >
                         <Input
                           placeholder="Description (e.g. SPP Bulanan)"
@@ -304,13 +511,18 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                           className="flex-1 bg-white/5 border-white/10 rounded-xl"
                         />
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           placeholder="0"
-                          value={item.amount || ""}
+                          value={item.amount ? formatCurrency(item.amount) : ""}
                           onChange={(e) =>
-                            updateItem(idx, "amount", Number(e.target.value))
+                            updateItem(
+                              idx,
+                              "amount",
+                              parseRupiahInput(e.target.value),
+                            )
                           }
-                          className="w-40 bg-white/5 border-white/10 rounded-xl font-mono"
+                          className="w-full rounded-xl border-white/10 bg-white/5 font-mono sm:w-40"
                         />
                         <Button
                           type="button"
@@ -335,7 +547,7 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                 animate={{ opacity: 1, scale: 1 }}
                 className="space-y-6 py-4"
               >
-                <div className="p-6 rounded-3xl bg-finance-teal/10 ring-1 ring-finance-teal/20 space-y-6">
+                <div className="space-y-6 rounded-3xl bg-finance-teal/10 p-4 ring-1 ring-finance-teal/20 sm:p-6">
                   <div className="flex items-center justify-between pb-4 border-b border-white/5">
                     <div className="flex items-center gap-2">
                       <HistoryIcon className="h-4 w-4 text-finance-teal" />
@@ -351,13 +563,13 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-8">
                     <div className="space-y-1">
                       <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-bold">
                         Target
                       </p>
                       <p className="text-2xl font-black text-white">
-                        {selectedStudentIds.length || "ALL"}
+                        {targetLabel}
                         <span className="text-sm font-medium text-zinc-500 ml-2">
                           Students
                         </span>
@@ -373,7 +585,7 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-4 text-xs font-mono">
+                  <div className="grid grid-cols-1 gap-3 border-t border-white/5 pt-4 font-mono text-xs sm:grid-cols-2 sm:gap-4">
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Category:</span>
                       <span className="text-white font-bold">
@@ -399,7 +611,8 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                     <p className="text-xs text-amber-200/60 leading-relaxed">
                       Generated invoices will be immutable. Auto-deletion is not
                       supported. Please verify the amounts and students before
-                      finalizing.
+                      finalizing. Jika target masih ALL active students, proses
+                      bisa berjalan lebih lama dari aksi finance biasa.
                     </p>
                   </div>
                 </div>
@@ -408,8 +621,8 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
         </div>
 
-        <DialogFooter className="p-6 border-t border-white/5 bg-white/2">
-          <div className="flex w-full justify-between items-center">
+        <DialogFooter className="shrink-0 border-t border-white/5 bg-white/2 p-4 sm:p-6">
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {step > 1 ? (
               <Button
                 variant="ghost"
@@ -421,14 +634,14 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
                 Back
               </Button>
             ) : (
-              <div />
+              <div className="hidden sm:block" />
             )}
 
-            <div className="flex gap-3">
+            <div className="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row">
               <Button
                 variant="ghost"
                 onClick={() => setOpen(false)}
-                className="text-zinc-400 hover:bg-white/5 rounded-xl"
+                className="rounded-xl text-zinc-400 hover:bg-white/5"
                 disabled={isPending}
               >
                 Cancel
@@ -436,7 +649,7 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
               <Button
                 onClick={step === 3 ? handleFinalize : next}
                 disabled={isPending}
-                className="bg-finance-teal hover:bg-finance-teal/90 rounded-xl shadow-lg shadow-finance-teal/20 min-w-[140px]"
+                className="min-w-[140px] rounded-xl bg-finance-teal shadow-lg shadow-finance-teal/20 hover:bg-finance-teal/90"
               >
                 {isPending ? (
                   <>
@@ -456,5 +669,15 @@ export function BatchInvoiceModal({ children }: { children: React.ReactNode }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function BatchInvoiceModalAutoOpen() {
+  return (
+    <BatchInvoiceModal defaultOpen>
+      <button type="button" className="hidden" aria-hidden="true" tabIndex={-1}>
+        Open batch invoice
+      </button>
+    </BatchInvoiceModal>
   );
 }

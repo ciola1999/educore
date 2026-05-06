@@ -82,6 +82,14 @@ type StudentStatsSummary = {
   activeGrades: number;
 };
 
+function buildStudentDisplayNameExpression() {
+  return sql<string>`coalesce(${users.fullName}, ${students.fullName})`;
+}
+
+function buildStudentDisplayGradeExpression() {
+  return sql<string>`coalesce(${classes.name}, ${students.grade})`;
+}
+
 function normalizeDate(value: string | null): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -360,12 +368,16 @@ export async function GET(request: Request) {
   }
 
   let conditions = isNull(students.deletedAt);
+  const displayNameExpression = buildStudentDisplayNameExpression();
+  const displayGradeExpression = buildStudentDisplayGradeExpression();
   if (search) {
     const q = `%${search}%`;
     const searchCondition = or(
       like(students.fullName, q),
+      like(displayNameExpression, q),
       like(students.nis, q),
       like(students.grade, q),
+      like(displayGradeExpression, q),
       like(students.nisn, q),
     );
 
@@ -410,16 +422,16 @@ export async function GET(request: Request) {
     .orderBy(
       sortBy === "fullName"
         ? sortDir === "asc"
-          ? students.fullName
-          : desc(students.fullName)
+          ? displayNameExpression
+          : desc(displayNameExpression)
         : sortBy === "nis"
           ? sortDir === "asc"
             ? students.nis
             : desc(students.nis)
           : sortBy === "grade"
             ? sortDir === "asc"
-              ? students.grade
-              : desc(students.grade)
+              ? displayGradeExpression
+              : desc(displayGradeExpression)
             : sortDir === "asc"
               ? students.createdAt
               : desc(students.createdAt),

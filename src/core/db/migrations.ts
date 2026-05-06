@@ -867,7 +867,39 @@ async function seedFinanceMasterData(db: DatabaseLike): Promise<void> {
     }
   }
 
-  // 2. Default Payment Methods
+  // 2. Default Billing Categories
+  const defaultCategories = [
+    {
+      name: "SPP Bulanan",
+      description: "Kategori tagihan utama untuk iuran sekolah bulanan.",
+    },
+    {
+      name: "Daftar Ulang",
+      description:
+        "Kategori tagihan untuk proses registrasi atau daftar ulang.",
+    },
+    {
+      name: "Kegiatan Sekolah",
+      description:
+        "Kategori tagihan untuk event, kegiatan, atau program sekolah.",
+    },
+  ];
+
+  for (const category of defaultCategories) {
+    const existing = await db.select(
+      "SELECT id FROM billing_categories WHERE lower(name) = lower(?) AND deleted_at IS NULL LIMIT 1",
+      [category.name],
+    );
+    if (existing.length === 0) {
+      await db.execute(
+        `INSERT INTO billing_categories (id, name, description, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), category.name, category.description, 1, now, now],
+      );
+    }
+  }
+
+  // 3. Default Payment Methods
   const defaultMethods = [
     { name: "Cash", code: "CASH", isElectronic: 0 },
     { name: "Bank Transfer", code: "TRANSFER", isElectronic: 1 },
@@ -894,7 +926,7 @@ async function seedFinanceMasterData(db: DatabaseLike): Promise<void> {
     }
   }
 
-  // 3. Default Active Period (Start of Current Month)
+  // 4. Default Active Period (Start of Current Month)
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -1294,6 +1326,211 @@ async function safeAddColumn(
 /**
  * Run all migrations — safe to call multiple times (idempotent)
  */
+type ForeignKeyListRow = {
+  table: string;
+  from: string;
+};
+
+async function getForeignKeyList(
+  db: DatabaseLike,
+  table: string,
+): Promise<ForeignKeyListRow[]> {
+  try {
+    return await db.select<ForeignKeyListRow>(
+      `PRAGMA foreign_key_list("${table}")`,
+    );
+  } catch (error) {
+    console.warn(
+      `⚠️ [Migration] Could not inspect foreign keys for ${table}`,
+      error,
+    );
+    return [];
+  }
+}
+
+function buildStudentIdRemapExpression(alias: string) {
+  return `COALESCE(
+    (SELECT s.id FROM students s WHERE s.id = ${alias}.student_id LIMIT 1),
+    (
+      SELECT s.id
+      FROM students s
+      INNER JOIN users u ON u.nis = s.nis
+      WHERE u.id = ${alias}.student_id
+        AND s.deleted_at IS NULL
+      LIMIT 1
+    ),
+    ${alias}.student_id
+  )`;
+}
+
+async function rebuildInvoicesStudentForeignKey(db: DatabaseLike) {
+  const foreignKeys = await getForeignKeyList(db, "invoices");
+  const studentForeignKey = foreignKeys.find((fk) => fk.from === "student_id");
+  if (studentForeignKey?.table !== "users") return;
+
+  console.info(
+    "🔧 [Migration] Rebuilding invoices.student_id foreign key to students.id",
+  );
+
+  await db.execute(`PRAGMA foreign_keys = OFF`);
+  try {
+    await db.execute(`DROP TABLE IF EXISTS "invoices_new"`);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS "invoices_new" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "invoice_no" TEXT UNIQUE NOT NULL,
+        "student_id" TEXT NOT NULL REFERENCES "students"("id"),
+        "batch_id" TEXT REFERENCES "billing_batches"("id"),
+        "category_id" TEXT NOT NULL REFERENCES "billing_categories"("id"),
+        "due_date" INTEGER NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'OPEN',
+        "total_amount" INTEGER NOT NULL,
+        "total_paid" INTEGER NOT NULL DEFAULT 0,
+        "outstanding" INTEGER NOT NULL,
+        "discount_total" INTEGER NOT NULL DEFAULT 0,
+        "penalty_total" INTEGER NOT NULL DEFAULT 0,
+        "student_snapshot" TEXT,
+        "version" INTEGER NOT NULL DEFAULT 1,
+        "hlc" TEXT,
+        "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        "deleted_at" INTEGER,
+        "sync_status" TEXT NOT NULL DEFAULT 'pending'
+      )
+    `);
+
+    await db.execute(`
+      INSERT OR IGNORE INTO "invoices_new" (
+        id, invoice_no, student_id, batch_id, category_id, due_date, status,
+        total_amount, total_paid, outstanding, discount_total, penalty_total,
+        student_snapshot, version, hlc, created_at, updated_at, deleted_at,
+        sync_status
+      )
+      SELECT
+        i.id, i.invoice_no, ${buildStudentIdRemapExpression("i")},
+        i.batch_id, i.category_id, i.due_date, i.status, i.total_amount,
+        i.total_paid, i.outstanding, i.discount_total, i.penalty_total,
+        i.student_snapshot, i.version, i.hlc, i.created_at, i.updated_at,
+        i.deleted_at, i.sync_status
+      FROM invoices i
+    `);
+
+    await db.execute(`DROP TABLE "invoices"`);
+    await db.execute(`ALTER TABLE "invoices_new" RENAME TO "invoices"`);
+  } finally {
+    await db.execute(`PRAGMA foreign_keys = ON`);
+  }
+}
+
+async function rebuildPaymentsStudentForeignKey(db: DatabaseLike) {
+  const foreignKeys = await getForeignKeyList(db, "payments");
+  const studentForeignKey = foreignKeys.find((fk) => fk.from === "student_id");
+  if (studentForeignKey?.table !== "users") return;
+
+  console.info(
+    "🔧 [Migration] Rebuilding payments.student_id foreign key to students.id",
+  );
+
+  await db.execute(`PRAGMA foreign_keys = OFF`);
+  try {
+    await db.execute(`DROP TABLE IF EXISTS "payments_new"`);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS "payments_new" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "payment_no" TEXT UNIQUE NOT NULL,
+        "student_id" TEXT NOT NULL REFERENCES "students"("id"),
+        "method_id" TEXT NOT NULL REFERENCES "payment_methods"("id"),
+        "amount" INTEGER NOT NULL,
+        "date" INTEGER NOT NULL,
+        "is_confirmed" INTEGER NOT NULL DEFAULT 0,
+        "confirmed_at" INTEGER,
+        "confirmed_by" TEXT REFERENCES "users"("id"),
+        "reference_no" TEXT,
+        "notes" TEXT,
+        "version" INTEGER NOT NULL DEFAULT 1,
+        "hlc" TEXT,
+        "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        "deleted_at" INTEGER,
+        "sync_status" TEXT NOT NULL DEFAULT 'pending'
+      )
+    `);
+
+    await db.execute(`
+      INSERT OR IGNORE INTO "payments_new" (
+        id, payment_no, student_id, method_id, amount, date, is_confirmed,
+        confirmed_at, confirmed_by, reference_no, notes, version, hlc,
+        created_at, updated_at, deleted_at, sync_status
+      )
+      SELECT
+        p.id, p.payment_no, ${buildStudentIdRemapExpression("p")},
+        p.method_id, p.amount, p.date, p.is_confirmed, p.confirmed_at,
+        p.confirmed_by, p.reference_no, p.notes, p.version, p.hlc,
+        p.created_at, p.updated_at, p.deleted_at, p.sync_status
+      FROM payments p
+    `);
+
+    await db.execute(`DROP TABLE "payments"`);
+    await db.execute(`ALTER TABLE "payments_new" RENAME TO "payments"`);
+  } finally {
+    await db.execute(`PRAGMA foreign_keys = ON`);
+  }
+}
+
+async function rebuildCreditBalancesStudentForeignKey(db: DatabaseLike) {
+  const foreignKeys = await getForeignKeyList(db, "credit_balances");
+  const studentForeignKey = foreignKeys.find((fk) => fk.from === "student_id");
+  if (studentForeignKey?.table !== "users") return;
+
+  console.info(
+    "🔧 [Migration] Rebuilding credit_balances.student_id foreign key to students.id",
+  );
+
+  await db.execute(`PRAGMA foreign_keys = OFF`);
+  try {
+    await db.execute(`DROP TABLE IF EXISTS "credit_balances_new"`);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS "credit_balances_new" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "student_id" TEXT NOT NULL REFERENCES "students"("id"),
+        "amount" INTEGER NOT NULL,
+        "last_used_at" INTEGER,
+        "version" INTEGER NOT NULL DEFAULT 1,
+        "hlc" TEXT,
+        "created_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        "updated_at" INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        "deleted_at" INTEGER,
+        "sync_status" TEXT NOT NULL DEFAULT 'pending'
+      )
+    `);
+
+    await db.execute(`
+      INSERT OR IGNORE INTO "credit_balances_new" (
+        id, student_id, amount, last_used_at, version, hlc, created_at,
+        updated_at, deleted_at, sync_status
+      )
+      SELECT
+        cb.id, ${buildStudentIdRemapExpression("cb")},
+        cb.amount, cb.last_used_at, cb.version, cb.hlc, cb.created_at,
+        cb.updated_at, cb.deleted_at, cb.sync_status
+      FROM credit_balances cb
+    `);
+
+    await db.execute(`DROP TABLE "credit_balances"`);
+    await db.execute(
+      `ALTER TABLE "credit_balances_new" RENAME TO "credit_balances"`,
+    );
+  } finally {
+    await db.execute(`PRAGMA foreign_keys = ON`);
+  }
+}
+
+async function ensureFinanceStudentForeignKeys(db: DatabaseLike) {
+  await rebuildInvoicesStudentForeignKey(db);
+  await rebuildPaymentsStudentForeignKey(db);
+  await rebuildCreditBalancesStudentForeignKey(db);
+}
+
 export async function runMigrations(
   db: DatabaseLike,
   options?: MigrationOptions,
@@ -1932,7 +2169,7 @@ export async function runMigrations(
     CREATE TABLE IF NOT EXISTS "invoices" (
       "id" TEXT PRIMARY KEY NOT NULL,
       "invoice_no" TEXT UNIQUE NOT NULL,
-      "student_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "student_id" TEXT NOT NULL REFERENCES "students"("id"),
       "batch_id" TEXT REFERENCES "billing_batches"("id"),
       "category_id" TEXT NOT NULL REFERENCES "billing_categories"("id"),
       "due_date" INTEGER NOT NULL,
@@ -2001,7 +2238,7 @@ export async function runMigrations(
     CREATE TABLE IF NOT EXISTS "payments" (
       "id" TEXT PRIMARY KEY NOT NULL,
       "payment_no" TEXT UNIQUE NOT NULL,
-      "student_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "student_id" TEXT NOT NULL REFERENCES "students"("id"),
       "method_id" TEXT NOT NULL REFERENCES "payment_methods"("id"),
       "amount" INTEGER NOT NULL,
       "date" INTEGER NOT NULL,
@@ -2052,7 +2289,7 @@ export async function runMigrations(
   await db.execute(`
     CREATE TABLE IF NOT EXISTS "credit_balances" (
       "id" TEXT PRIMARY KEY NOT NULL,
-      "student_id" TEXT NOT NULL REFERENCES "users"("id"),
+      "student_id" TEXT NOT NULL REFERENCES "students"("id"),
       "amount" INTEGER NOT NULL,
       "last_used_at" INTEGER,
       "version" INTEGER NOT NULL DEFAULT 1,
@@ -2149,6 +2386,8 @@ export async function runMigrations(
       "sync_status" TEXT NOT NULL DEFAULT 'pending'
     )
   `);
+
+  await ensureFinanceStudentForeignKeys(db);
 
   try {
     await consolidateCreditBalancesByStudent(db);

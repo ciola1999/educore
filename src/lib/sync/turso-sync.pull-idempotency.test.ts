@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attendance,
+  billingCategories,
+  creditBalances,
+  invoices,
   notifikasi,
+  paymentAllocations,
+  payments,
+  receipts,
   studentDailyAttendance,
   students,
+  users,
 } from "@/lib/db/schema";
 import { fullSync, pullFromCloud, pushToCloud } from "./turso-sync";
 
@@ -1309,5 +1316,429 @@ describe("turso full sync idempotency", () => {
           payload.syncStatus === "synced",
       ),
     ).toBe(true);
+  });
+
+  it("reuses the remote billing category id when a pending desktop category matches by name", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let selectCallCount = 0;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) => ({
+          where: vi.fn(() => {
+            if (table === billingCategories) {
+              selectCallCount += 1;
+
+              if (selectCallCount === 1) {
+                return Promise.resolve([
+                  {
+                    id: "local-category-1",
+                    name: "SPP Bulanan",
+                    description: "Seed desktop",
+                    isActive: true,
+                    updatedAt: new Date("2026-04-13T10:00:00.000Z"),
+                    syncStatus: "pending",
+                  },
+                ]);
+              }
+
+              return {
+                limit: vi.fn(async () => []),
+              };
+            }
+
+            return {
+              limit: vi.fn(async () => []),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes(
+          'SELECT id FROM "billing_categories" WHERE "name" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        expect(statement.args).toEqual(["SPP Bulanan"]);
+        return {
+          rows: [{ id: "remote-category-1" }],
+        };
+      }
+
+      if (sql.includes('INSERT INTO "billing_categories"')) {
+        expect(statement.args).toContain("remote-category-1");
+        expect(statement.args).not.toContain("local-category-1");
+        expect(statement.args).toContain("SPP Bulanan");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["billing_categories"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(syncedUpdates).toHaveLength(1);
+    expect(executeMock).toHaveBeenCalled();
+  });
+
+  it("remaps local payment and invoice ids before pushing pending payment allocations", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let pendingServed = false;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) => ({
+          where: vi.fn(() => {
+            if (table === paymentAllocations && !pendingServed) {
+              pendingServed = true;
+              return Promise.resolve([
+                {
+                  id: "local-allocation-1",
+                  paymentId: "local-payment-1",
+                  invoiceId: "local-invoice-1",
+                  amount: 250000,
+                  updatedAt: new Date("2026-04-13T10:15:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => {
+                if (table === payments) {
+                  return [
+                    {
+                      id: "local-payment-1",
+                      paymentNo: "PAY/2026/04/0001/LOC001",
+                      studentId: "student-1",
+                      methodId: "cash-1",
+                      amount: 250000,
+                      updatedAt: new Date("2026-04-13T10:10:00.000Z"),
+                      syncStatus: "pending",
+                    },
+                  ];
+                }
+
+                if (table === invoices) {
+                  return [
+                    {
+                      id: "local-invoice-1",
+                      invoiceNo: "INV/2026/04/0001/LOC001",
+                      studentId: "student-1",
+                      categoryId: "category-1",
+                      outstanding: 250000,
+                      updatedAt: new Date("2026-04-13T09:00:00.000Z"),
+                      syncStatus: "pending",
+                    },
+                  ];
+                }
+
+                return [];
+              }),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes(
+          'SELECT id FROM "payments" WHERE "payment_no" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        expect(statement.args).toEqual(["PAY/2026/04/0001/LOC001"]);
+        return {
+          rows: [{ id: "remote-payment-1" }],
+        };
+      }
+
+      if (
+        sql.includes(
+          'SELECT id FROM "invoices" WHERE "invoice_no" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        expect(statement.args).toEqual(["INV/2026/04/0001/LOC001"]);
+        return {
+          rows: [{ id: "remote-invoice-1" }],
+        };
+      }
+
+      if (
+        sql.includes(
+          'SELECT id FROM "payment_allocations" WHERE "payment_id" = ? AND "invoice_id" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        expect(statement.args).toEqual([
+          "remote-payment-1",
+          "remote-invoice-1",
+        ]);
+        return {
+          rows: [{ id: "remote-allocation-1" }],
+        };
+      }
+
+      if (sql.includes('INSERT INTO "payment_allocations"')) {
+        expect(statement.args).toContain("remote-allocation-1");
+        expect(statement.args).toContain("remote-payment-1");
+        expect(statement.args).toContain("remote-invoice-1");
+        expect(statement.args).not.toContain("local-payment-1");
+        expect(statement.args).not.toContain("local-invoice-1");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["payment_allocations"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(syncedUpdates).toHaveLength(1);
+    expect(executeMock).toHaveBeenCalled();
+  });
+
+  it("reuses the remote receipt id when a pending desktop receipt matches by receipt number", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let pendingServed = false;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) => ({
+          where: vi.fn(() => {
+            if (table === receipts && !pendingServed) {
+              pendingServed = true;
+              return Promise.resolve([
+                {
+                  id: "local-receipt-1",
+                  paymentId: "remote-payment-1",
+                  receiptNo: "RCP/2026/04/0001/LOC001",
+                  issuedAt: new Date("2026-04-13T10:20:00.000Z"),
+                  updatedAt: new Date("2026-04-13T10:20:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => []),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes(
+          'SELECT id FROM "receipts" WHERE "receipt_no" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        expect(statement.args).toEqual(["RCP/2026/04/0001/LOC001"]);
+        return {
+          rows: [{ id: "remote-receipt-1" }],
+        };
+      }
+
+      if (sql.includes('INSERT INTO "receipts"')) {
+        expect(statement.args).toContain("remote-receipt-1");
+        expect(statement.args).not.toContain("local-receipt-1");
+        expect(statement.args).toContain("RCP/2026/04/0001/LOC001");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["receipts"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(syncedUpdates).toHaveLength(1);
+    expect(executeMock).toHaveBeenCalled();
+  });
+
+  it("reuses the remote credit balance id after remapping the local student id", async () => {
+    const syncedUpdates: Array<Record<string, unknown>> = [];
+    let pendingServed = false;
+
+    const dbMock = {
+      select: vi.fn(() => ({
+        from: vi.fn((table: unknown) => ({
+          where: vi.fn(() => {
+            if (table === creditBalances && !pendingServed) {
+              pendingServed = true;
+              return Promise.resolve([
+                {
+                  id: "local-credit-1",
+                  studentId: "local-student-1",
+                  balance: 50000,
+                  updatedAt: new Date("2026-04-13T10:25:00.000Z"),
+                  syncStatus: "pending",
+                },
+              ]);
+            }
+
+            return {
+              limit: vi.fn(async () => {
+                if (table === students) {
+                  return [
+                    {
+                      id: "local-student-profile-1",
+                      nis: "12345",
+                      fullName: "Student Kredit",
+                      updatedAt: new Date("2026-04-13T09:30:00.000Z"),
+                      syncStatus: "pending",
+                    },
+                  ];
+                }
+
+                if (table === users) {
+                  return [
+                    {
+                      id: "local-student-1",
+                      email: "student-kredit@school.local",
+                      fullName: "Student Kredit",
+                      updatedAt: new Date("2026-04-13T09:30:00.000Z"),
+                      syncStatus: "pending",
+                    },
+                  ];
+                }
+
+                return [];
+              }),
+            };
+          }),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => ({
+          where: vi.fn(async () => {
+            syncedUpdates.push(payload);
+          }),
+        })),
+      })),
+    };
+
+    const executeMock = vi.fn(async (input: unknown) => {
+      const statement =
+        typeof input === "string"
+          ? { sql: input, args: [] as unknown[] }
+          : ((input as { sql?: string; args?: unknown[] }) ?? {
+              sql: "",
+              args: [],
+            });
+      const sql = statement.sql ?? "";
+
+      if (
+        sql.includes(
+          'SELECT id FROM "users" WHERE "email" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        return {
+          rows: [{ id: "remote-student-1" }],
+        };
+      }
+
+      if (
+        sql.includes(
+          'SELECT id FROM "credit_balances" WHERE "student_id" = ? AND "deleted_at" IS NULL LIMIT 1',
+        )
+      ) {
+        expect(statement.args).toEqual(["remote-student-1"]);
+        return {
+          rows: [{ id: "remote-credit-1" }],
+        };
+      }
+
+      if (sql.includes('INSERT INTO "credit_balances"')) {
+        expect(statement.args).toContain("remote-credit-1");
+        expect(statement.args).toContain("remote-student-1");
+        expect(statement.args).not.toContain("local-credit-1");
+        expect(statement.args).not.toContain("local-student-1");
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+
+    const result = await pushToCloud({
+      db: dbMock as never,
+      tursoCloud: {
+        execute: executeMock,
+      } as never,
+      tables: ["credit_balances"],
+    });
+
+    expect(result.status).toBe("success");
+    expect(syncedUpdates).toHaveLength(1);
+    expect(executeMock).toHaveBeenCalled();
   });
 });

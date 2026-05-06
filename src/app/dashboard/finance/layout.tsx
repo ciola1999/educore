@@ -32,6 +32,7 @@ export default function FinanceLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const visibleNavItems = navItems;
 
   return (
     <div className="space-y-8">
@@ -47,7 +48,7 @@ export default function FinanceLayout({
         </div>
 
         <nav className="flex items-center gap-1 rounded-2xl border border-white/5 bg-white/5 p-1.5 backdrop-blur-xl">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link

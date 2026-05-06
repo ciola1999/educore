@@ -19,6 +19,7 @@ const DESKTOP_LOCAL_ONLY_API_PREFIXES = [
   "/api/auth/logout",
   "/api/classes",
   "/api/dashboard",
+  "/api/finance",
   "/api/schedules",
   "/api/semesters",
   "/api/students",

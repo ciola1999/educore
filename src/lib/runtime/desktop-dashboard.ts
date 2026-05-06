@@ -24,6 +24,30 @@ const DESKTOP_CONSTRAINED_DASHBOARD_ROUTES = [
     label: "Academic",
   },
   {
+    href: "/dashboard/finance",
+    label: "Finance",
+  },
+  {
+    href: "/dashboard/finance/invoices",
+    label: "Finance",
+  },
+  {
+    href: "/dashboard/finance/payments",
+    label: "Finance",
+  },
+  {
+    href: "/dashboard/finance/periods",
+    label: "Finance",
+  },
+  {
+    href: "/dashboard/finance/accounting",
+    label: "Finance",
+  },
+  {
+    href: "/dashboard/finance/audit",
+    label: "Finance",
+  },
+  {
     href: "/dashboard/settings",
     label: "Settings",
   },

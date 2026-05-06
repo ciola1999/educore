@@ -216,6 +216,55 @@ function isExpectedWebMigrationConnectivityError(error: unknown) {
   });
 }
 
+function isSqliteLockedError(error: unknown) {
+  return collectDatabaseErrorMessages(error).some((message) => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("database is locked") ||
+      normalized.includes("database table is locked") ||
+      normalized.includes("(code: 5)")
+    );
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withSqliteBusyRetry<T>(
+  operation: () => Promise<T>,
+  maxAttempts = 4,
+  baseDelayMs = 120,
+) {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      attempt += 1;
+      if (!isSqliteLockedError(error) || attempt >= maxAttempts) {
+        throw error;
+      }
+
+      await sleep(baseDelayMs * attempt);
+    }
+  }
+}
+
+function isTransactionControlStatement(sql: string) {
+  const normalized = sql.trim().toUpperCase();
+  return (
+    normalized === "BEGIN" ||
+    normalized.startsWith("BEGIN ") ||
+    normalized === "COMMIT" ||
+    normalized === "ROLLBACK" ||
+    normalized.startsWith("SAVEPOINT ") ||
+    normalized.startsWith("RELEASE ") ||
+    normalized.startsWith("ROLLBACK TO ")
+  );
+}
+
 async function ensureWebMigrations(
   dbLike: DatabaseLike,
   options?: DatabaseInitOptions,
@@ -279,6 +328,7 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
       // Hardening & integrity defaults
       await _sqliteRemote.execute("PRAGMA foreign_keys = ON");
       await _sqliteRemote.execute("PRAGMA journal_mode = WAL");
+      await _sqliteRemote.execute("PRAGMA busy_timeout = 5000");
 
       // Ensure schema exists before any query execution
       logDatabaseDebug("⚡ [DB] Starting migrations...");
@@ -289,12 +339,14 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
         async (sql, params, method) => {
           try {
             if (!_sqliteRemote) throw new Error("DB not loaded");
+            const sqliteRemote = _sqliteRemote;
 
             if (method === "run") {
-              const result = await _sqliteRemote.execute(
-                sql,
-                params as unknown[],
-              );
+              const executeRun = () =>
+                sqliteRemote.execute(sql, params as unknown[]);
+              const result = isTransactionControlStatement(sql)
+                ? await executeRun()
+                : await withSqliteBusyRetry(executeRun);
               const raw = result as {
                 changes?: number;
                 rowsAffected?: number;
@@ -308,9 +360,11 @@ export const getDatabase = async (options?: DatabaseInitOptions) => {
               };
             }
 
-            const rows = await _sqliteRemote.select<Record<string, unknown>[]>(
-              sql,
-              params as unknown[],
+            const rows = await withSqliteBusyRetry(() =>
+              sqliteRemote.select<Record<string, unknown>[]>(
+                sql,
+                params as unknown[],
+              ),
             );
 
             // ALWAYS return array of arrays (values) for Drizzle proxy

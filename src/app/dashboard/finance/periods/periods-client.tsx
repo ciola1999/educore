@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
   BadgeCheck,
+  CheckCheck,
   ChevronRight,
   History,
   Lock,
@@ -15,15 +16,18 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import {
+  approveFinanceRequestRuntimeAction,
+  bulkDecideFinanceRequestsRuntimeAction,
+  rejectFinanceRequestRuntimeAction,
+  updateFinancePeriodStatusRuntimeAction,
+} from "@/app/dashboard/finance/client-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, formatCurrency } from "@/lib/utils";
-import {
-  approveFinanceRequestAction,
-  rejectFinanceRequestAction,
-} from "../actions";
+import { CreatePeriodDialog } from "./create-period-dialog";
 
 interface Period {
   id: string;
@@ -82,27 +86,83 @@ export function PeriodsClient({
     initialPeriods[0]?.id || null,
   );
   const [isPending, startTransition] = useTransition();
+  const [selectedApprovalIds, setSelectedApprovalIds] = useState<string[]>([]);
   const router = useRouter();
   const { user } = useAuth();
   const canManageApprovals =
     user?.role === "admin" || user?.role === "super_admin";
+  const canManagePeriods = canManageApprovals;
+  const pendingApprovals = initialApprovals.filter(
+    (request) => request.status === "PENDING",
+  );
+  const selectedPendingApprovals = pendingApprovals.filter((request) =>
+    selectedApprovalIds.includes(request.id),
+  );
+  const allPendingSelected =
+    pendingApprovals.length > 0 &&
+    pendingApprovals.every((request) =>
+      selectedApprovalIds.includes(request.id),
+    );
+
+  const toggleApprovalSelection = (requestId: string) => {
+    setSelectedApprovalIds((current) =>
+      current.includes(requestId)
+        ? current.filter((id) => id !== requestId)
+        : [...current, requestId],
+    );
+  };
+
+  const toggleAllPendingApprovals = () => {
+    setSelectedApprovalIds((current) => {
+      if (allPendingSelected) {
+        return current.filter(
+          (id) => !pendingApprovals.some((request) => request.id === id),
+        );
+      }
+
+      return Array.from(
+        new Set([...current, ...pendingApprovals.map((request) => request.id)]),
+      );
+    });
+  };
+
+  const requestReason = (label: string) => {
+    const value = window.prompt(`Masukkan alasan untuk ${label}:`, "");
+    if (!value || value.trim().length < 5) {
+      toast.error("Alasan minimal 5 karakter.");
+      return null;
+    }
+
+    return value.trim();
+  };
 
   const handleApprovalDecision = (
     requestId: string,
     action: "approve" | "reject",
   ) => {
+    if (!canManageApprovals) {
+      toast.info("Approval hanya tersedia untuk admin finance.");
+      return;
+    }
     if (!user?.id) {
       toast.error("Sesi pengguna tidak ditemukan. Silakan login ulang.");
+      return;
+    }
+
+    const reason = requestReason(
+      action === "approve" ? "approve request" : "reject request",
+    );
+    if (!reason) {
       return;
     }
 
     startTransition(async () => {
       try {
         if (action === "approve") {
-          await approveFinanceRequestAction(user.id, requestId);
+          await approveFinanceRequestRuntimeAction(user.id, requestId, reason);
           toast.success("Approval request berhasil disetujui.");
         } else {
-          await rejectFinanceRequestAction(user.id, requestId);
+          await rejectFinanceRequestRuntimeAction(user.id, requestId, reason);
           toast.success("Approval request berhasil ditolak.");
         }
 
@@ -117,8 +177,106 @@ export function PeriodsClient({
     });
   };
 
+  const handleBulkApprovalDecision = (decision: "approve" | "reject") => {
+    if (!canManageApprovals) {
+      toast.info("Approval hanya tersedia untuk admin finance.");
+      return;
+    }
+    if (!user?.id) {
+      toast.error("Sesi pengguna tidak ditemukan. Silakan login ulang.");
+      return;
+    }
+    if (selectedPendingApprovals.length === 0) {
+      toast.info("Pilih minimal 1 approval request PENDING.");
+      return;
+    }
+
+    const reason = requestReason(
+      decision === "approve" ? "bulk approve requests" : "bulk reject requests",
+    );
+    if (!reason) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await bulkDecideFinanceRequestsRuntimeAction(user.id, {
+          requestIds: selectedPendingApprovals.map((request) => request.id),
+          decision,
+          reason,
+        });
+
+        toast.success(
+          `${decision === "approve" ? "Approved" : "Rejected"} ${result.processed} request, skipped ${result.skippedInvalid}.`,
+        );
+        setSelectedApprovalIds([]);
+        router.refresh();
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Gagal memproses bulk approval request",
+        );
+      }
+    });
+  };
+
+  const handlePeriodTransition = (
+    periodId: string,
+    nextStatus: "OPEN" | "SOFT_CLOSED" | "CLOSED",
+    label: string,
+  ) => {
+    if (!canManagePeriods) {
+      toast.info("Pengelolaan periode hanya tersedia untuk admin finance.");
+      return;
+    }
+
+    if (!user?.id) {
+      toast.error("Sesi pengguna tidak ditemukan. Silakan login ulang.");
+      return;
+    }
+
+    const reason = requestReason(label);
+    if (!reason) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await updateFinancePeriodStatusRuntimeAction(
+          user.id,
+          periodId,
+          nextStatus,
+          reason,
+        );
+        toast.success(`Periode berhasil diubah ke status ${nextStatus}.`);
+        router.refresh();
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Gagal memperbarui status periode",
+        );
+      }
+    });
+  };
+
   return (
     <div className="space-y-8 pb-20">
+      {!canManagePeriods ? (
+        <Card className="border-amber-500/20 bg-amber-500/10 p-5 text-amber-50 backdrop-blur-xl">
+          <div className="space-y-1.5">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-amber-100">
+              Governance Admin-Only
+            </h3>
+            <p className="text-sm text-amber-100/90">
+              Runtime desktop sekarang sudah mendukung approval dan period
+              control, tetapi hanya untuk admin finance atau super admin.
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
       <div className="flex items-center justify-between bg-zinc-950/50 p-6 rounded-3xl border border-white/5 backdrop-blur-xl shadow-2xl shadow-black/50">
         <div className="flex items-center gap-4 text-white">
           <div className="h-12 w-12 rounded-2xl bg-finance-teal/20 flex items-center justify-center text-finance-teal">
@@ -133,10 +291,22 @@ export function PeriodsClient({
             </p>
           </div>
         </div>
-        <Button className="bg-finance-teal hover:bg-finance-teal/90 rounded-xl font-black">
-          <Plus className="h-4 w-4 mr-2" />
-          NEW PERIOD
-        </Button>
+        {canManagePeriods && user?.id ? (
+          <CreatePeriodDialog actorId={user.id}>
+            <Button className="bg-finance-teal hover:bg-finance-teal/90 rounded-xl font-black">
+              <Plus className="h-4 w-4 mr-2" />
+              NEW PERIOD
+            </Button>
+          </CreatePeriodDialog>
+        ) : (
+          <Button
+            className="bg-finance-teal hover:bg-finance-teal/90 rounded-xl font-black"
+            disabled
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            NEW PERIOD
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
@@ -266,8 +436,16 @@ export function PeriodsClient({
                                     : "outline"
                                 }
                                 className="h-10 rounded-xl flex-1 font-bold"
+                                disabled={isPending || !canManagePeriods}
+                                onClick={() =>
+                                  handlePeriodTransition(
+                                    period.id,
+                                    "SOFT_CLOSED",
+                                    "soft close period",
+                                  )
+                                }
                               >
-                                <Lock className="h-4 w-4 mr-2" /> LOCK
+                                <Lock className="h-4 w-4 mr-2" /> SOFT CLOSE
                               </Button>
                               <Button
                                 size="sm"
@@ -277,10 +455,38 @@ export function PeriodsClient({
                                     : "outline"
                                 }
                                 className="h-10 rounded-xl flex-1 font-bold"
+                                disabled={
+                                  isPending ||
+                                  !canManagePeriods ||
+                                  period.status === "CLOSED"
+                                }
+                                onClick={() =>
+                                  handlePeriodTransition(
+                                    period.id,
+                                    "OPEN",
+                                    "reopen period",
+                                  )
+                                }
                               >
-                                <Unlock className="h-4 w-4 mr-2" /> OPEN
+                                <Unlock className="h-4 w-4 mr-2" /> REOPEN
                               </Button>
                             </div>
+                            {period.status === "SOFT_CLOSED" ? (
+                              <Button
+                                size="sm"
+                                className="h-10 w-full rounded-xl font-bold bg-rose-500 hover:bg-rose-600"
+                                disabled={isPending || !canManagePeriods}
+                                onClick={() =>
+                                  handlePeriodTransition(
+                                    period.id,
+                                    "CLOSED",
+                                    "final close period",
+                                  )
+                                }
+                              >
+                                FINAL CLOSE
+                              </Button>
+                            ) : null}
                           </div>
                           <div className="col-span-2 p-5 rounded-2xl bg-zinc-950/50 flex flex-col md:flex-row items-center justify-between gap-6">
                             <div className="space-y-2">
@@ -319,26 +525,82 @@ export function PeriodsClient({
           </div>
         </div>
 
-        <div className="space-y-8">
+        <div id="approval-gate" className="scroll-mt-28 space-y-8">
           <div className="flex items-center justify-between text-white">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-rose-400" />
               Approval Gate
             </h3>
-            <span className="h-7 w-7 rounded-full bg-rose-500/20 text-rose-400 text-xs flex items-center justify-center font-black ring-1 ring-rose-500/30">
-              {initialApprovals.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="h-7 w-7 rounded-full bg-rose-500/20 text-rose-400 text-xs flex items-center justify-center font-black ring-1 ring-rose-500/30">
+                {pendingApprovals.length}
+              </span>
+              <input
+                type="checkbox"
+                aria-label="Select all pending approval requests"
+                checked={allPendingSelected}
+                disabled={pendingApprovals.length === 0 || !canManageApprovals}
+                onChange={toggleAllPendingApprovals}
+                className="h-4 w-4 rounded border-white/20 bg-white/10 accent-finance-teal disabled:opacity-30"
+              />
+            </div>
           </div>
+
+          {selectedPendingApprovals.length > 0 ? (
+            <Card className="space-y-4 rounded-[2rem] border-finance-teal/20 bg-finance-teal/10 p-5 text-white backdrop-blur-xl">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-finance-teal">
+                    Bulk Approval
+                  </p>
+                  <p className="text-sm text-zinc-300">
+                    {selectedPendingApprovals.length} pending request selected
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-xl text-zinc-400 hover:bg-white/5 hover:text-white"
+                  onClick={() => setSelectedApprovalIds([])}
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  disabled={isPending || !canManageApprovals}
+                  onClick={() => handleBulkApprovalDecision("approve")}
+                  className="h-11 rounded-2xl bg-emerald-500 text-xs font-black uppercase tracking-widest hover:bg-emerald-600"
+                >
+                  <CheckCheck className="mr-2 h-4 w-4" />
+                  Approve Selected
+                </Button>
+                <Button
+                  disabled={isPending || !canManageApprovals}
+                  onClick={() => handleBulkApprovalDecision("reject")}
+                  variant="outline"
+                  className="h-11 rounded-2xl border-white/10 bg-transparent text-xs font-black uppercase tracking-widest text-zinc-300 hover:text-white"
+                >
+                  Reject Selected
+                </Button>
+              </div>
+            </Card>
+          ) : null}
 
           <div className="space-y-4">
             {initialApprovals.length > 0 ? (
               initialApprovals.map((req) => {
                 const payload = parseApprovalPayload(req.payload);
+                const isPendingApproval = req.status === "PENDING";
+                const isSelected = selectedApprovalIds.includes(req.id);
 
                 return (
                   <Card
                     key={req.id}
-                    className="p-6 border-white/5 bg-white/5 backdrop-blur-xl relative overflow-hidden group rounded-[2.5rem] shadow-2xl shadow-rose-950/20"
+                    className={cn(
+                      "p-6 border-white/5 bg-white/5 backdrop-blur-xl relative overflow-hidden group rounded-[2.5rem] shadow-2xl shadow-rose-950/20",
+                      isSelected && "border-finance-teal/40 bg-finance-teal/10",
+                    )}
                   >
                     <div className="absolute top-0 right-0 p-4">
                       <Badge className="bg-rose-500 text-white border-none rounded-lg font-black tracking-widest py-1 px-3 shadow-lg shadow-rose-500/20">
@@ -348,6 +610,14 @@ export function PeriodsClient({
                     <div className="space-y-6">
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select approval request ${req.id}`}
+                            checked={isSelected}
+                            disabled={!isPendingApproval || !canManageApprovals}
+                            onChange={() => toggleApprovalSelection(req.id)}
+                            className="h-4 w-4 rounded border-white/20 bg-white/10 accent-finance-teal disabled:opacity-30"
+                          />
                           <div className="h-8 w-8 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-[10px] font-black text-rose-400">
                             {req.requestedBy.fullName.charAt(0)}
                           </div>

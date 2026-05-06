@@ -2,10 +2,10 @@ import { Info } from "lucide-react";
 import { Suspense } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinanceRuntimeNotice } from "../finance-runtime-notice";
-import { getJournalEntriesAction } from "../queries";
-import { isFinanceDesktopEmbeddedRuntime } from "../runtime-policy";
-import { AccountingClient } from "./accounting-client";
+import { auth } from "@/lib/auth/web/auth";
+import { getFinanceAccountsAction, getJournalEntriesAction } from "../queries";
+import { isFinanceDesktopRequestRuntime } from "../runtime-policy";
+import { AccountingRuntimeClient } from "./accounting-runtime-client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +17,16 @@ export const dynamic = "force-dynamic";
  */
 
 export default async function AccountingPage() {
-  if (isFinanceDesktopEmbeddedRuntime()) {
-    return <FinanceRuntimeNotice />;
-  }
-
-  const entries = await getJournalEntriesAction();
+  const desktopRuntime = await isFinanceDesktopRequestRuntime();
+  const session = desktopRuntime ? null : await auth();
+  const hasWebSession = Boolean(session?.user?.id);
+  const [entries, accounts] =
+    desktopRuntime || !hasWebSession
+      ? [[], []]
+      : await Promise.all([
+          getJournalEntriesAction(),
+          getFinanceAccountsAction(),
+        ]);
 
   return (
     <div className="space-y-10">
@@ -44,7 +49,7 @@ export default async function AccountingPage() {
       </Card>
 
       <Suspense fallback={<LedgerSkeleton />}>
-        <AccountingClient entries={entries} />
+        <AccountingRuntimeClient initialPayload={{ entries, accounts }} />
       </Suspense>
     </div>
   );
