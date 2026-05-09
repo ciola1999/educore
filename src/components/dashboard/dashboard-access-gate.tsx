@@ -141,12 +141,12 @@ export function DashboardAccessGate({
           desktopConstrainedRuntime && !runtimeSupported
             ? runtimeStaticDesktop
               ? "Halaman belum tersedia di desktop"
-              : "Halaman belum tersedia pada runtime ini"
+              : "Halaman belum tersedia di aplikasi ini"
             : "Akses halaman dibatasi"
         }
         description={
           desktopConstrainedRuntime && !runtimeSupported
-            ? `Halaman ini belum dibuka pada runtime desktop saat ini. Gunakan modul yang tersedia: ${runtimeSupportedLabels.join(", ")}.`
+            ? `Halaman ini belum tersedia di aplikasi desktop saat ini. Gunakan modul yang tersedia: ${runtimeSupportedLabels.join(", ")}.`
             : "Role akun ini tidak memiliki izin untuk membuka halaman tersebut."
         }
         actionLabel={

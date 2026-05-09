@@ -352,7 +352,7 @@ const SYNC_TABLES: SyncTableConfig[] = [
     conflictKey: "id",
     logicalKey: "invoiceNo",
     foreignKeyRemaps: {
-      studentId: "users",
+      studentId: "students",
       batchId: "billing_batches",
       categoryId: "billing_categories",
     },
@@ -381,7 +381,7 @@ const SYNC_TABLES: SyncTableConfig[] = [
     conflictKey: "id",
     logicalKey: "paymentNo",
     foreignKeyRemaps: {
-      studentId: "users",
+      studentId: "students",
       methodId: "payment_methods",
       confirmedBy: "users",
     },
@@ -405,7 +405,7 @@ const SYNC_TABLES: SyncTableConfig[] = [
     table: creditBalances,
     conflictKey: "id",
     logicalKey: "studentId",
-    foreignKeyRemaps: { studentId: "users" },
+    foreignKeyRemaps: { studentId: "students" },
   },
   {
     name: "journal_entries",
@@ -446,6 +446,10 @@ const SYNC_TABLES: SyncTableConfig[] = [
 const SYNC_TABLE_CONFIG_MAP = new Map(
   SYNC_TABLES.map((tableConfig) => [tableConfig.name, tableConfig]),
 );
+
+export function getSyncTableForeignKeyRemaps(tableName: string) {
+  return { ...(SYNC_TABLE_CONFIG_MAP.get(tableName)?.foreignKeyRemaps ?? {}) };
+}
 const FINANCE_SENSITIVE_SYNC_TABLES = new Set([
   "billing_batches",
   "invoices",

@@ -99,6 +99,24 @@ function getInvoiceMonthRange(date: Date) {
   return { start, end };
 }
 
+function normalizeDbDate(value: Date | number | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "number") {
+    const date = new Date(value < 10_000_000_000 ? value * 1000 : value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /**
  * FinanceService (Core Unified Engine Phase 2.4 - 5.0)
  * The heart of EduCore Financials: Handling Billing, Payments, Ledger Posting, and Control.
@@ -1959,6 +1977,11 @@ export const FinanceService = {
   async getStudentsWithOutstandingInvoices(limit = 100) {
     const db = await getDb();
     const today = new Date();
+    const todayStartMs = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    ).getTime();
 
     const rows = await db
       .select({
@@ -1970,8 +1993,10 @@ export const FinanceService = {
         creditBalance: creditBalances.amount,
         invoiceCount: sql<number>`count(${invoices.id})`,
         totalOutstanding: sql<number>`coalesce(sum(${invoices.outstanding}), 0)`,
-        oldestDueDate: sql<Date | null>`min(${invoices.dueDate})`,
-        overdueCount: sql<number>`sum(case when ${invoices.dueDate} < ${today} then 1 else 0 end)`,
+        oldestDueDate: sql<
+          Date | number | null
+        >`min(case when ${invoices.dueDate} > 0 then ${invoices.dueDate} else null end)`,
+        overdueCount: sql<number>`sum(case when ${invoices.dueDate} > 0 and (case when ${invoices.dueDate} > 10000000000 then ${invoices.dueDate} else ${invoices.dueDate} * 1000 end) < ${todayStartMs} then 1 else 0 end)`,
       })
       .from(invoices)
       .innerJoin(students, eq(students.id, invoices.studentId))
@@ -2020,7 +2045,7 @@ export const FinanceService = {
         (row.totalOutstanding ?? 0) - (row.creditBalance ?? 0),
         0,
       ),
-      oldestDueDate: row.oldestDueDate,
+      oldestDueDate: normalizeDbDate(row.oldestDueDate),
       overdueCount: row.overdueCount ?? 0,
     }));
   },

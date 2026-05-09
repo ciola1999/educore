@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SYNC_TABLE_NAMES } from "./turso-sync";
+import { getSyncTableForeignKeyRemaps, SYNC_TABLE_NAMES } from "./turso-sync";
 
 describe("turso sync table coverage", () => {
   it("includes phase 2.1 academic master data in dependency order", () => {
@@ -27,5 +27,13 @@ describe("turso sync table coverage", () => {
 
   it("keeps users table available for scoped auth sync pushes", () => {
     expect(SYNC_TABLE_NAMES).toContain("users");
+  });
+
+  it("maps finance student identities to academic students, not login users", () => {
+    expect(getSyncTableForeignKeyRemaps("invoices").studentId).toBe("students");
+    expect(getSyncTableForeignKeyRemaps("payments").studentId).toBe("students");
+    expect(getSyncTableForeignKeyRemaps("credit_balances").studentId).toBe(
+      "students",
+    );
   });
 });

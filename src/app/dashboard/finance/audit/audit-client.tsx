@@ -9,9 +9,9 @@ import {
   FileJson,
   Hash,
   Search,
-  Shield,
   User,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -247,7 +247,8 @@ function downloadEvidence(log: FinanceAuditLogView) {
 }
 
 export function AuditClient({ logs }: { logs: FinanceAuditLogView[] }) {
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("q") ?? "");
   const [selectedLog, setSelectedLog] = useState<string | null>(null);
 
   const filteredLogs = logs.filter(
@@ -433,46 +434,45 @@ export function AuditClient({ logs }: { logs: FinanceAuditLogView[] }) {
                                   </p>
                                 )}
                               </Card>
-                              <div className="flex items-center gap-3 text-white">
-                                <Hash className="h-4 w-4 text-finance-teal" />
-                                <h5 className="text-sm font-black tracking-widest uppercase">
-                                  Raw Payload
-                                </h5>
-                              </div>
-                              <div className="p-6 rounded-2xl bg-zinc-950/80 border border-white/5 font-mono text-[11px] leading-relaxed text-zinc-400 overflow-x-auto whitespace-pre">
-                                {formatLogPayload(log.details)}
-                              </div>
+                              <details className="group rounded-2xl border border-white/5 bg-zinc-950/80">
+                                <summary className="flex cursor-pointer items-center gap-3 px-5 py-4 text-white">
+                                  <Hash className="h-4 w-4 text-finance-teal" />
+                                  <span className="text-sm font-black uppercase tracking-widest">
+                                    Technical Evidence
+                                  </span>
+                                  <span className="ml-auto text-[10px] font-mono uppercase tracking-widest text-zinc-600 group-open:text-zinc-400">
+                                    Raw payload
+                                  </span>
+                                </summary>
+                                <div className="overflow-x-auto whitespace-pre border-t border-white/5 p-6 font-mono text-[11px] leading-relaxed text-zinc-400">
+                                  {formatLogPayload(log.details)}
+                                </div>
+                              </details>
                             </div>
                             <div className="space-y-6">
-                              <div className="flex items-center gap-3 text-white">
-                                <Shield className="h-4 w-4 text-finance-teal" />
-                                <h5 className="text-sm font-black tracking-widest uppercase">
-                                  Security Verification
-                                </h5>
-                              </div>
                               <Card className="p-6 border-white/5 bg-white/2 rounded-2xl space-y-4">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
-                                    Compliance Status
+                                    Evidence Type
                                   </span>
-                                  <Badge className="bg-emerald-500/10 text-emerald-400 border-none rounded-lg px-2 text-[9px] font-black">
-                                    CERTIFIED
+                                  <Badge className="rounded-lg border-none bg-finance-teal/10 px-2 text-[9px] font-black text-finance-teal">
+                                    Audit Record
                                   </Badge>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
-                                    Origin Runtime
+                                    Actor
                                   </span>
                                   <span className="text-[10px] font-mono text-white">
-                                    SERVER-SIDE-ACTION
+                                    {log.actor.fullName}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
-                                    Audit Context
+                                    Recorded At
                                   </span>
-                                  <span className="text-[10px] font-mono text-zinc-400 italic">
-                                    Phase 5.0 Governance Active
+                                  <span className="text-right text-[10px] font-mono text-zinc-400">
+                                    {new Date(log.createdAt).toLocaleString()}
                                   </span>
                                 </div>
                               </Card>

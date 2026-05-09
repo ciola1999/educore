@@ -44,7 +44,7 @@ export async function isFinanceDesktopRequestRuntime() {
 }
 
 export function getFinanceDesktopGuardMessage() {
-  return "Aksi Finance ini belum dibuka di runtime desktop. Gunakan jalur web atau modul desktop yang sudah diaktifkan.";
+  return "Aksi Finance ini belum tersedia untuk sesi ini. Coba muat ulang aplikasi atau hubungi admin jika masalah berlanjut.";
 }
 
 export function assertFinanceWebServerOnlyRuntime() {

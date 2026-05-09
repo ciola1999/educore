@@ -32,9 +32,7 @@ export function FinanceOverviewRuntimeClient({
     let cancelled = false;
 
     void (async () => {
-      setSyncNotice(
-        "Finance desktop sedang mencoba menarik data cloud terbaru.",
-      );
+      setSyncNotice("Sinkronisasi Finance sedang berjalan.");
 
       try {
         const result = await runFullSync();
@@ -46,22 +44,22 @@ export function FinanceOverviewRuntimeClient({
           const refreshedSummary = await refresh();
           setSyncNotice(
             refreshedSummary?.dataState === "seeded"
-              ? "Sinkronisasi awal selesai, tetapi desktop ini masih belum memiliki transaksi Finance cloud. Yang tampil sekarang tetap master data lokal yang tersedia."
-              : "Sinkronisasi awal selesai. Ringkasan Finance sudah dimuat ulang dari data lokal terbaru.",
+              ? "Sinkronisasi selesai, tetapi belum ada transaksi Finance yang tersedia untuk perangkat ini."
+              : "Sinkronisasi selesai. Ringkasan Finance sudah diperbarui.",
           );
           return;
         }
 
         setSyncNotice(
           result.message ||
-            "Sinkronisasi awal belum berhasil. Finance masih menampilkan data lokal yang tersedia.",
+            "Sinkronisasi belum berhasil. Finance tetap menampilkan data yang tersedia di perangkat ini.",
         );
       } catch (syncError) {
         if (!cancelled) {
           setSyncNotice(
             syncError instanceof Error
               ? syncError.message
-              : "Sinkronisasi awal desktop belum berhasil diproses.",
+              : "Sinkronisasi Finance belum berhasil diproses.",
           );
         }
       }

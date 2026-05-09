@@ -77,7 +77,7 @@ interface OutstandingStudentResult extends StudentResult {
   invoiceCount: number;
   totalOutstanding: number;
   netOutstanding?: number;
-  oldestDueDate: string | Date | null;
+  oldestDueDate: string | number | Date | null;
   overdueCount: number;
 }
 
@@ -131,6 +131,24 @@ function getAllocationTitle(invoice: Invoice) {
 function parseRupiahInput(value: string) {
   const digitsOnly = value.replace(/\D/g, "");
   return digitsOnly ? Number(digitsOnly) : 0;
+}
+
+function parseFinanceDate(value: string | number | Date | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "number") {
+    const date = new Date(value < 10_000_000_000 ? value * 1000 : value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function PaymentsClient({
@@ -364,12 +382,12 @@ export function PaymentsClient({
         );
       }
 
-      const aDue = a.oldestDueDate
-        ? new Date(a.oldestDueDate).getTime()
-        : Number.POSITIVE_INFINITY;
-      const bDue = b.oldestDueDate
-        ? new Date(b.oldestDueDate).getTime()
-        : Number.POSITIVE_INFINITY;
+      const aDue =
+        parseFinanceDate(a.oldestDueDate)?.getTime() ??
+        Number.POSITIVE_INFINITY;
+      const bDue =
+        parseFinanceDate(b.oldestDueDate)?.getTime() ??
+        Number.POSITIVE_INFINITY;
 
       return aDue - bDue || b.totalOutstanding - a.totalOutstanding;
     });
@@ -474,7 +492,7 @@ export function PaymentsClient({
 
   const handleProcessPayment = async (confirmedCredit = false) => {
     if (!allowMutation) {
-      toast.info("Eksekusi pembayaran saat ini belum dibuka di runtime ini.");
+      toast.info("Eksekusi pembayaran belum tersedia untuk sesi ini.");
       return;
     }
     if (!user?.id || !selectedStudent) return;
@@ -560,7 +578,7 @@ export function PaymentsClient({
 
   const handleApplyCredit = async () => {
     if (!allowMutation) {
-      toast.info("Apply credit saat ini belum dibuka di runtime ini.");
+      toast.info("Apply credit belum tersedia untuk sesi ini.");
       return;
     }
     if (!user?.id || !selectedStudent) return;
@@ -678,21 +696,6 @@ export function PaymentsClient({
 
       <div className="grid grid-cols-1 gap-6 pb-20 xl:grid-cols-5">
         <div className="space-y-6 xl:col-span-2">
-          {desktopRuntime ? (
-            <Card className="border-sky-500/20 bg-sky-500/10 p-5 text-sky-50 backdrop-blur-xl">
-              <div className="space-y-1.5">
-                <h3 className="text-sm font-bold uppercase tracking-widest text-sky-100">
-                  Payment Entry Desktop Aktif
-                </h3>
-                <p className="text-sm text-sky-100/90">
-                  Entry payment di runtime desktop sekarang memakai jalur local
-                  finance. Search siswa, lookup invoice, dan submit payment
-                  tidak lagi bergantung pada server action web.
-                </p>
-              </div>
-            </Card>
-          ) : null}
-
           {paymentResult ? (
             <Card className="space-y-4 border-emerald-500/20 bg-emerald-500/10 p-5 text-emerald-50 backdrop-blur-xl">
               <div className="flex items-start justify-between gap-4">
@@ -785,7 +788,7 @@ export function PaymentsClient({
                 onClick={() => router.push("/dashboard/finance/invoices")}
                 className="w-full border-emerald-400/20 bg-emerald-400/10 text-emerald-50 hover:bg-emerald-400/15"
               >
-                View Invoice Ledger
+                Lihat Invoice
               </Button>
             </Card>
           ) : null}
@@ -971,15 +974,18 @@ export function PaymentsClient({
                           </div>
                         </div>
 
-                        {student.oldestDueDate ? (
-                          <div className="mt-3 flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-                            <Clock3 className="h-3 w-3" />
-                            Due terlama{" "}
-                            {new Date(
-                              student.oldestDueDate,
-                            ).toLocaleDateString()}
-                          </div>
-                        ) : null}
+                        {(() => {
+                          const oldestDueDate = parseFinanceDate(
+                            student.oldestDueDate,
+                          );
+                          return oldestDueDate ? (
+                            <div className="mt-3 flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+                              <Clock3 className="h-3 w-3" />
+                              Due terlama{" "}
+                              {oldestDueDate.toLocaleDateString("id-ID")}
+                            </div>
+                          ) : null;
+                        })()}
                       </button>
                     ))
                   ) : (
@@ -1099,7 +1105,7 @@ export function PaymentsClient({
                   htmlFor="amount-input"
                   className="text-xs font-mono font-bold uppercase text-zinc-500 tracking-widest"
                 >
-                  Revenue Ingress
+                  Nominal Pembayaran
                 </label>
                 <div className="relative">
                   <span className="absolute left-6 top-1/2 -translate-y-1/2 font-mono font-black text-finance-teal text-lg">
@@ -1119,39 +1125,59 @@ export function PaymentsClient({
                   />
                 </div>
                 {selectedStudent ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 2xl:grid-cols-4">
                     <Button
                       type="button"
                       variant="outline"
                       disabled={netPayable <= 0}
                       onClick={() => setAmount(netPayable)}
-                      className="border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
+                      className="h-auto min-h-12 justify-start whitespace-normal border-white/10 bg-white/5 px-3 py-2 text-left text-zinc-300 leading-tight hover:bg-white/10"
                     >
-                      Pay Net Due
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-bold">Bayar Sisa</span>
+                        <span className="font-mono text-[10px] text-zinc-500">
+                          {formatCurrency(netPayable)}
+                        </span>
+                      </span>
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setAmount(100000)}
-                      className="border-amber-500/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                      className="h-auto min-h-12 justify-start whitespace-normal border-amber-500/20 bg-amber-500/10 px-3 py-2 text-left text-amber-100 leading-tight hover:bg-amber-500/20"
                     >
-                      Deposit 100k
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-bold">Deposit</span>
+                        <span className="font-mono text-[10px] text-amber-100/70">
+                          Rp100 rb
+                        </span>
+                      </span>
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setAmount(200000)}
-                      className="border-amber-500/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                      className="h-auto min-h-12 justify-start whitespace-normal border-amber-500/20 bg-amber-500/10 px-3 py-2 text-left text-amber-100 leading-tight hover:bg-amber-500/20"
                     >
-                      Deposit 200k
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-bold">Deposit</span>
+                        <span className="font-mono text-[10px] text-amber-100/70">
+                          Rp200 rb
+                        </span>
+                      </span>
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setAmount(amount + 100000)}
-                      className="border-amber-500/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                      className="h-auto min-h-12 justify-start whitespace-normal border-amber-500/20 bg-amber-500/10 px-3 py-2 text-left text-amber-100 leading-tight hover:bg-amber-500/20"
                     >
-                      +100k
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-bold">Tambah</span>
+                        <span className="font-mono text-[10px] text-amber-100/70">
+                          +Rp100 rb
+                        </span>
+                      </span>
                     </Button>
                   </div>
                 ) : null}
@@ -1159,7 +1185,7 @@ export function PaymentsClient({
 
               <div className="space-y-4">
                 <p className="text-xs font-mono font-bold uppercase text-zinc-500 tracking-widest">
-                  Settlement Path
+                  Metode Pembayaran
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   {initialMethods.map((method) => {
@@ -1407,10 +1433,10 @@ export function PaymentsClient({
               </div>
               <div>
                 <h3 className="text-xl font-black tracking-tighter text-white">
-                  Waterfall Allocation
+                  Alokasi Tagihan
                 </h3>
                 <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                  Smart Debt Clearance Engine
+                  Pembayaran dialokasikan ke tagihan tertua lebih dulu
                 </p>
               </div>
             </div>
@@ -1418,7 +1444,7 @@ export function PaymentsClient({
               variant="success"
               className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-mono tracking-widest font-black py-1.5 px-4 rounded-full"
             >
-              FIFO ACTIVE
+              FIFO Aktif
             </Badge>
           </div>
 
@@ -1427,7 +1453,7 @@ export function PaymentsClient({
               <div className="py-20 flex flex-col items-center justify-center gap-4">
                 <Loader2 className="h-12 w-12 text-zinc-800 animate-spin" />
                 <p className="text-xs font-mono text-zinc-600 uppercase tracking-widest animate-pulse">
-                  Calculating Ledger...
+                  Menghitung alokasi...
                 </p>
               </div>
             ) : invoices.length > 0 ? (
@@ -1534,10 +1560,10 @@ export function PaymentsClient({
               <div className="py-24 flex flex-col items-center justify-center text-zinc-500 bg-white/3 border border-white/5 rounded-[3rem] border-dashed">
                 <CheckCircle2 className="h-16 w-16 text-emerald-500/20 mb-6" />
                 <p className="font-black text-2xl text-zinc-300">
-                  Clean Ledger
+                  Tidak Ada Tagihan
                 </p>
                 <p className="font-mono text-sm uppercase tracking-widest text-zinc-600 mt-2">
-                  This student has no outstanding invoices.
+                  Siswa ini tidak memiliki tagihan aktif.
                 </p>
               </div>
             ) : (
@@ -1545,11 +1571,11 @@ export function PaymentsClient({
                 <Wallet className="h-20 w-20 opacity-10 mb-8" />
                 <div className="space-y-4 text-center max-w-sm">
                   <p className="font-black text-3xl text-zinc-800 tracking-tighter">
-                    Waiting for Entry
+                    Pilih Siswa
                   </p>
                   <p className="text-zinc-600 text-sm font-medium leading-relaxed">
-                    Select a student and enter the payment amount to see the
-                    intelligent FIFO allocation engine in action.
+                    Pilih siswa dan isi nominal pembayaran untuk melihat alokasi
+                    tagihan.
                   </p>
                 </div>
               </div>
@@ -1574,7 +1600,7 @@ export function PaymentsClient({
                           Overpayment Detected
                         </p>
                         <p className="text-black/60 font-bold text-sm leading-none uppercase tracking-widest">
-                          Stored as student credit balance
+                          Disimpan sebagai saldo credit/deposit siswa
                         </p>
                       </div>
                     </div>

@@ -215,7 +215,7 @@ export function PeriodsClient({
         toast.error(
           error instanceof Error
             ? error.message
-            : "Gagal memproses bulk approval request",
+            : "Gagal memproses approval massal",
         );
       }
     });
@@ -263,31 +263,15 @@ export function PeriodsClient({
 
   return (
     <div className="space-y-8 pb-20">
-      {!canManagePeriods ? (
-        <Card className="border-amber-500/20 bg-amber-500/10 p-5 text-amber-50 backdrop-blur-xl">
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-amber-100">
-              Governance Admin-Only
-            </h3>
-            <p className="text-sm text-amber-100/90">
-              Runtime desktop sekarang sudah mendukung approval dan period
-              control, tetapi hanya untuk admin finance atau super admin.
-            </p>
-          </div>
-        </Card>
-      ) : null}
-
       <div className="flex items-center justify-between bg-zinc-950/50 p-6 rounded-3xl border border-white/5 backdrop-blur-xl shadow-2xl shadow-black/50">
         <div className="flex items-center gap-4 text-white">
           <div className="h-12 w-12 rounded-2xl bg-finance-teal/20 flex items-center justify-center text-finance-teal">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight">
-              Finance Control Center
-            </h2>
+            <h2 className="text-xl font-bold tracking-tight">Period Control</h2>
             <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
-              Governance & Period Management
+              Kelola periode keuangan dan approval
             </p>
           </div>
         </div>
@@ -299,13 +283,18 @@ export function PeriodsClient({
             </Button>
           </CreatePeriodDialog>
         ) : (
-          <Button
-            className="bg-finance-teal hover:bg-finance-teal/90 rounded-xl font-black"
-            disabled
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            NEW PERIOD
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              className="bg-finance-teal hover:bg-finance-teal/90 rounded-xl font-black"
+              disabled
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              NEW PERIOD
+            </Button>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+              Admin finance only
+            </p>
+          </div>
         )}
       </div>
 
@@ -314,7 +303,7 @@ export function PeriodsClient({
           <div className="flex items-center justify-between text-white">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <History className="h-5 w-5 text-zinc-400" />
-              Fiscal Timeline
+              Daftar Periode
             </h3>
             <div className="flex gap-2">
               <Badge
@@ -393,7 +382,7 @@ export function PeriodsClient({
                             {period.status}
                           </Badge>
                           <p className="mt-1 text-[10px] font-mono text-zinc-500 uppercase tracking-tighter">
-                            Current Lifecycle
+                            Status periode
                           </p>
                         </div>
                         <button
@@ -421,13 +410,13 @@ export function PeriodsClient({
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden mt-6 pt-6 border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-6"
+                          className="mt-6 grid grid-cols-1 gap-4 overflow-hidden border-t border-white/5 pt-6 xl:grid-cols-[minmax(240px,0.95fr)_minmax(0,2fr)]"
                         >
-                          <div className="col-span-1 p-5 rounded-2xl bg-zinc-950/50 space-y-4">
+                          <div className="space-y-4 rounded-2xl bg-zinc-950/50 p-4 sm:p-5">
                             <p className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-[0.2em]">
-                              State Control
+                              Aksi Periode
                             </p>
-                            <div className="flex items-center gap-3">
+                            <div className="grid grid-cols-1 gap-2 min-[460px]:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                               <Button
                                 size="sm"
                                 variant={
@@ -435,7 +424,7 @@ export function PeriodsClient({
                                     ? "default"
                                     : "outline"
                                 }
-                                className="h-10 rounded-xl flex-1 font-bold"
+                                className="h-auto min-h-11 justify-start whitespace-normal rounded-xl px-3 py-2 text-left font-bold leading-tight"
                                 disabled={isPending || !canManagePeriods}
                                 onClick={() =>
                                   handlePeriodTransition(
@@ -445,7 +434,13 @@ export function PeriodsClient({
                                   )
                                 }
                               >
-                                <Lock className="h-4 w-4 mr-2" /> SOFT CLOSE
+                                <Lock className="mr-2 h-4 w-4 shrink-0" />
+                                <span className="flex flex-col gap-0.5">
+                                  <span>Soft Close</span>
+                                  <span className="text-[10px] font-mono opacity-70">
+                                    Kunci sementara
+                                  </span>
+                                </span>
                               </Button>
                               <Button
                                 size="sm"
@@ -454,7 +449,7 @@ export function PeriodsClient({
                                     ? "default"
                                     : "outline"
                                 }
-                                className="h-10 rounded-xl flex-1 font-bold"
+                                className="h-auto min-h-11 justify-start whitespace-normal rounded-xl px-3 py-2 text-left font-bold leading-tight"
                                 disabled={
                                   isPending ||
                                   !canManagePeriods ||
@@ -468,13 +463,19 @@ export function PeriodsClient({
                                   )
                                 }
                               >
-                                <Unlock className="h-4 w-4 mr-2" /> REOPEN
+                                <Unlock className="mr-2 h-4 w-4 shrink-0" />
+                                <span className="flex flex-col gap-0.5">
+                                  <span>Reopen</span>
+                                  <span className="text-[10px] font-mono opacity-70">
+                                    Buka ulang
+                                  </span>
+                                </span>
                               </Button>
                             </div>
                             {period.status === "SOFT_CLOSED" ? (
                               <Button
                                 size="sm"
-                                className="h-10 w-full rounded-xl font-bold bg-rose-500 hover:bg-rose-600"
+                                className="h-11 w-full rounded-xl bg-rose-500 font-bold hover:bg-rose-600"
                                 disabled={isPending || !canManagePeriods}
                                 onClick={() =>
                                   handlePeriodTransition(
@@ -488,27 +489,39 @@ export function PeriodsClient({
                               </Button>
                             ) : null}
                           </div>
-                          <div className="col-span-2 p-5 rounded-2xl bg-zinc-950/50 flex flex-col md:flex-row items-center justify-between gap-6">
+                          <div className="flex flex-col gap-5 rounded-2xl bg-zinc-950/50 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
                             <div className="space-y-2">
-                              <p className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest text-center md:text-left">
-                                Policy Governance
+                              <p className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">
+                                Ringkasan Periode
                               </p>
                               <div className="flex items-center gap-4">
                                 <div className="text-white">
                                   <p className="text-xl font-bold tracking-tighter">
-                                    Compliant
+                                    Siap Ditinjau
                                   </p>
                                   <p className="text-[10px] font-mono text-emerald-400/70 uppercase">
-                                    Audit readiness: 100%
+                                    Cek jurnal sebelum tutup periode
                                   </p>
                                 </div>
                               </div>
                             </div>
                             <Button
+                              type="button"
                               variant="outline"
-                              className="w-full md:w-auto h-12 rounded-xl border-white/5 bg-white/2 hover:bg-white/5 text-zinc-300 font-bold gap-3"
+                              className="h-auto min-h-12 w-full justify-between rounded-xl border-white/5 bg-white/2 px-4 py-3 text-left font-bold text-zinc-300 hover:bg-white/5 lg:w-auto lg:min-w-52"
+                              onClick={() =>
+                                router.push(
+                                  `/dashboard/finance/accounting?period=${encodeURIComponent(period.id)}`,
+                                )
+                              }
                             >
-                              ANALYZE JOURNAL <ArrowRight className="h-4 w-4" />
+                              <span className="flex flex-col gap-0.5">
+                                <span>Analisis Jurnal</span>
+                                <span className="text-[10px] font-mono text-zinc-500">
+                                  Buka General Ledger
+                                </span>
+                              </span>
+                              <ArrowRight className="ml-3 h-4 w-4 shrink-0" />
                             </Button>
                           </div>
                         </motion.div>
@@ -551,7 +564,7 @@ export function PeriodsClient({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-mono text-[10px] font-black uppercase tracking-[0.2em] text-finance-teal">
-                    Bulk Approval
+                    Approval Massal
                   </p>
                   <p className="text-sm text-zinc-300">
                     {selectedPendingApprovals.length} pending request selected
@@ -682,42 +695,27 @@ export function PeriodsClient({
               <div className="p-12 rounded-[2.5rem] bg-zinc-950/50 border border-white/5 border-dashed flex flex-col items-center justify-center gap-4 text-zinc-600">
                 <BadgeCheck className="h-10 w-10 opacity-10" />
                 <p className="text-xs font-bold font-mono uppercase tracking-[0.2em] text-zinc-500">
-                  Gate Secured
+                  Tidak ada approval pending
                 </p>
               </div>
             )}
           </div>
 
-          <Card className="p-8 border-white/5 bg-zinc-950/80 rounded-[2.5rem] shadow-2xl space-y-6">
+          <Card className="p-8 border-white/5 bg-zinc-950/80 rounded-[2.5rem] shadow-2xl space-y-4">
             <h4 className="text-[10px] font-mono font-black uppercase text-zinc-500 tracking-[0.3em]">
-              Live Governance Feed
+              Audit Periode
             </h4>
-            <div className="space-y-6 relative">
-              <div className="absolute left-[3px] top-1 bottom-1 w-px bg-white/5" />
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex gap-4 text-[10px] relative z-10">
-                  <div className="h-1.5 w-1.5 rounded-full bg-finance-teal mt-1 shrink-0 shadow-lg shadow-finance-teal/50" />
-                  <div className="space-y-1">
-                    <p className="text-white font-bold">
-                      Ledger Revaluation{" "}
-                      <span className="text-zinc-600 font-mono">
-                        #{293 + i}
-                      </span>{" "}
-                      detected
-                    </p>
-                    <p className="text-zinc-500 font-mono tracking-tighter uppercase">
-                      {i * 12} minutes ago • ADMIN-SEC-01
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="text-sm leading-6 text-zinc-400">
+              Buka audit log untuk melihat riwayat approval, perubahan periode,
+              dan aktivitas finance terkait.
+            </p>
             <Button
               type="button"
               variant="ghost"
               className="w-full h-12 border border-white/5 bg-white/2 text-zinc-500 hover:text-finance-teal rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all"
+              onClick={() => router.push("/dashboard/finance/audit?q=period")}
             >
-              VIEW MASTER AUDIT LOG
+              Buka Audit Log
             </Button>
           </Card>
         </div>

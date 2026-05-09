@@ -103,6 +103,10 @@ function shouldResetNextBuildOutput() {
   return process.env.EDUCORE_FORCE_CLEAN_NEXT_BUILD === "1";
 }
 
+function shouldUseWebpackBuild(env: NodeJS.ProcessEnv) {
+  return env.EDUCORE_NEXT_BUILD_WEBPACK === "1";
+}
+
 function formatTsconfigJson(tsconfig: unknown) {
   return `${JSON.stringify(tsconfig, null, 2)
     .replace(
@@ -172,7 +176,7 @@ function run() {
     ? "node"
     : process.execPath;
   warnUnsupportedNodeVersion(runtimeBinary);
-  const useWebpack = env.EDUCORE_NEXT_BUILD_WEBPACK !== "0";
+  const useWebpack = shouldUseWebpackBuild(env);
   const args = [
     nextBin,
     "build",

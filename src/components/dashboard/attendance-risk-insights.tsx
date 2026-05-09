@@ -194,7 +194,7 @@ async function exportAttendanceRiskRowsToXlsx(
 }
 
 const dashboardPanelClass =
-  "overflow-hidden border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]";
+  "min-w-0 overflow-hidden border-zinc-800 bg-zinc-900 text-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]";
 const dashboardInsetCardClass =
   "rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3";
 const dashboardToolbarPanelClass =
@@ -1830,18 +1830,18 @@ export function AttendanceRiskInsights() {
           untuk menghindari timeout saat cold-start pertama.
         </div>
       ) : null}
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_1.2fr]">
+      <div className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
         <Card className={dashboardPanelClass}>
-          <CardHeader className="space-y-3">
-            <CardTitle className="flex items-center gap-2 text-zinc-100">
-              <AlertTriangle className="h-4 w-4 text-red-400" />
+          <CardHeader className="space-y-3 px-4 sm:px-6">
+            <CardTitle className="flex min-w-0 items-center gap-2 text-zinc-100">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
               Attendance Risk
             </CardTitle>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 font-semibold uppercase tracking-[0.16em] text-red-200">
+            <div className="grid gap-2 text-xs min-[520px]:flex min-[520px]:flex-wrap">
+              <span className="w-fit rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 font-semibold uppercase tracking-[0.16em] text-red-200">
                 Period Active
               </span>
-              <span className="rounded-full border border-zinc-700 bg-zinc-950/70 px-2.5 py-1 text-zinc-400">
+              <span className="min-w-0 rounded-full border border-zinc-700 bg-zinc-950/70 px-2.5 py-1 text-zinc-400 min-[520px]:w-fit">
                 {data.period.startDate} s/d {data.period.endDate}
               </span>
             </div>
@@ -1850,8 +1850,8 @@ export function AttendanceRiskInsights() {
               kelas dan assignee aktif.
             </p>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <CardContent className="space-y-3 px-4 sm:px-6">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className={dashboardToolbarPanelClass}>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
                   Filter Kelas
@@ -1908,18 +1908,18 @@ export function AttendanceRiskInsights() {
                 {data.students.map((student) => (
                   <div
                     key={student.studentId}
-                    className="rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-3"
+                    className="min-w-0 rounded-2xl border border-zinc-800 bg-linear-to-br from-zinc-950/80 to-zinc-900/60 px-4 py-3"
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-zinc-100">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold text-zinc-100">
                           {student.studentName}
                         </p>
-                        <p className="text-xs text-zinc-500">
+                        <p className="break-words text-xs text-zinc-500">
                           {student.nis} • {student.className}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
                         <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-300">
                           Rate {student.attendanceRate}%
                         </span>
@@ -1958,7 +1958,7 @@ export function AttendanceRiskInsights() {
         </Card>
 
         <Card className={dashboardPanelClass}>
-          <CardHeader className="space-y-3">
+          <CardHeader className="space-y-3 px-4 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-zinc-100">
               <BellRing className="h-4 w-4 text-sky-400" />
               Internal Notifications
@@ -1968,7 +1968,7 @@ export function AttendanceRiskInsights() {
               operasional dalam satu workspace.
             </p>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="min-w-0 space-y-3 px-4 sm:px-6">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className={`${dashboardInsetCardClass} border-sky-500/20`}>
                 <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
@@ -1998,7 +1998,7 @@ export function AttendanceRiskInsights() {
               </div>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
               <div
                 className={`${dashboardInsetCardClass} border-emerald-500/20`}
               >
@@ -2053,7 +2053,7 @@ export function AttendanceRiskInsights() {
               <p className="text-xs uppercase tracking-[0.18em] text-sky-200">
                 Snapshot Kepala Sekolah
               </p>
-              <div className="mt-3 grid gap-3 md:grid-cols-4">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                 <div>
                   <p className="text-xs text-sky-100/70">Total Follow-up</p>
                   <p className="text-lg font-semibold text-white">
@@ -2093,7 +2093,7 @@ export function AttendanceRiskInsights() {
               </div>
             </div>
 
-            <div className="sticky top-2 z-10 grid gap-3 rounded-[1.5rem] border border-zinc-800/80 bg-zinc-900/85 p-2.5 backdrop-blur md:top-4 md:rounded-[1.75rem] md:p-3 xl:grid-cols-[minmax(0,220px)_1fr]">
+            <div className="sticky top-2 z-10 grid min-w-0 gap-3 rounded-[1.5rem] border border-zinc-800/80 bg-zinc-900/85 p-2.5 backdrop-blur md:top-4 md:rounded-[1.75rem] md:p-3 2xl:grid-cols-[minmax(0,220px)_1fr]">
               <div className={dashboardToolbarPanelClass}>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
                   Periode Dashboard
@@ -2115,7 +2115,7 @@ export function AttendanceRiskInsights() {
                 </Select>
               </div>
               <div
-                className={`${dashboardToolbarPanelClass} flex flex-wrap gap-2 p-2.5 md:p-3`}
+                className={`${dashboardToolbarPanelClass} grid grid-cols-1 gap-2 p-2.5 min-[520px]:grid-cols-2 lg:grid-cols-3 2xl:flex 2xl:flex-wrap 2xl:items-center md:p-3`}
               >
                 <Button
                   type="button"
@@ -2125,29 +2125,27 @@ export function AttendanceRiskInsights() {
                   onClick={() => {
                     void handlePrintDashboardReport();
                   }}
-                  className={dashboardOutlineButtonClass}
+                  className={`${dashboardOutlineButtonClass} min-h-9 w-full justify-center whitespace-normal px-2.5 text-center text-[11px] leading-tight`}
                 >
-                  {printingDashboard ? "Memproses..." : "Print Dashboard"}
+                  {printingDashboard ? "Proses..." : "Print"}
                 </Button>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={handleToggleReminderCards}
-                  className={dashboardOutlineButtonClass}
+                  className={`${dashboardOutlineButtonClass} min-h-9 w-full justify-center whitespace-normal px-2.5 text-center text-[11px] leading-tight`}
                 >
-                  {hideReminderCards
-                    ? "Tampilkan Reminder"
-                    : "Sembunyikan Reminder"}
+                  {hideReminderCards ? "Reminder On" : "Reminder Off"}
                 </Button>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={handleResetDashboardUiState}
-                  className={dashboardOutlineButtonClass}
+                  className={`${dashboardOutlineButtonClass} min-h-9 w-full justify-center whitespace-normal px-2.5 text-center text-[11px] leading-tight`}
                 >
-                  Reset Tampilan
+                  Reset
                 </Button>
                 <Button
                   type="button"
@@ -2157,11 +2155,9 @@ export function AttendanceRiskInsights() {
                   onClick={() => {
                     void handleExportDashboardPack();
                   }}
-                  className={dashboardEmeraldOutlineButtonClass}
+                  className={`${dashboardEmeraldOutlineButtonClass} min-h-9 w-full justify-center whitespace-normal px-2.5 text-center text-[11px] leading-tight`}
                 >
-                  {exportingDashboardPack
-                    ? "Memproses..."
-                    : "Ekspor Paket Dashboard"}
+                  {exportingDashboardPack ? "Proses..." : "Export Pack"}
                 </Button>
                 <Button
                   type="button"
@@ -2171,9 +2167,9 @@ export function AttendanceRiskInsights() {
                   onClick={() => {
                     void handleExportAnalytics();
                   }}
-                  className={dashboardVioletOutlineButtonClass}
+                  className={`${dashboardVioletOutlineButtonClass} min-h-9 w-full justify-center whitespace-normal px-2.5 text-center text-[11px] leading-tight`}
                 >
-                  {exportingAnalytics ? "Memproses..." : "Ekspor Analitik"}
+                  {exportingAnalytics ? "Proses..." : "Analytics"}
                 </Button>
                 <Button
                   type="button"
@@ -2183,19 +2179,15 @@ export function AttendanceRiskInsights() {
                   onClick={() => {
                     void handleExportKpiDashboard();
                   }}
-                  className={dashboardSkyOutlineButtonClass}
+                  className={`${dashboardSkyOutlineButtonClass} min-h-9 w-full justify-center whitespace-normal px-2.5 text-center text-[11px] leading-tight`}
                 >
-                  {exportingKpi ? "Memproses..." : "Ekspor KPI"}
+                  {exportingKpi ? "Proses..." : "KPI"}
                 </Button>
-                <div className="hidden min-w-[11rem] items-center rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-[11px] leading-5 text-zinc-500 lg:ml-auto lg:flex">
-                  Toolbar tetap terlihat saat scroll supaya filter dan export
-                  lebih cepat diakses.
-                </div>
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-3">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 xl:col-span-2">
+            <div className="grid min-w-0 gap-4">
+              <div className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
                 <div className="flex items-end justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
@@ -2206,45 +2198,49 @@ export function AttendanceRiskInsights() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-4 grid grid-cols-7 gap-2">
-                  {trendBuckets.map((item) => (
-                    <div
-                      key={item.date}
-                      className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 p-2 shadow-[0_16px_40px_-32px_rgba(59,130,246,0.6)]"
-                    >
-                      <p className="text-[11px] text-zinc-500">{item.label}</p>
-                      <div className="mt-2 flex h-28 items-end gap-1">
-                        <div className="flex-1 rounded-t bg-zinc-700/70">
-                          <div
-                            className="rounded-t bg-zinc-500/70"
-                            style={{
-                              height: `${Math.max(
-                                8,
-                                (item.total / maxTrendTotal) * 100,
-                              )}%`,
-                            }}
-                          />
+                <div className="mt-4 overflow-x-auto pb-2">
+                  <div className="grid min-w-[560px] grid-cols-7 gap-2">
+                    {trendBuckets.map((item) => (
+                      <div
+                        key={item.date}
+                        className="rounded-xl border border-zinc-800 bg-linear-to-b from-zinc-900/80 to-zinc-950/70 p-2 shadow-[0_16px_40px_-32px_rgba(59,130,246,0.6)]"
+                      >
+                        <p className="text-[11px] text-zinc-500">
+                          {item.label}
+                        </p>
+                        <div className="mt-2 flex h-28 items-end gap-1">
+                          <div className="flex-1 rounded-t bg-zinc-700/70">
+                            <div
+                              className="rounded-t bg-zinc-500/70"
+                              style={{
+                                height: `${Math.max(
+                                  8,
+                                  (item.total / maxTrendTotal) * 100,
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="flex-1 rounded-t bg-emerald-900/50">
+                            <div
+                              className="rounded-t bg-emerald-400"
+                              style={{
+                                height: `${Math.max(
+                                  8,
+                                  (item.completed / maxTrendTotal) * 100,
+                                )}%`,
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="flex-1 rounded-t bg-emerald-900/50">
-                          <div
-                            className="rounded-t bg-emerald-400"
-                            style={{
-                              height: `${Math.max(
-                                8,
-                                (item.completed / maxTrendTotal) * 100,
-                              )}%`,
-                            }}
-                          />
-                        </div>
+                        <p className="mt-2 text-[11px] text-zinc-400">
+                          {item.completed}/{item.total} selesai
+                        </p>
+                        <p className="text-[11px] text-emerald-300">
+                          Rate {item.rate}%
+                        </p>
                       </div>
-                      <p className="mt-2 text-[11px] text-zinc-400">
-                        {item.completed}/{item.total} selesai
-                      </p>
-                      <p className="text-[11px] text-emerald-300">
-                        Rate {item.rate}%
-                      </p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -2394,7 +2390,7 @@ export function AttendanceRiskInsights() {
                   {topAssigneePerformance.length} assignee aktif
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 md:hidden">
+              <div className="mt-4 grid gap-3 2xl:hidden">
                 {topAssigneePerformance.map((item) => (
                   <button
                     key={`performance-mobile-top-${item.userId}`}
@@ -2455,11 +2451,8 @@ export function AttendanceRiskInsights() {
                   </button>
                 ))}
               </div>
-              <p className="mt-4 text-xs text-zinc-500 md:hidden">
-                Geser tabel ke samping untuk melihat semua kolom.
-              </p>
-              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-                <table className="min-w-full text-sm">
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 2xl:block">
+                <table className="min-w-[680px] text-sm">
                   <thead className="text-left text-zinc-500">
                     <tr className="border-b border-zinc-800">
                       <th className="pb-2 pr-4 font-medium">Assignee</th>
@@ -2520,7 +2513,7 @@ export function AttendanceRiskInsights() {
                     : "Ekspor Ringkasan Kelas"}
                 </Button>
               </div>
-              <div className="mt-4 grid gap-3 md:hidden">
+              <div className="mt-4 grid gap-3 2xl:hidden">
                 {classRecoveryLeaderboard.map((item) => (
                   <div
                     key={`class-recovery-mobile-${item.className}`}
@@ -2568,11 +2561,8 @@ export function AttendanceRiskInsights() {
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-xs text-zinc-500 md:hidden">
-                Geser tabel ke samping untuk melihat semua kolom.
-              </p>
-              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-                <table className="min-w-full text-sm">
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 2xl:block">
+                <table className="min-w-[680px] text-sm">
                   <thead className="text-left text-zinc-500">
                     <tr className="border-b border-zinc-800">
                       <th className="pb-2 pr-4 font-medium">Kelas</th>
@@ -2640,10 +2630,7 @@ export function AttendanceRiskInsights() {
                     : "Ekspor Papan Peringkat"}
                 </Button>
               </div>
-              <p className="mt-4 text-xs text-zinc-500 md:hidden">
-                Geser tabel ke samping untuk melihat semua kolom.
-              </p>
-              <div className="mt-4 grid gap-3 md:hidden">
+              <div className="mt-4 grid gap-3 2xl:hidden">
                 {topAssigneePerformance.map((item) => (
                   <button
                     key={`performance-mobile-${item.userId}`}
@@ -2696,11 +2683,8 @@ export function AttendanceRiskInsights() {
                   </button>
                 ))}
               </div>
-              <p className="mt-4 text-xs text-zinc-500 md:hidden">
-                Geser tabel ke samping untuk melihat semua kolom.
-              </p>
-              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-                <table className="min-w-full text-sm">
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 2xl:block">
+                <table className="min-w-[680px] text-sm">
                   <thead className="text-left text-zinc-500">
                     <tr className="border-b border-zinc-800">
                       <th className="pb-2 pr-4 font-medium">Kelas</th>
@@ -2752,7 +2736,7 @@ export function AttendanceRiskInsights() {
                   Fokus recovery rate
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 md:hidden">
+              <div className="mt-4 grid gap-3 2xl:hidden">
                 {recoveryLeaderboard.map((item) => (
                   <button
                     key={`recovery-mobile-${item.userId}`}
@@ -2797,11 +2781,8 @@ export function AttendanceRiskInsights() {
                   </button>
                 ))}
               </div>
-              <p className="mt-4 text-xs text-zinc-500 md:hidden">
-                Geser tabel ke samping untuk melihat semua kolom.
-              </p>
-              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-                <table className="min-w-full text-sm">
+              <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 2xl:block">
+                <table className="min-w-[680px] text-sm">
                   <thead className="text-left text-zinc-500">
                     <tr className="border-b border-zinc-800">
                       <th className="pb-2 pr-4 font-medium">Assignee</th>
@@ -3430,7 +3411,7 @@ export function AttendanceRiskInsights() {
             </div>
             {data.assignmentSummary.length > 0 ? (
               <>
-                <div className="mb-3 grid gap-3 md:hidden">
+                <div className="mb-3 grid gap-3 2xl:hidden">
                   {data.assignmentSummary.map((item) => (
                     <button
                       key={`assignment-mobile-${item.userId}`}
@@ -3483,11 +3464,8 @@ export function AttendanceRiskInsights() {
                     </button>
                   ))}
                 </div>
-                <p className="mb-2 text-xs text-zinc-500 md:hidden">
-                  Geser tabel ke samping untuk melihat semua kolom.
-                </p>
-                <div className="hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 md:block">
-                  <table className="min-w-full text-sm">
+                <div className="hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/60 2xl:block">
+                  <table className="min-w-[680px] text-sm">
                     <thead className="text-left text-zinc-500">
                       <tr className="border-b border-zinc-800">
                         <th className="pb-2 pr-4 font-medium">Assignee</th>

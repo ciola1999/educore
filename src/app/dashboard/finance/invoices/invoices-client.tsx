@@ -15,7 +15,7 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -46,7 +46,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { isTauri } from "@/core/env";
 import { useAuth } from "@/hooks/use-auth";
+import { exportRowsToXlsx } from "@/lib/export/xlsx";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { FinanceInvoiceListItemView } from "../types";
 
@@ -125,6 +127,32 @@ function buildInvoiceDownloadContent(invoice: FinanceInvoiceListItemView) {
   ].join("\n");
 }
 
+function buildInvoiceExportRows(
+  invoicesToExport: FinanceInvoiceListItemView[],
+) {
+  return invoicesToExport.map((invoice) => {
+    const student = parseStudentSnapshot(invoice.studentSnapshot, invoice);
+    const dueDate =
+      invoice.dueDate instanceof Date
+        ? invoice.dueDate.toLocaleDateString("id-ID")
+        : new Date(invoice.dueDate).toLocaleDateString("id-ID");
+
+    return {
+      "Invoice No": invoice.invoiceNo,
+      Student: student.fullName,
+      NIS: student.nis,
+      NISN: student.nisn,
+      Class: student.className,
+      Status: invoice.status,
+      Amount: invoice.totalAmount,
+      Outstanding: invoice.outstanding,
+      "Credit/Deposit": invoice.studentCreditBalance ?? 0,
+      "Net Due": getInvoiceNetDue(invoice),
+      "Due Date": dueDate,
+    };
+  });
+}
+
 function getInvoiceNetDue(invoice: FinanceInvoiceListItemView) {
   return Math.max(invoice.outstanding - (invoice.studentCreditBalance ?? 0), 0);
 }
@@ -186,7 +214,8 @@ export function InvoicesClient({
   autoOpenBatchGeneration?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const [isPending, startTransition] = useTransition();
   const [previewInvoice, setPreviewInvoice] =
     useState<FinanceInvoiceListItemView | null>(null);
@@ -223,7 +252,8 @@ export function InvoicesClient({
       student.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.nisn.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.className.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inv.invoiceNo.toLowerCase().includes(searchQuery.toLowerCase());
+      inv.invoiceNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inv.id.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesTab && matchesSearch;
   });
   const isBulkEligible = (invoice: FinanceInvoiceListItemView) =>
@@ -369,7 +399,7 @@ export function InvoicesClient({
 
   const handleVoid = async (id: string) => {
     if (!allowStatusActions) {
-      toast.info("Aksi status invoice saat ini belum dibuka di runtime ini.");
+      toast.info("Aksi status invoice belum tersedia untuk sesi ini.");
       return;
     }
     if (!canManageSensitiveStatus) {
@@ -421,6 +451,39 @@ export function InvoicesClient({
     toast.success("Invoice berhasil diunduh.");
   };
 
+  const handleExportVisibleInvoices = async () => {
+    if (filteredInvoices.length === 0) {
+      toast.info("Tidak ada invoice yang bisa diexport.");
+      return;
+    }
+
+    const fileName = `finance-invoices-${activeTab.toLowerCase()}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+
+    try {
+      await exportRowsToXlsx({
+        fileName,
+        sheetName: "Invoices",
+        rows: buildInvoiceExportRows(filteredInvoices),
+      });
+      toast.success(`Exported ${filteredInvoices.length} invoice.`);
+    } catch (error) {
+      if (isTauri()) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Export Excel desktop gagal.",
+        );
+        return;
+      }
+
+      toast.error(
+        error instanceof Error ? error.message : "Export Excel gagal.",
+      );
+    }
+  };
+
   return (
     <div className="space-y-8">
       {allowBatchGeneration && autoOpenBatchGeneration ? (
@@ -455,6 +518,7 @@ export function InvoicesClient({
           <Button
             variant="outline"
             className="border-white/10 bg-white/5 text-white hover:bg-white/10 rounded-xl"
+            onClick={handleExportVisibleInvoices}
           >
             <Download className="mr-2 h-4 w-4" />
             Export
@@ -510,13 +574,6 @@ export function InvoicesClient({
         </div>
       ) : null}
 
-      {canManageSensitiveStatus && visibleEligibleInvoiceIds.length > 0 ? (
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-5 py-4 text-sm text-amber-100">
-          Invoice removal is approval-gated: Request VOID akan masuk ke Approval
-          Gate terlebih dahulu, lalu invoice berubah status setelah disetujui.
-        </div>
-      ) : null}
-
       {/* Glass Tabs */}
       <div className="flex flex-wrap gap-2 p-1 bg-white/5 border border-white/5 rounded-2xl w-fit">
         {tabs.map((tab) => {
@@ -553,8 +610,8 @@ export function InvoicesClient({
       </div>
 
       {/* Invoice Ledger Table */}
-      <Card className="overflow-hidden border-white/5 bg-white/5 backdrop-blur-xl rounded-2xl">
-        <Table>
+      <Card className="overflow-x-auto overflow-y-hidden border-white/5 bg-white/5 backdrop-blur-xl rounded-2xl">
+        <Table className="min-w-[1120px]">
           <TableHeader className="bg-white/5">
             <TableRow className="border-white/5 hover:bg-transparent">
               <TableHead className="w-12 py-5">
@@ -588,7 +645,7 @@ export function InvoicesClient({
               <TableHead className="text-zinc-400 font-mono font-bold tracking-tight text-center">
                 STATUS
               </TableHead>
-              <TableHead className="sticky right-0 z-10 bg-zinc-950/90 text-zinc-400 font-mono font-bold tracking-tight text-right pr-8">
+              <TableHead className="w-[220px] min-w-[220px] text-zinc-400 font-mono font-bold tracking-tight text-right pr-6">
                 REQUESTS
               </TableHead>
             </TableRow>
@@ -694,8 +751,8 @@ export function InvoicesClient({
                         {badge.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="sticky right-0 bg-zinc-950/90 text-right pr-6">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <TableCell className="w-[220px] min-w-[220px] text-right pr-6">
+                      <div className="flex items-center justify-end gap-2 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
                         {isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin text-finance-teal" />
                         ) : (

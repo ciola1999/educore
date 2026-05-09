@@ -188,6 +188,10 @@ function waitForStandaloneArtifacts(timeoutMs = 180_000) {
   }
 }
 
+function shouldUseWebpackBuild(env: NodeJS.ProcessEnv) {
+  return env.EDUCORE_NEXT_BUILD_WEBPACK === "1";
+}
+
 function runNextBuild() {
   if (SHOULD_SKIP_NEXT_BUILD) {
     console.log(
@@ -217,7 +221,12 @@ function runNextBuild() {
   const runtimeBinary = basename(process.execPath).toLowerCase().includes("bun")
     ? "node"
     : process.execPath;
-  const result = spawnSync(runtimeBinary, [nextBin, "build", "--webpack"], {
+  const args = [
+    nextBin,
+    "build",
+    ...(shouldUseWebpackBuild(env) ? ["--webpack"] : []),
+  ];
+  const result = spawnSync(runtimeBinary, args, {
     cwd: process.cwd(),
     stdio: "inherit",
     env,

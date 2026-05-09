@@ -84,8 +84,8 @@ export function FinanceOverviewClient({
   const seededStateMessage =
     summary.dataState === "seeded"
       ? summary.canManageSync
-        ? "Desktop Finance baru berisi master data lokal awal. Jika sekolah ini sudah punya data cloud, buka Settings atau tunggu hydrasi awal selesai agar transaksi real ikut masuk."
-        : "Desktop Finance baru berisi master data lokal awal. Minta admin menjalankan sinkronisasi agar transaksi real ikut masuk ke perangkat ini."
+        ? "Data transaksi Finance di perangkat ini belum lengkap. Jalankan sinkronisasi agar ringkasan memakai data sekolah terbaru."
+        : "Data transaksi Finance di perangkat ini belum lengkap. Minta admin menjalankan sinkronisasi."
       : null;
   const pendingSyncMessage = summary.pendingSync
     ? "Ada perubahan Finance lokal yang masih menunggu sinkronisasi cloud."

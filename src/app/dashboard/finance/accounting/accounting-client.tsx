@@ -10,12 +10,12 @@ import {
   Calendar,
   ChevronRight,
   FileText,
-  Filter,
   Layers,
-  MoreVertical,
   Search,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -36,6 +36,7 @@ export function AccountingClient({
 }) {
   const [search, setSearch] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
+  const router = useRouter();
   const { user } = useAuth();
   const canManageAdjustments =
     user?.role === "admin" || user?.role === "super_admin";
@@ -49,24 +50,35 @@ export function AccountingClient({
           l.account.name.toLowerCase().includes(search.toLowerCase()),
       ),
   );
+  const openSourceDocument = async (entry: FinanceJournalEntryView) => {
+    if (!entry.referenceId) {
+      toast.info("Jurnal ini belum memiliki dokumen sumber.");
+      return;
+    }
+
+    const referenceType = entry.referenceType?.toUpperCase();
+    const referenceQuery = encodeURIComponent(entry.referenceId);
+
+    if (referenceType === "INVOICE") {
+      router.push(`/dashboard/finance/invoices?q=${referenceQuery}`);
+      return;
+    }
+
+    if (referenceType === "PAYMENT") {
+      router.push(`/dashboard/finance/audit?q=${referenceQuery}`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(entry.referenceId);
+      toast.success("Reference ID berhasil disalin.");
+    } catch {
+      toast.info(`Reference ID: ${entry.referenceId}`);
+    }
+  };
 
   return (
     <div className="space-y-8 pb-20">
-      {desktopRuntime && !canManageAdjustments ? (
-        <Card className="border-amber-500/20 bg-amber-500/10 p-5 text-amber-50 backdrop-blur-xl">
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-amber-100">
-              Adjustment Admin-Only
-            </h3>
-            <p className="text-sm text-amber-100/90">
-              Manual adjustment di desktop hanya tersedia untuk admin finance
-              dan super admin. Role lain tetap memiliki akses audit/read-only ke
-              ledger.
-            </p>
-          </div>
-        </Card>
-      ) : null}
-
       {/* Search & Filter Header */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-96 group">
@@ -74,17 +86,11 @@ export function AccountingClient({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by description, account code..."
+            placeholder="Cari deskripsi atau kode akun..."
             className="pl-11 h-12 bg-white/5 border-white/10 rounded-xl focus:ring-finance-teal/50 transition-all text-white"
           />
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <Button
-            variant="outline"
-            className="flex-1 md:flex-none h-12 rounded-xl bg-white/5 border-white/10 text-zinc-400 gap-2"
-          >
-            <Filter className="h-4 w-4" /> Filter
-          </Button>
           {canManageAdjustments && user?.id ? (
             <ManualAdjustmentDialog actorId={user.id} accounts={accounts}>
               <Button className="flex-1 md:flex-none h-12 rounded-xl bg-finance-teal hover:bg-finance-teal/90 font-black gap-2">
@@ -92,12 +98,19 @@ export function AccountingClient({
               </Button>
             </ManualAdjustmentDialog>
           ) : (
-            <Button
-              className="flex-1 md:flex-none h-12 rounded-xl bg-finance-teal hover:bg-finance-teal/90 font-black gap-2"
-              disabled
-            >
-              <Layers className="h-4 w-4" /> New Adjustment
-            </Button>
+            <div className="flex flex-1 flex-col gap-2 md:flex-none">
+              <Button
+                className="h-12 rounded-xl bg-finance-teal hover:bg-finance-teal/90 font-black gap-2"
+                disabled
+              >
+                <Layers className="h-4 w-4" /> New Adjustment
+              </Button>
+              {desktopRuntime ? (
+                <p className="text-right text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+                  Admin finance only
+                </p>
+              ) : null}
+            </div>
           )}
         </div>
       </div>
@@ -213,11 +226,11 @@ export function AccountingClient({
                     >
                       <div className="p-8 space-y-6">
                         <div className="grid grid-cols-12 gap-4 text-[10px] font-mono font-black text-zinc-500 uppercase tracking-widest border-b border-white/5 pb-4">
-                          <div className="col-span-5">Account Designation</div>
+                          <div className="col-span-5">Akun</div>
                           <div className="col-span-2">Type</div>
                           <div className="col-span-2 text-right">Debit</div>
                           <div className="col-span-2 text-right">Credit</div>
-                          <div className="col-span-1"></div>
+                          <div className="col-span-1 text-right">Status</div>
                         </div>
 
                         <div className="space-y-2">
@@ -267,13 +280,9 @@ export function AccountingClient({
                                 )}
                               </div>
                               <div className="col-span-1 text-right">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 rounded-lg opacity-0 group-hover/line:opacity-100 transition-opacity"
-                                >
-                                  <MoreVertical className="h-4 w-4 text-zinc-600" />
-                                </Button>
+                                <Badge className="border-white/5 bg-white/5 text-[9px] font-mono text-zinc-500">
+                                  Posted
+                                </Badge>
                               </div>
                             </div>
                           ))}
@@ -284,17 +293,23 @@ export function AccountingClient({
                           <div className="flex items-center gap-4">
                             <BadgeCheck className="h-5 w-5 text-finance-teal" />
                             <p className="text-xs text-zinc-500 font-medium">
-                              Valid Journal Entry • No discrepancy detected in
-                              trial balance
+                              Jurnal sudah seimbang dan siap masuk audit trail.
                             </p>
                           </div>
                           {entry.referenceId && (
                             <Button
+                              type="button"
                               variant="outline"
+                              onClick={() => openSourceDocument(entry)}
                               className="h-10 rounded-xl bg-white/5 border-white/5 text-xs text-zinc-400 hover:text-white gap-2"
                             >
-                              <FileText className="h-3.5 w-3.5" /> Source
-                              Document
+                              <FileText className="h-3.5 w-3.5" />
+                              {entry.referenceType?.toUpperCase() === "INVOICE"
+                                ? "Open Invoice"
+                                : entry.referenceType?.toUpperCase() ===
+                                    "PAYMENT"
+                                  ? "Open Payment"
+                                  : "Copy Reference"}
                             </Button>
                           )}
                         </div>
@@ -310,12 +325,11 @@ export function AccountingClient({
             <BookText className="h-20 w-20 opacity-10 mb-8" />
             <div className="space-y-4 text-center max-w-sm">
               <p className="font-black text-3xl text-zinc-800 tracking-tighter">
-                Empty Ledger
+                Belum Ada Jurnal
               </p>
               <p className="text-zinc-600 text-sm font-medium leading-relaxed">
-                No accounting records found matching your criteria. Automatic
-                postings will appear here when invoices are generated or
-                payments processed.
+                Belum ada jurnal yang cocok dengan pencarian. Posting otomatis
+                akan muncul setelah invoice dibuat atau pembayaran diproses.
               </p>
             </div>
           </div>
